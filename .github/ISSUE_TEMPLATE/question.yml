@@ -1,0 +1,184 @@
+name: ❓ Question / Support
+description: Ask a question or get help using Cognix
+title: "[Question]: "
+labels: ["question", "support"]
+assignees: []
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Need help with Cognix? Ask away! ❓
+        
+        For general discussions and community questions, consider using [GitHub Discussions](https://github.com/cognix-dev/cognix/discussions) instead.
+
+  - type: dropdown
+    id: question-type
+    attributes:
+      label: 🏷️ Question Type
+      description: What type of help do you need?
+      options:
+        - "Installation and Setup"
+        - "Configuration"
+        - "Usage and Commands"
+        - "Workflow Best Practices"
+        - "Troubleshooting"
+        - "AI Model Configuration"
+        - "Integration with Other Tools"
+        - "Performance Optimization"
+        - "Feature Clarification"
+        - "Documentation Clarification"
+        - "Other"
+    validations:
+      required: true
+
+  - type: textarea
+    id: question-summary
+    attributes:
+      label: ❓ Your Question
+      description: What would you like to know?
+      placeholder: Please describe your question clearly...
+    validations:
+      required: true
+
+  - type: textarea
+    id: context
+    attributes:
+      label: 🔍 Context
+      description: Provide context about what you're trying to achieve
+      placeholder: |
+        - What are you trying to accomplish?
+        - What have you tried so far?
+        - What's your current setup?
+        - Any relevant background information?
+    validations:
+      required: true
+
+  - type: textarea
+    id: current-behavior
+    attributes:
+      label: 📊 Current Situation
+      description: Describe your current situation or what you're experiencing
+      placeholder: |
+        - What's happening now?
+        - What output or behavior are you seeing?
+        - Is something not working as expected?
+    validations:
+      required: false
+
+  - type: textarea
+    id: expected-outcome
+    attributes:
+      label: ✅ Expected Outcome
+      description: What would you like to happen or achieve?
+      placeholder: What's your ideal outcome or goal?
+    validations:
+      required: false
+
+  - type: dropdown
+    id: experience-level
+    attributes:
+      label: 📚 Experience Level
+      description: How familiar are you with Cognix?
+      options:
+        - "New user (just getting started)"
+        - "Beginner (used for a few days)"
+        - "Intermediate (used for weeks)"
+        - "Advanced (used for months)"
+        - "Expert (contributor/power user)"
+    validations:
+      required: false
+
+  - type: textarea
+    id: system-info
+    attributes:
+      label: 💻 System Information
+      description: Your system details (if relevant to your question)
+      placeholder: |
+        - Operating System: 
+        - Python Version:
+        - Cognix Version:
+        - AI Provider(s):
+      render: shell
+    validations:
+      required: false
+
+  - type: textarea
+    id: attempts-made
+    attributes:
+      label: 🔄 What You've Tried
+      description: What solutions or approaches have you already attempted?
+      placeholder: |
+        - Documentation sections you've read
+        - Commands you've tried
+        - Configurations you've tested
+        - Other resources you've consulted
+    validations:
+      required: false
+
+  - type: textarea
+    id: code-examples
+    attributes:
+      label: 💻 Code/Command Examples
+      description: Share relevant commands, configurations, or error messages
+      placeholder: |
+        ```bash
+        # Commands you're running
+        cognix> /your-command
+        
+        # Configuration files (remove sensitive data)
+        
+        # Error messages or unexpected output
+        ```
+      render: shell
+    validations:
+      required: false
+
+  - type: checkboxes
+    id: documentation-checked
+    attributes:
+      label: 📖 Documentation
+      description: Have you checked the following resources?
+      options:
+        - label: "README.md in the repository"
+        - label: "CONTRIBUTING.md for development questions"
+        - label: "Existing GitHub Issues and Discussions"
+        - label: "Built-in help (`cognix --help` or `/help`)"
+
+  - type: dropdown
+    id: urgency
+    attributes:
+      label: ⏰ Urgency
+      description: How urgent is this question for you?
+      options:
+        - "Low - General inquiry or learning"
+        - "Medium - Affecting my current work"
+        - label: "High - Blocking important workflow"
+        - "Critical - Production issue"
+    validations:
+      required: false
+
+  - type: textarea
+    id: additional-context
+    attributes:
+      label: 📄 Additional Context
+      description: Any other information that might be helpful
+      placeholder: |
+        - Screenshots or recordings
+        - Links to related resources
+        - Specific use case details
+        - Timeline constraints
+    validations:
+      required: false
+
+  - type: checkboxes
+    id: terms
+    attributes:
+      label: ✅ Checklist
+      description: Please confirm the following
+      options:
+        - label: "I have searched existing issues and discussions for similar questions"
+          required: true
+        - label: "I have removed any sensitive information (API keys, personal data)"
+          required: true
+        - label: "I am willing to provide additional information if needed"
+          required: false
