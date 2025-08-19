@@ -1,0 +1,173 @@
+name: ✨ Feature Request
+description: Suggest a new feature or enhancement for Cognix
+title: "[Feature]: "
+labels: ["enhancement", "triage"]
+assignees: []
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thank you for suggesting a new feature! ✨
+        
+        Please provide detailed information about your feature request to help us understand your needs.
+
+  - type: textarea
+    id: feature-summary
+    attributes:
+      label: 🎯 Feature Summary
+      description: A clear and concise description of the feature you'd like to see
+      placeholder: What feature would you like to see added to Cognix?
+    validations:
+      required: true
+
+  - type: textarea
+    id: problem-statement
+    attributes:
+      label: 🔍 Problem Statement
+      description: What problem does this feature solve?
+      placeholder: |
+        Describe the problem or limitation you're experiencing:
+        - What's currently difficult or impossible to do?
+        - How does this impact your workflow?
+        - What workarounds are you currently using?
+    validations:
+      required: true
+
+  - type: textarea
+    id: proposed-solution
+    attributes:
+      label: 💡 Proposed Solution
+      description: Describe the solution you'd like to see
+      placeholder: |
+        How would you like this feature to work?
+        - What commands or interactions would be involved?
+        - How would it integrate with existing Cognix functionality?
+        - What would the user experience look like?
+    validations:
+      required: true
+
+  - type: textarea
+    id: example-usage
+    attributes:
+      label: 📝 Example Usage
+      description: Provide concrete examples of how this feature would be used
+      placeholder: |
+        Example workflow or commands:
+        ```bash
+        cognix> /your-new-command "example"
+        # Expected output or behavior
+        ```
+    validations:
+      required: false
+
+  - type: dropdown
+    id: feature-category
+    attributes:
+      label: 🏷️ Feature Category
+      description: Which area of Cognix would this feature enhance?
+      options:
+        - "Core Workflow (Think→Plan→Write)"
+        - "Session Management"
+        - "Memory System"
+        - "AI Model Integration"
+        - "File Operations"
+        - "CLI Interface"
+        - "Project Analysis"
+        - "Configuration"
+        - "Performance"
+        - "Documentation"
+        - "Other"
+    validations:
+      required: true
+
+  - type: dropdown
+    id: feature-priority
+    attributes:
+      label: ⭐ Priority Level
+      description: How important is this feature to your workflow?
+      options:
+        - "Critical - Blocks important workflows"
+        - "High - Would significantly improve productivity"
+        - "Medium - Nice to have enhancement"
+        - "Low - Minor improvement"
+    validations:
+      required: true
+
+  - type: checkboxes
+    id: affected-users
+    attributes:
+      label: 👥 Who Would Benefit?
+      description: Who would benefit from this feature? (Select all that apply)
+      options:
+        - label: "New users getting started with Cognix"
+        - label: "Daily Cognix users"
+        - label: "Developers working on large projects"
+        - label: "Teams collaborating on code"
+        - label: "Users of specific AI models"
+        - label: "Power users with complex workflows"
+        - label: "Users on specific platforms (Windows/Mac/Linux)"
+
+  - type: textarea
+    id: alternatives-considered
+    attributes:
+      label: 🔄 Alternatives Considered
+      description: What alternative solutions or features have you considered?
+      placeholder: |
+        - Other tools that solve this problem
+        - Different approaches to the same goal
+        - Why those alternatives don't work as well
+    validations:
+      required: false
+
+  - type: textarea
+    id: technical-considerations
+    attributes:
+      label: ⚙️ Technical Considerations
+      description: Any technical aspects or constraints to consider?
+      placeholder: |
+        - Performance implications
+        - Compatibility requirements
+        - Integration challenges
+        - Security considerations
+    validations:
+      required: false
+
+  - type: checkboxes
+    id: implementation-willingness
+    attributes:
+      label: 🤝 Implementation
+      description: Would you be interested in helping implement this feature?
+      options:
+        - label: "I'd like to implement this feature myself"
+        - label: "I can help with testing and feedback"
+        - label: "I can provide domain expertise"
+        - label: "I can help with documentation"
+        - label: "I prefer to let the maintainers handle it"
+
+  - type: textarea
+    id: additional-context
+    attributes:
+      label: 📄 Additional Context
+      description: Any other information that would help us understand this request
+      placeholder: |
+        - Screenshots or mockups
+        - Links to related issues or discussions
+        - References to similar features in other tools
+        - Use cases from your specific domain
+    validations:
+      required: false
+
+  - type: checkboxes
+    id: terms
+    attributes:
+      label: ✅ Checklist
+      description: Please confirm the following
+      options:
+        - label: "I have searched existing issues and discussions to avoid duplicates"
+          required: true
+        - label: "This feature aligns with Cognix's core mission (AI development assistant with persistent memory)"
+          required: true
+        - label: "I have provided enough detail for the maintainers to understand the request"
+          required: true
+        - label: "I understand this is a request, not a guarantee of implementation"
+          required: true
