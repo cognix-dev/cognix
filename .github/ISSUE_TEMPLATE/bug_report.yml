@@ -1,0 +1,177 @@
+name: 🐛 Bug Report
+description: Report a bug to help us improve Cognix
+title: "[Bug]: "
+labels: ["bug", "triage"]
+assignees: []
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thank you for taking the time to report a bug! 🐛
+        
+        Please fill out the following information to help us understand and fix the issue.
+
+  - type: textarea
+    id: bug-description
+    attributes:
+      label: 🔍 Bug Description
+      description: A clear and concise description of what the bug is.
+      placeholder: Describe what happened...
+    validations:
+      required: true
+
+  - type: textarea
+    id: reproduction-steps
+    attributes:
+      label: 🔄 Steps to Reproduce
+      description: Steps to reproduce the behavior
+      placeholder: |
+        1. Start cognix with `cognix`
+        2. Run command `/think "..."`
+        3. See error...
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected-behavior
+    attributes:
+      label: ✅ Expected Behavior
+      description: A clear and concise description of what you expected to happen.
+      placeholder: What should have happened instead?
+    validations:
+      required: true
+
+  - type: textarea
+    id: actual-behavior
+    attributes:
+      label: ❌ Actual Behavior
+      description: What actually happened?
+      placeholder: What actually happened?
+    validations:
+      required: true
+
+  - type: textarea
+    id: error-output
+    attributes:
+      label: 📝 Error Output
+      description: Please copy and paste any relevant error messages or logs
+      placeholder: |
+        Paste error messages here...
+        (Remove any sensitive information like API keys)
+      render: shell
+
+  - type: dropdown
+    id: cognix-version
+    attributes:
+      label: 🏷️ Cognix Version
+      description: Which version of Cognix are you using?
+      options:
+        - "0.1.0-beta (latest)"
+        - "0.1.0-alpha"
+        - "Development/main branch"
+        - "Other (please specify in additional context)"
+    validations:
+      required: true
+
+  - type: dropdown
+    id: python-version
+    attributes:
+      label: 🐍 Python Version
+      description: Which Python version are you using?
+      options:
+        - "Python 3.8"
+        - "Python 3.9"
+        - "Python 3.10"
+        - "Python 3.11"
+        - "Python 3.12"
+        - "Other (please specify in additional context)"
+    validations:
+      required: true
+
+  - type: dropdown
+    id: operating-system
+    attributes:
+      label: 💻 Operating System
+      description: Which operating system are you using?
+      options:
+        - "Windows 11"
+        - "Windows 10"
+        - "macOS (Intel)"
+        - "macOS (Apple Silicon)"
+        - "Ubuntu/Debian"
+        - "Other Linux distribution"
+        - "Other (please specify in additional context)"
+    validations:
+      required: true
+
+  - type: dropdown
+    id: ai-provider
+    attributes:
+      label: 🤖 AI Provider
+      description: Which AI provider were you using when the bug occurred?
+      options:
+        - "Anthropic (Claude)"
+        - "OpenAI (GPT)"
+        - "Both"
+        - "Not applicable"
+        - "Other (please specify in additional context)"
+    validations:
+      required: false
+
+  - type: checkboxes
+    id: bug-area
+    attributes:
+      label: 🎯 Bug Area
+      description: Which area of Cognix does this bug affect? (Select all that apply)
+      options:
+        - label: "Session persistence/restoration"
+        - label: "Workflow (Think→Plan→Write)"
+        - label: "AI model switching"
+        - label: "File operations (/write, /edit, /fix)"
+        - label: "Memory management"
+        - label: "CLI interface/commands"
+        - label: "Configuration/setup"
+        - label: "Project detection"
+        - label: "Error handling"
+        - label: "Performance"
+
+  - type: textarea
+    id: session-context
+    attributes:
+      label: 🧠 Session Context
+      description: If relevant, provide context about your Cognix session
+      placeholder: |
+        - Was this a new session or restored session?
+        - What was your last successful command?
+        - How many memory entries did you have?
+        - What was your workflow goal?
+    validations:
+      required: false
+
+  - type: textarea
+    id: additional-context
+    attributes:
+      label: 📄 Additional Context
+      description: Add any other context about the problem here
+      placeholder: |
+        - Screenshots or recordings
+        - Configuration files (remove sensitive data)
+        - Similar issues you've found
+        - Workarounds you've tried
+    validations:
+      required: false
+
+  - type: checkboxes
+    id: terms
+    attributes:
+      label: ✅ Checklist
+      description: Please confirm the following
+      options:
+        - label: "I have searched existing issues to avoid duplicates"
+          required: true
+        - label: "I have removed any sensitive information (API keys, personal data)"
+          required: true
+        - label: "I have provided enough information to reproduce the issue"
+          required: true
+        - label: "I am willing to test potential fixes"
+          required: false
