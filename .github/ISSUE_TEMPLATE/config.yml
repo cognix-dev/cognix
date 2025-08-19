@@ -1,0 +1,14 @@
+blank_issues_enabled: false
+contact_links:
+  - name: 💬 GitHub Discussions
+    url: https://github.com/cognix-dev/cognix/discussions
+    about: For general questions, ideas, and community discussions
+  - name: 📖 Documentation
+    url: https://github.com/cognix-dev/cognix#readme
+    about: Check the README for installation, usage, and examples
+  - name: 🚀 Quick Start Guide
+    url: https://github.com/cognix-dev/cognix#-quick-start
+    about: Get started with Cognix in under 2 minutes
+  - name: 📋 Command Reference
+    url: https://github.com/cognix-dev/cognix#-commands
+    about: Complete list of available commands and examples
