@@ -466,8 +466,8 @@ flake8 src/
 ```
 
 ### **Contribution Guidelines**
-- 🐛 **Bug Reports**: [GitHub Issues](https://github.com/cognix-ai/cognix/issues)
-- 💡 **Feature Proposals**: [GitHub Discussions](https://github.com/cognix-ai/cognix/discussions)
+- 🐛 **Bug Reports**: [GitHub Issues](https://github.com/cognix-dev/cognix/issues)
+- 💡 **Feature Proposals**: [GitHub Discussions](https://github.com/cognix-dev/cognix/discussions)
 - 🔀 **Pull Requests**: [Contributing Guide](CONTRIBUTING.md)
 
 ---
@@ -508,25 +508,21 @@ MIT License - see [LICENSE](LICENSE) file for details.
 ## 💬 Support & Community
 
 ### **Need Help?**
-- 🐛 **Bug Reports**: [GitHub Issues](https://github.com/cognix-ai/cognix/issues)
-- 💡 **Feature Requests**: [GitHub Discussions](https://github.com/cognix-ai/cognix/discussions)  
+- 🐛 **Bug Reports**: [GitHub Issues](https://github.com/cognix-dev/cognix/issues)
+- 💡 **Feature Requests**: [GitHub Discussions](https://github.com/cognix-dev/cognix/discussions)  
 - 📧 **Email**: support@cognix.dev
-- 💬 **Discord**: [Join our community](https://discord.gg/cognix)
 
 ### **Stay Updated**
-- 📰 **Blog**: [cognix.dev/blog](https://cognix.dev/blog)
-- 🐦 **Twitter**: [@CognixAI](https://twitter.com/CognixAI)
-- 📺 **YouTube**: [Cognix Tutorials](https://youtube.com/@CognixAI)
-
+- 🐦 **X**: [@Cognix_dev](https://x.com/cognix_dev))
 ---
 
 <div align="center">
 
 **🧠 Cognix - Where AI meets intelligent development workflows**
 
-Made with ❤️ by [Individual Developer](https://github.com/cognix-ai)
+Made with ❤️ by [Individual Developer](https://github.com/cognix-dev)
 
-[⭐ Star on GitHub](https://github.com/cognix-ai/cognix) • [📖 Documentation](https://docs.cognix.dev) • [🚀 Get Started](#-quick-start)
+[⭐ Star on GitHub](https://github.com/cognix-dev/cognix) • [📖 Documentation](https://docs.cognix.dev) • [🚀 Get Started](#-quick-start)
 
 ---
 
