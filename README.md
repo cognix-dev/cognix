@@ -1,7 +1,6 @@
 # Cognix
 
 <div align="center">
-
 <div style="background-color: #1e1e1e; padding: 20px; border-radius: 8px; margin: 20px 0; border: 2px solid #333;">
 <pre style="color: #00d962; font-family: 'Courier New', monospace; font-weight: bold; margin: 0; font-size: 16px; background-color: #1e1e1e;">
 █▀▀ █▀█ █▀▀ █▄░█ █ ▀▄▀
