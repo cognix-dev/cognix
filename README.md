@@ -9,8 +9,8 @@
 </div>
 
 **Cognix — Augmented AI Development Partner for CLI**  
-Persistent Sessions, Long-Term Memory, Multi-Model Support, and Full-Pipeline Development — All in One Terminal.  
-Build smarter, faster, and without context loss — directly from your terminal.
+Persistent Sessions, Long-Term Memory, Multi-Model Support, and Full-Pipeline Development.  
+Build smarter, faster, and without context loss.
 
 [![Version](https://img.shields.io/badge/version-0.1.0--beta-blue.svg)](https://github.com/cognix-dev/cognix)
 [![License](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
