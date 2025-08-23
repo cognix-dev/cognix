@@ -12,7 +12,7 @@
 Persistent Sessions, Long-Term Memory, Multi-Model Support, and Full-Pipeline Development.  
 Build smarter, faster, and without context loss.
 
-[![Version](https://img.shields.io/badge/version-0.1.0--beta-blue.svg)](https://github.com/cognix-dev/cognix)
+[![Version](https://img.shields.io/badge/version-0.1.0-blue.svg)](https://github.com/cognix-dev/cognix)
 [![License](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
 [![Python](https://img.shields.io/badge/python-3.8+-blue.svg)](https://python.org)
 [![Demo](https://img.shields.io/badge/demo-12_seconds-brightgreen.svg)](https://github.com/cognix-dev/cognix#-see-it-in-action)
@@ -91,6 +91,11 @@ python my_clock.py  # → Beautiful clock appears!
 ## 🚀 Quick Start
 
 ### Installation
+**Recommended (isolated):**
+```bash
+pipx install cognix
+```
+**Alternative:**
 ```bash
 pip install cognix
 ```
@@ -139,11 +144,14 @@ cognix> /write --file auth_api.py
 | `/help` | Show all commands | `/help` |
 | `/model` | Show current model & options | `/model` |
 | `/workflow-status` | Check current progress | `/workflow-status` |
+| `/status` | Show current config/model | `/status` |
+| `/memory` | Inspect or export memory | `/memory export` |
+
 
 ### AI Model Management
 | Command | Description | Example |
 |---------|-------------|---------|
-| `/model <name>` | Switch AI models instantly | `/model gpt-5` |
+| `/model <name>` | Switch AI models instantly | `/model gpt-4o` |
 
 ### File Operations
 | Command | Description | Example |
@@ -151,12 +159,19 @@ cognix> /write --file auth_api.py
 | `/edit <file>` | AI-assisted editing | `/edit src/main.py` |
 | `/fix <file>` | Auto-fix bugs | `/fix api.py --function auth` |
 | `/review [dir]` | Code analysis | `/review src/` |
+| `/diff` | Show changes before applying | `/diff` |
+| `/apply` | Apply generated patch safely | `/apply` |
+| `/backup` | Manage backups/restore | `/backup restore` |
+
 
 ### Session Management
 | Command | Description | Example |
 |---------|-------------|---------|
 | `/save-session <name>` | Save your work | `/save-session "auth-system"` |
 | `/resume <name>` | Resume previous work | `/resume "auth-system"` |
+| `/list-sessions` | List saved sessions | `/list-sessions` |
+| `/session-info` | Show current session meta | `/session-info` |
+
 
 ### Workflow Control
 | Command | Description | Example |
@@ -172,11 +187,11 @@ cognix> /write --file auth_api.py
 cognix> /think "Build a todo app"
 # Using Claude-4: Detailed, enterprise-focused analysis
 
-cognix> /model gpt-5
-✅ Switched to: gpt-5
+cognix> /model gpt-4o
+✅ Switched to: gpt-4o
 
 cognix> /think "Build a todo app"  
-# Using GPT-5: Creative, modern, action-oriented approach
+# Using GPT-4o: Creative, modern, action-oriented approach
 ```
 
 **Compare results instantly. Choose the best AI for each task.**
@@ -248,8 +263,8 @@ cognix> /think "Database caching strategy"
 → Comprehensive analysis with Redis, Memcached comparison, 
   enterprise concerns, compliance considerations
 
-# Switch to GPT-5 for creative alternatives  
-cognix> /model gpt-5
+# Switch to GPT-4o for creative alternatives  
+cognix> /model gpt-4o
 cognix> /think "Database caching strategy"  
 → Modern approach with edge caching, CDN integration,
   serverless caching solutions
@@ -295,19 +310,29 @@ python calculator.py  # → Professional calculator app launches
 - `claude-opus-4-20250514` - Most capable, complex reasoning
 - `claude-sonnet-4-20250514` - Balanced performance & speed
 
-### **GPT-5 Series** (OpenAI)  
-- `gpt-5` - Latest model, highly creative
-- `gpt-5-mini` - Fast responses, cost-effective
+### **GPT-4o Series** (OpenAI)  
+- `gpt-4o` - Latest model, highly creative
+- `gpt-4o-mini` - Fast responses, cost-effective
 
 ### **Legacy Support**
 - `claude-3-5-sonnet-20241022`
 - `claude-3-7-sonnet-20250219`
 
-**Switch between any model instantly:** `/model gpt-5`
+**Switch between any model instantly:** `/model gpt-4o`
 
 ---
 
 ## ⚙️ Configuration & Customization
+
+## 📁 Data Storage & Privacy
+
+Cognix stores local data under your home directory:
+
+- `~/.cognix/config.json` — user configuration
+- `~/.cognix/sessions/` — saved sessions & autosave
+- `~/.cognix/memory/memory.json` — long‑term memory
+
+> All files are local to your machine. You can delete them anytime.
 
 ### Default Config (`~/.cognix/config.json`)
 ```json
@@ -329,7 +354,7 @@ OPENAI_API_KEY=your_openai_key
 
 # Optional settings  
 COGNIX_DEBUG=true
-DEFAULT_MODEL=gpt-5
+DEFAULT_MODEL=gpt-4o
 COGNIX_AUTO_SAVE=true
 ```
 
@@ -346,7 +371,7 @@ COGNIX_AUTO_SAVE=true
 ### **vs. GitHub Copilot**
 | Feature | Cognix | Copilot |
 |---------|--------|---------|
-| Multi-AI Support | ✅ GPT-5 + Claude-4 | ❌ OpenAI only |
+| Multi-AI Support | ✅ GPT-4o + Claude-4 | ❌ OpenAI only |
 | Session Persistence | ✅ Full project memory | ❌ No memory |
 | Workflow Structure | ✅ Think→Plan→Write | ❌ Code completion only |
 | CLI Integration | ✅ Native terminal | ❌ Editor-dependent |
@@ -418,6 +443,7 @@ cognix> /edit src/api.py
 📝 Editing: src/api.py
 What changes would you like to make? Add rate limiting
 
+
 🤖 Generating suggestions...
 💡 Suggestion: I'll add Express rate limiting middleware...
 
@@ -461,8 +487,8 @@ pytest tests/
 
 ### **Code Style**
 ```bash
-black src/
-flake8 src/
+black cognix/
+flake8 cognix/
 ```
 
 ### **Contribution Guidelines**
@@ -471,6 +497,11 @@ flake8 src/
 - 🔀 **Pull Requests**: [Contributing Guide](CONTRIBUTING.md)
 
 ---
+
+## 🧰 Troubleshooting
+
+- **No LLM providers available** → `.env` に `ANTHROPIC_API_KEY` または `OPENAI_API_KEY` を設定して再起動してください。
+- **差分の適用に失敗した** → `/backup restore` で直前のバックアップに戻せます。
 
 ## 📄 License
 
@@ -525,7 +556,3 @@ Made with ❤️ by [Individual Developer](https://github.com/cognix-dev)
 [⭐ Star on GitHub](https://github.com/cognix-dev/cognix)  • [🚀 Get Started](#-quick-start)
 
 ---
-
-**"Once you have an idea, it's already complete with Cognix."**
-
-</div>
