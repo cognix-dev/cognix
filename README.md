@@ -449,7 +449,7 @@ We welcome contributions! Here's how to get started:
 
 ### **Development Setup**
 ```bash
-git clone https://github.com/cognix-ai/cognix.git
+git clone https://github.com/cognix-dev/cognix.git
 cd cognix
 pip install -e ".[dev]"
 ```
@@ -513,7 +513,7 @@ MIT License - see [LICENSE](LICENSE) file for details.
 - 📧 **Maintainer**: shichiroh.shigeh@gmail.com
 
 ### **Stay Updated**
-- 🐦 **X**: [@Cognix_dev](https://x.com/cognix_dev))
+- 🐦 **X**: [@Cognix_dev](https://x.com/cognix_dev)
 ---
 
 <div align="center">
@@ -522,7 +522,7 @@ MIT License - see [LICENSE](LICENSE) file for details.
 
 Made with ❤️ by [Individual Developer](https://github.com/cognix-dev)
 
-[⭐ Star on GitHub](https://github.com/cognix-dev/cognix) • [📖 Documentation](https://docs.cognix.dev) • [🚀 Get Started](#-quick-start)
+[⭐ Star on GitHub](https://github.com/cognix-dev/cognix)  • [🚀 Get Started](#-quick-start)
 
 ---
 
