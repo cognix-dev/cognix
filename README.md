@@ -148,6 +148,7 @@ cognix> /write --file auth_api.py
 | `/memory` | Inspect or export memory | `/memory export` |
 
 
+
 ### AI Model Management
 | Command | Description | Example |
 |---------|-------------|---------|
@@ -169,8 +170,11 @@ cognix> /write --file auth_api.py
 |---------|-------------|---------|
 | `/save-session <name>` | Save your work | `/save-session "auth-system"` |
 | `/resume <name>` | Resume previous work | `/resume "auth-system"` |
-| `/list-sessions` | List saved sessions | `/list-sessions` |
-| `/session-info` | Show current session meta | `/session-info` |
+| `/list_sessions` | List saved sessions | `/list_sessions` |
+| `/session_info` | Show current session meta | `/session_info` |
+| `/save_session <name>` | Save current session | `/save_session mywork` |
+| `/resume <name>` | Restore a saved session | `/resume mywork` |
+
 
 
 ### Workflow Control
@@ -500,8 +504,8 @@ flake8 cognix/
 
 ## 🧰 Troubleshooting
 
-- **No LLM providers available** → `.env` に `ANTHROPIC_API_KEY` または `OPENAI_API_KEY` を設定して再起動してください。
-- **差分の適用に失敗した** → `/backup restore` で直前のバックアップに戻せます。
+- **No LLM providers available** → Set `ANTHROPIC_API_KEY` or `OPENAI_API_KEY` in your `.env`, then restart Cognix.
+- **Patch apply failed** → Restore the last backup with `/backup restore`.
 
 ## 📄 License
 
