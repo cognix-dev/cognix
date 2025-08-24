@@ -540,12 +540,11 @@ MIT License - see [LICENSE](LICENSE) file for details.
 
 ---
 
-## 💬 Support & Community
+## 💬 Support
 
 ### **Need Help?**
 - 🐛 **Bug Reports**: [GitHub Issues](https://github.com/cognix-dev/cognix/issues)
 - 💡 **Feature Requests**: [GitHub Discussions](https://github.com/cognix-dev/cognix/discussions)  
-- 📧 **Maintainer**: shichiroh.shigeh@gmail.com
 
 ### **Stay Updated**
 - 🐦 **X**: [@Cognix_dev](https://x.com/cognix_dev)
