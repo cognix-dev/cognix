@@ -1,4 +1,6 @@
 # Cognix
+🚀 v0.1.0 released!  
+If you find Cognix useful, **please give it a star 🌟** — it helps us reach more developers and build a stronger community.
 
 <div align="center">
 <div style="background-color: #1e1e1e; padding: 20px; border-radius: 8px; margin: 20px 0; border: 2px solid #333;">
