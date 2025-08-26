@@ -1,4 +1,7 @@
-# Cognix
+<div style="display: flex; align-items: center; margin-bottom: 20px;">
+  <img src="./Cognix_logo.png" alt="Cognix Logo" width="64" height="64" style="margin-right: 16px;">
+  <h1 style="margin: 0; font-size: 48px; font-weight: bold;">Cognix</h1>
+</div># Cognix
 🚀 **v0.1.0 released!**  
 If you find Cognix useful, **please give it a star 🌟** — it helps us reach more developers and build a stronger community.
 
