@@ -1,5 +1,5 @@
 # Cognix
-🚀 v0.1.0 released!  
+🚀 **v0.1.0 released!**  
 If you find Cognix useful, **please give it a star 🌟** — it helps us reach more developers and build a stronger community.
 
 <div align="center">
