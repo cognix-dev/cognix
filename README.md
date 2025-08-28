@@ -22,7 +22,7 @@ If you find Cognix useful, please give it a star ⭐ — it helps us reach more 
 Persistent Sessions, Long-Term Memory, Multi-Model Support, and Full-Pipeline Development.  
 Build smarter, faster, and without context loss.
 
-[![Version](https://img.shields.io/badge/version-0.1.0-blue.svg)](https://github.com/cognix-dev/cognix)
+[![Version](https://img.shields.io/badge/version-0.1.1-blue.svg)](https://github.com/cognix-dev/cognix)
 [![License](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
 [![Python](https://img.shields.io/badge/python-3.8+-blue.svg)](https://python.org)
 [![Demo](https://img.shields.io/badge/demo-12_seconds-brightgreen.svg)](https://github.com/cognix-dev/cognix#-see-it-in-action)
