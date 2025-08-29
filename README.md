@@ -4,9 +4,9 @@
 
 <br clear="left">
 
-🚀 **v0.1.1 released!**
+🚀 **v0.1.2 released!**
 
-Provider auto-detection and model fallback fixes included. Now works seamlessly with OpenAI-only or Anthropic-only setups.
+Fixed "Unknown model: gpt-4o" error for OpenAI-only users.
 
 If you find Cognix useful, please give it a star ⭐ — it helps us reach more developers and build a stronger community.
 
@@ -22,7 +22,7 @@ If you find Cognix useful, please give it a star ⭐ — it helps us reach more 
 Persistent Sessions, Long-Term Memory, Multi-Model Support, and Full-Pipeline Development.  
 Build smarter, faster, and without context loss.
 
-[![Version](https://img.shields.io/badge/version-0.1.1-blue.svg)](https://github.com/cognix-dev/cognix)
+[![Version](https://img.shields.io/badge/version-0.1.2-blue.svg)](https://github.com/cognix-dev/cognix)
 [![License](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
 [![Python](https://img.shields.io/badge/python-3.8+-blue.svg)](https://python.org)
 [![Demo](https://img.shields.io/badge/demo-12_seconds-brightgreen.svg)](https://github.com/cognix-dev/cognix#-see-it-in-action)
@@ -243,6 +243,11 @@ cognix> /write --file clock.py
 - 🧠 **Remembers** all previous conversations  
 - 🎯 **Adapts** suggestions to your codebase
 - 🔄 **Maintains** context across sessions
+  ## 🆕 What's New in v0.1.2
+- Fixed OpenAI model recognition issue (gpt-4o, gpt-4o-mini)
+- Added support for GPT-4.1 series models
+- Improved model alias handling
+- Removed non-existent model references
 
 ---
 
