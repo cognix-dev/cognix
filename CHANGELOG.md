@@ -5,6 +5,29 @@ All notable changes to Cognix will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.1.2] - 2025-08-29
+
+### Fixed
+- OpenAI model recognition issue - "Unknown model: gpt-4o" error
+- Model provider dictionary synchronization between llm.py and config.py
+- Removed non-existent GPT-5 model references
+
+### Added
+- Support for gpt-4o and gpt-4o-mini models
+- Support for GPT-4.1 model series (gpt-4.1, gpt-4.1-mini, gpt-4.1-nano)
+- OpenAI model aliases (gpt4o → gpt-4o, gpt-4-omni → gpt-4o)
+- Experimental model auto-detection capability (via COGNIX_AUTO_DETECT_MODELS env var)
+
+### Changed
+- Updated default model list to reflect actual available models
+- Improved model validation and fallback logic
+
+## [0.1.1] - 2025-08-28
+
+### Added
+- Session persistence improvements
+- Enhanced error handling
+
 ## [0.1.0] - 2025-08-22
 
 ### Added
