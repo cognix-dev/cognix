@@ -150,28 +150,6 @@ class Config:
                 "max_tokens": 4000,
                 "context_window": 128000
             },
-            # OpenAI GPT-5 models (2025年8月リリース)
-            "gpt-5": {
-                "name": "gpt-5",
-                "provider": "openai",
-                "temperature": 0.7,
-                "max_tokens": 4000,
-                "context_window": 200000  # GPT-5は大きなコンテキストウィンドウを持つ
-            },
-            "gpt-5-mini": {
-                "name": "gpt-5-mini",
-                "provider": "openai",
-                "temperature": 0.7,
-                "max_tokens": 4000,
-                "context_window": 128000
-            },
-            "gpt-5-nano": {
-                "name": "gpt-5-nano",
-                "provider": "openai",
-                "temperature": 0.7,
-                "max_tokens": 4000,
-                "context_window": 64000
-            },
             # エイリアス (Config側でも定義して検証エラーを回避)
             "claude-opus-4": {
                 "name": "claude-opus-4",

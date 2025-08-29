@@ -242,45 +242,37 @@ class LLMManager:
 
 # llm.py の MODEL_PROVIDERS セクションを以下に置き換えてください
 
+    # MODEL_PROVIDERS辞書を完全に置き換え
     MODEL_PROVIDERS = {
         # OpenAI models
         "gpt-4": "openai",
         "gpt-4-turbo": "openai",
         "gpt-4-turbo-preview": "openai",
         "gpt-3.5-turbo": "openai",
-        # OpenAI GPT-5 models (2025年8月リリース)
-        "gpt-5": "openai",
-        "gpt-5-mini": "openai",
-        "gpt-5-nano": "openai",
-        # Anthropic Claude 4 models (最新・実際に動作する)
+        "gpt-4o": "openai",                    # 新規追加
+        "gpt-4o-mini": "openai",               # 新規追加
+        "gpt-4.1": "openai",                   # 新規追加
+        "gpt-4.1-mini": "openai",              # 新規追加
+        "gpt-4.1-nano": "openai",              # 新規追加
+        
+        # Anthropic models（既存のまま）
         "claude-opus-4-20250514": "anthropic",
         "claude-sonnet-4-20250514": "anthropic",
-        
-        # Anthropic Claude 3.5 models (まだ利用可能)
         "claude-3-5-sonnet-20241022": "anthropic",
-        
-        # Anthropic Claude 3.7 models (まだ利用可能な場合) 
         "claude-3-7-sonnet-20250219": "anthropic",
-        
-        # 古いエイリアス名（削除推奨だが、互換性のため残す）
-        "claude-opus-4": "anthropic",  # claude-opus-4-20250514にマップ
-        "claude-sonnet-4": "anthropic", # claude-sonnet-4-20250514にマップ
-        
-        # 廃止されたClaude 3モデル（削除）
-        # "claude-3-opus-20240229": "anthropic",  # 廃止済み
-        # "claude-3-sonnet-20240229": "anthropic", # 廃止済み
-        # "claude-3-haiku-20240307": "anthropic",  # 廃止済み
-        # "claude-3-opus": "anthropic",            # 廃止済み
-        # "claude-3-sonnet": "anthropic",          # 廃止済み
-        # "claude-3-haiku": "anthropic"            # 廃止済み
-    }    
+    }
 
     # エイリアス名を正確なモデル名にマップ
+    # MODEL_ALIASES辞書も更新
     MODEL_ALIASES = {
         "claude-opus-4": "claude-opus-4-20250514",
         "claude-sonnet-4": "claude-sonnet-4-20250514",
         "claude-3.7-sonnet": "claude-3-7-sonnet-20250219",
-        "claude-3-5-sonnet": "claude-3-5-sonnet-20241022"
+        "claude-3-5-sonnet": "claude-3-5-sonnet-20241022",
+        # OpenAI aliases 新規追加
+        "gpt4": "gpt-4",
+        "gpt4o": "gpt-4o",
+        "gpt-4-omni": "gpt-4o",
     }
 
     def get_provider_for_model(self, model: str) -> LLMProvider:
@@ -315,7 +307,9 @@ class LLMManager:
         self._initialize_providers()
     
     def _initialize_providers(self):
+        
         """Initialize LLM providers based on available API keys"""
+
         # Use config's centralized get_api_key method which handles .env files
         from cognix.config import Config
         
@@ -330,6 +324,11 @@ class LLMManager:
         if openai_key:
             try:
                 self.providers["openai"] = OpenAIProvider(openai_key)
+                
+                # 自動検出機能を追加（オプション）
+                if os.getenv('COGNIX_AUTO_DETECT_MODELS'):
+                    self._detect_available_models()
+                    
                 if os.getenv('COGNIX_DEBUG') or os.getenv('DEBUG'):
                     print(f"Debug: OpenAI provider initialized successfully")
             except ImportError as e:
@@ -355,6 +354,24 @@ class LLMManager:
             self._show_immediate_setup_help()
             raise Exception("No LLM providers available. Please set API keys for OpenAI or Anthropic.")
     
+    def _detect_available_models(self):
+        """Auto-detect available models from OpenAI API"""
+        try:
+            import openai
+            client = openai.OpenAI(api_key=self.providers["openai"].api_key)
+            models = client.models.list()
+            
+            for model in models:
+                model_id = model.id
+                if model_id.startswith(('gpt-', 'o1-')) and model_id not in self.MODEL_PROVIDERS:
+                    self.MODEL_PROVIDERS[model_id] = "openai"
+                    if os.getenv('COGNIX_DEBUG'):
+                        print(f"Debug: Auto-detected model: {model_id}")
+                        
+        except Exception as e:
+            if os.getenv('COGNIX_DEBUG'):
+                print(f"Debug: Could not auto-detect models: {e}")
+
     def _show_immediate_setup_help(self):
         """Show immediate setup help with specific next steps"""
         print("\n" + "⚠️  API KEY REQUIRED")

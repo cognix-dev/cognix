@@ -1,0 +1,3 @@
+[console_scripts]
+cognix = cognix.main:main
+cognix-cli = cognix.main:main

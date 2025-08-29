@@ -2,7 +2,7 @@
 Cognix: AI-powered CLI development assistant
 """
 
-__version__ = "0.1.1"
+__version__ = "0.1.2"
 __author__ = "Cognix"
 __description__ = "AI-powered CLI development assistant"
 __url__ = "https://github.com/cognix-dev/cognix"
