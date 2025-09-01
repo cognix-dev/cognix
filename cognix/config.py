@@ -297,7 +297,7 @@ class Config:
             print(f"Warning: Failed to save config: {e}")
     
     def get(self, key: str, default: Any = None) -> Any:
-        """Get configuration value"""
+        """Get configuration value with environment variable fallback"""
         keys = key.split('.')
         value = self.data
         
@@ -305,6 +305,11 @@ class Config:
             if isinstance(value, dict) and k in value:
                 value = value[k]
             else:
+                # 環境変数もチェック（特定のキーに限定）
+                if key.upper() == "OPENAI_BASE_URL":
+                    env_value = os.getenv("OPENAI_BASE_URL")
+                    if env_value is not None:
+                        return env_value
                 return default
         
         return value
@@ -487,33 +492,70 @@ class Config:
         self.save_config()
     
     def validate_config(self) -> List[str]:
-        """Validate configuration and return list of issues"""
+        """設定を検証し、問題のリストを返す - OpenRouter対応版"""
         issues = []
         
-        # Check required fields
+        # APIキーを最初に確認
+        available_providers = self.get_available_providers()
+        
+        if not available_providers:
+            issues.append("有効なAPIキーが見つかりません")
+            issues.append("OPENAI_API_KEYまたはANTHROPIC_API_KEYを設定してください")
+            return issues
+        
+        # OpenRouter設定の検証を追加
+        openrouter_issues = self._validate_openrouter_config()
+        issues.extend(openrouter_issues)
+        
+        # 現在のモデルが利用可能かを確認
+        model = self.get("model")
+        available_models = self.get_available_models_for_providers()
+        
+        if model and model not in available_models:
+            # ** OpenRouter特別処理を追加 **
+            if os.getenv("OPENAI_BASE_URL") and "/" in model:
+                # OpenRouterモデルの場合は検証をスキップ
+                pass
+            else:
+                default_model = self.get_default_model()
+                if default_model:
+                    issues.append(f"モデル '{model}' は現在のAPIキーでは利用できません")
+                    issues.append(f"自動切り替えします: {default_model}")
+                    # 自動修正
+                    self.set("model", default_model, save=True)
+                else:
+                    issues.append(f"モデル '{model}' が利用できず、フォールバックも見つかりません")
+        
+        # 必須フィールドの確認
         required_fields = ["model", "temperature", "max_tokens"]
         for field in required_fields:
             if not self.has_key(field):
-                issues.append(f"Missing required field: {field}")
+                issues.append(f"必須フィールドが不足: {field}")
         
-        # Validate model exists
-        model = self.get("model")
-        if model and model not in self.get_available_models():
-            issues.append(f"Unknown model: {model}")
-        
-        # Validate temperature range
+        # 温度範囲の確認
         temperature = self.get("temperature")
         if temperature is not None and not (0 <= temperature <= 2):
-            issues.append("Temperature must be between 0 and 2")
+            issues.append("温度は0から2の間である必要があります")
         
-        # Validate max_tokens
+        # max_tokensの確認
         max_tokens = self.get("max_tokens")
         if max_tokens is not None and (max_tokens < 1 or max_tokens > 100000):
-            issues.append("max_tokens must be between 1 and 100000")
+            issues.append("max_tokensは1から100000の間である必要があります")
         
-        # Check API keys with helpful messages
-        api_key_issues = self._validate_api_keys()
-        issues.extend(api_key_issues)
+        return issues
+
+    def _validate_openrouter_config(self) -> List[str]:
+        """OpenRouter設定の検証（新規メソッド）"""
+        issues = []
+        
+        base_url = os.getenv("OPENAI_BASE_URL")
+        openai_key = self.get_api_key("openai")
+        
+        if base_url and not openai_key:
+            issues.append("OPENAI_BASE_URLが設定されていますが、OPENAI_API_KEYがありません")
+        
+        if base_url and not base_url.startswith(("http://", "https://")):
+            issues.append("OPENAI_BASE_URLの形式が正しくありません")
         
         return issues
     

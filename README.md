@@ -4,9 +4,9 @@
 
 <br clear="left">
 
-🚀 **v0.1.2 released!**
+🚀 **v0.1.3 released!**
 
-Fixed "Unknown model: gpt-4o" error for OpenAI-only users.
+OpenRouter integration for access to multiple AI models with single API key.
 
 If you find Cognix useful, please give it a star ⭐ — it helps us reach more developers and build a stronger community.
 
@@ -22,7 +22,7 @@ If you find Cognix useful, please give it a star ⭐ — it helps us reach more 
 Persistent Sessions, Long-Term Memory, Multi-Model Support, and Full-Pipeline Development.  
 Build smarter, faster, and without context loss.
 
-[![Version](https://img.shields.io/badge/version-0.1.2-blue.svg)](https://github.com/cognix-dev/cognix)
+[![Version](https://img.shields.io/badge/version-0.1.3-blue.svg)](https://github.com/cognix-dev/cognix)
 [![License](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
 [![Python](https://img.shields.io/badge/python-3.8+-blue.svg)](https://python.org)
 [![Demo](https://img.shields.io/badge/demo-12_seconds-brightgreen.svg)](https://github.com/cognix-dev/cognix#-see-it-in-action)
@@ -59,7 +59,7 @@ cognix
 # 1-3 seconds: Session restoration
 Would you like to restore the previous session? [y/N]: y
 ✅ Session restored successfully!
-🔄 Workflow state restored!
+📄 Workflow state restored!
    Goal: Brief: big bright green clock popup window bold digits
    Progress: ✅ Think → ✅ Plan → ⏳ Write
 
@@ -112,14 +112,21 @@ pip install cognix
 
 ### Setup (2 minutes)
 ```bash
-# 1. Get your API key from Anthropic or OpenAI
-# https://console.anthropic.com/ or https://platform.openai.com/
-
-# 2. Create .env file
+# Option 1: Anthropic Claude (Recommended)
 echo "ANTHROPIC_API_KEY=your_api_key_here" > .env
-echo "OPENAI_API_KEY=your_api_key_here" >> .env
+# Get your key at: https://console.anthropic.com/
 
-# 3. Start Cognix
+# Option 2: OpenAI GPT
+echo "OPENAI_API_KEY=your_api_key_here" > .env
+# Get your key at: https://platform.openai.com/
+
+# Option 3: OpenRouter (Multiple models with one key)
+echo "OPENAI_API_KEY=sk-or-v1-your_openrouter_key" > .env
+echo "OPENAI_BASE_URL=https://openrouter.ai/api/v1" >> .env
+# Get your key at: https://openrouter.ai/keys
+# Free models available: https://openrouter.ai/models/?q=free
+
+# Start Cognix
 cognix
 ```
 
@@ -132,7 +139,7 @@ cognix> /plan
 # 📋 AI creates detailed implementation plan...
 
 cognix> /write --file auth_api.py
-# ✍️ AI generates production-ready code...
+# ✏️ AI generates production-ready code...
 ```
 
 **That's it!** Your API is ready to use.
@@ -196,7 +203,7 @@ cognix> /write --file auth_api.py
 
 ## 🌟 Key Features
 
-### 🔄 **Multi-AI Powerhouse**
+### 📄 **Multi-AI Powerhouse**
 ```bash
 cognix> /think "Build a todo app"
 # Using Claude-4: Detailed, enterprise-focused analysis
@@ -219,7 +226,7 @@ cognix> /plan
 
 # Today
 cognix
-🔄 Workflow state restored!
+📄 Workflow state restored!
 Goal: E-commerce platform architecture  
 Progress: ✅ Think → ✅ Plan → ⏳ Write
 
@@ -242,12 +249,12 @@ cognix> /write --file clock.py
 - 📁 **Auto-scans** your project structure
 - 🧠 **Remembers** all previous conversations  
 - 🎯 **Adapts** suggestions to your codebase
-- 🔄 **Maintains** context across sessions
-  ## 🆕 What's New in v0.1.2
-- Fixed OpenAI model recognition issue (gpt-4o, gpt-4o-mini)
-- Added support for GPT-4.1 series models
-- Improved model alias handling
-- Removed non-existent model references
+- 📄 **Maintains** context across sessions
+  ## 🆕 What's New in v0.1.3
+- OpenRouter integration for multiple AI models access
+- Enhanced error handling for 402/429/401 API errors
+- Support for free models through OpenRouter
+- Improved model switching and provider management
 
 ---
 
@@ -302,7 +309,7 @@ cognix
 
 Would you like to restore the previous session? [y/N]: y
 ✅ Session restored successfully!
-🔄 Workflow state restored!
+📄 Workflow state restored!
    Goal: Microservices architecture design
    Progress: ✅ Think → ✅ Plan → ⏳ Write
 
@@ -333,6 +340,11 @@ python calculator.py  # → Professional calculator app launches
 - `gpt-4o` - Latest model, highly creative
 - `gpt-4o-mini` - Fast responses, cost-effective
 
+### **OpenRouter Models** (Multiple providers)
+- `google/gemini-2.0-flash-exp:free` - Free Google Gemini
+- `microsoft/phi-3-mini-128k-instruct:free` - Free Microsoft Phi
+- Many more models available at https://openrouter.ai/models
+
 ### **Legacy Support**
 - `claude-3-5-sonnet-20241022`
 - `claude-3-7-sonnet-20250219`
@@ -359,29 +371,62 @@ export ANTHROPIC_API_KEY=your_key_here
 # Option 2: .env file
 echo "OPENAI_API_KEY=your_key_here" > .env
 echo "ANTHROPIC_API_KEY=your_key_here" >> .env
-Provider-Specific Setup
-OpenAI Only:
-bashOPENAI_API_KEY=sk-proj-your_key_here
+```
+
+### OpenRouter Configuration
+
+**Using OpenRouter for multiple models:**
+```bash
+OPENAI_API_KEY=sk-or-v1-your_openrouter_key
+OPENAI_BASE_URL=https://openrouter.ai/api/v1
+```
+
+**Common OpenRouter Issues:**
+- `402 Insufficient credits` → Add credits at https://openrouter.ai/settings/credits or use free models
+- `429 Rate limited` → Wait a few minutes or try different free models
+- `Model not found` → Check available models at https://openrouter.ai/models
+- Free models available at: https://openrouter.ai/models/?q=free
+
+### Provider-Specific Setup
+**OpenAI Only:**
+```bash
+OPENAI_API_KEY=sk-proj-your_key_here
+```
 → Cognix automatically defaults to gpt-4o
-Anthropic Only:
-bashANTHROPIC_API_KEY=sk-ant-your_key_here
+
+**Anthropic Only:**
+```bash
+ANTHROPIC_API_KEY=sk-ant-your_key_here
+```
 → Cognix automatically defaults to claude-sonnet-4-20250514
-Manual Model Switching
-bashcognix> /model gpt-4o          # Switch to OpenAI
+
+**OpenRouter Only:**
+```bash
+OPENAI_API_KEY=sk-or-v1-your_openrouter_key
+OPENAI_BASE_URL=https://openrouter.ai/api/v1
+```
+→ Access to multiple models with single key
+
+### Manual Model Switching
+```bash
+cognix> /model gpt-4o          # Switch to OpenAI
 cognix> /model claude-sonnet-4  # Switch to Claude
+cognix> /model google/gemini-2.0-flash-exp:free  # Switch to OpenRouter
 cognix> /model                  # Show all available models
-Environment Detection Order
+```
+
+### Environment Detection Order
 Cognix checks for API keys in this priority:
 
-Environment variables (OPENAI_API_KEY, ANTHROPIC_API_KEY)
-.env file in current directory
-.env file in ~/.cognix/ directory
+1. Environment variables (OPENAI_API_KEY, ANTHROPIC_API_KEY)
+2. .env file in current directory
+3. .env file in ~/.cognix/ directory
 
-Common Issues
+### Common Issues
 
-No LLM providers available → Set at least one API key
-Model switching fails → Use /model to see available options
-Session restore errors → Check ~/.cognix/sessions/ directory permissions
+- **No LLM providers available** → Set at least one API key
+- **Model switching fails** → Use /model to see available options
+- **Session restore errors** → Check ~/.cognix/sessions/ directory permissions
 
 ## 📁 Data Storage & Privacy
 
@@ -411,6 +456,10 @@ Cognix stores local data under your home directory:
 ANTHROPIC_API_KEY=your_anthropic_key
 OPENAI_API_KEY=your_openai_key
 
+# OpenRouter (Alternative)
+OPENAI_API_KEY=sk-or-v1-your_openrouter_key
+OPENAI_BASE_URL=https://openrouter.ai/api/v1
+
 # Optional settings  
 COGNIX_DEBUG=true
 DEFAULT_MODEL=gpt-4o
@@ -430,7 +479,7 @@ COGNIX_AUTO_SAVE=true
 ### **vs. GitHub Copilot**
 | Feature | Cognix | Copilot |
 |---------|--------|---------|
-| Multi-AI Support | ✅ GPT-4o + Claude-4 | ❌ OpenAI only |
+| Multi-AI Support | ✅ GPT-4o + Claude-4 + OpenRouter | ❌ OpenAI only |
 | Session Persistence | ✅ Full project memory | ❌ No memory |
 | Workflow Structure | ✅ Think→Plan→Write | ❌ Code completion only |
 | CLI Integration | ✅ Native terminal | ❌ Editor-dependent |
@@ -445,7 +494,7 @@ COGNIX_AUTO_SAVE=true
 
 ### **vs. Other AI Coding Tools**
 - 🧠 **Memory Persistence**: Only Cognix remembers everything across sessions
-- 🔄 **Multi-AI**: Compare approaches from different models instantly  
+- 📄 **Multi-AI**: Compare approaches from different models instantly  
 - ⚡ **Structured Workflow**: Think→Plan→Write methodology
 - 🎯 **State Restoration**: Resume work exactly where you left off
 
@@ -499,9 +548,8 @@ cognix> /think "Todo app - brief"
 ```bash
 # Edit with AI assistance
 cognix> /edit src/api.py
-📝 Editing: src/api.py
+📁 Editing: src/api.py
 What changes would you like to make? Add rate limiting
-
 
 🤖 Generating suggestions...
 💡 Suggestion: I'll add Express rate limiting middleware...
@@ -581,7 +629,7 @@ MIT License - see [LICENSE](LICENSE) file for details.
 - [ ] 🎯 Target file/function specification (@filename, #function)
 - [ ] 🏃 File execution capabilities (/run)
 - [ ] 📱 Browser-based GUI (beta)
-- [ ] 🔍 Advanced code analysis features
+- [ ] 📝 Advanced code analysis features
 
 ### **v0.4.0** - Team Collaboration
 - [ ] 👥 Shared sessions between team members
@@ -590,7 +638,7 @@ MIT License - see [LICENSE](LICENSE) file for details.
 
 ### **v0.5.0** - Enterprise
 - [ ] 🏢 Self-hosted deployment options
-- [ ] 🔒 Advanced security features
+- [ ] 🔐 Advanced security features
 - [ ] 📊 Usage analytics and metrics
 
 ---
@@ -602,7 +650,7 @@ MIT License - see [LICENSE](LICENSE) file for details.
 - 💡 **Feature Requests**: [GitHub Discussions](https://github.com/cognix-dev/cognix/discussions)  
 
 ### **Stay Updated**
-- 🐦 **X**: [@Cognix_dev](https://x.com/cognix_dev)
+- 🦅 **X**: [@Cognix_dev](https://x.com/cognix_dev)
 ---
 
 <div align="center">

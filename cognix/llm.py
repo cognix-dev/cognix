@@ -49,14 +49,28 @@ class LLMProvider(ABC):
 class OpenAIProvider(LLMProvider):
     """OpenAI API provider"""
     
-    def __init__(self, api_key: str, model: str = "gpt-4"):
-        """Initialize OpenAI provider"""
+    def __init__(self, api_key: str, model: str = "gpt-4", base_url: str = None):
+        """Initialize OpenAI provider with optional base URL for OpenRouter support"""
         self.api_key = api_key
         self.model = model
         
         try:
             import openai
-            self.client = openai.OpenAI(api_key=api_key)
+            
+            # OpenRouter または他のOpenAI互換サービス対応
+            if base_url:
+                self.client = openai.OpenAI(
+                    api_key=api_key,
+                    base_url=base_url,
+                    default_headers={
+                        "HTTP-Referer": "https://github.com/cognix-dev/cognix",
+                        "X-Title": "Cognix"
+                    }
+                )
+            else:
+                # 通常のOpenAI API
+                self.client = openai.OpenAI(api_key=api_key)
+                
         except ImportError:
             raise ImportError("OpenAI package not installed. Run: pip install openai")
     
@@ -240,7 +254,17 @@ class AnthropicProvider(LLMProvider):
 class LLMManager:
     """Manages LLM providers and interactions"""
 
-# llm.py の MODEL_PROVIDERS セクションを以下に置き換えてください
+    # OpenRouter形式のモデル名を処理する関数
+    @staticmethod
+    def normalize_model_name(model: str) -> str:
+        """OpenRouter形式のモデル名を正規化"""
+        # openai/gpt-oss-120b:free -> gpt-oss-120b
+        if "/" in model:
+            parts = model.split("/")
+            model = parts[-1]  # プロバイダー部分を削除
+        if ":" in model:
+            model = model.split(":")[0]  # :free などのサフィックスを削除
+        return model
 
     # MODEL_PROVIDERS辞書を完全に置き換え
     MODEL_PROVIDERS = {
@@ -277,20 +301,27 @@ class LLMManager:
 
     def get_provider_for_model(self, model: str) -> LLMProvider:
         """Get provider for a specific model"""
+        # OpenRouter形式のモデル名を正規化
+        normalized_model = self.normalize_model_name(model)
+        
         # エイリアス名を正確な名前に変換
-        actual_model = self.MODEL_ALIASES.get(model, model)
+        actual_model = self.MODEL_ALIASES.get(normalized_model, normalized_model)
         
         provider_name = self.MODEL_PROVIDERS.get(actual_model)
         
         if not provider_name:
-            raise ValueError(f"Unknown model: {model}")
+            # OpenRouter経由の場合はopenaiプロバイダーを使用
+            if os.getenv("OPENAI_BASE_URL"):
+                provider_name = "openai"
+            else:
+                raise ValueError(f"Unknown model: {model}")
         
         provider = self.providers.get(provider_name)
         if not provider:
             raise Exception(f"Provider {provider_name} not available for model {model}")
         
-        # プロバイダーに正確なモデル名を設定
-        provider.model = actual_model
+        # プロバイダーに元のモデル名を設定（OpenRouter用）
+        provider.model = model  # 正規化前の元の名前を保持
         return provider
 
     def __init__(self, config):
@@ -323,14 +354,18 @@ class LLMManager:
         openai_key = config_obj.get_api_key("openai")
         if openai_key:
             try:
-                self.providers["openai"] = OpenAIProvider(openai_key)
+                # base_url を環境変数から取得
+                base_url = os.getenv("OPENAI_BASE_URL")
+                self.providers["openai"] = OpenAIProvider(
+                    openai_key, 
+                    base_url=base_url
+                )
                 
-                # 自動検出機能を追加（オプション）
-                if os.getenv('COGNIX_AUTO_DETECT_MODELS'):
-                    self._detect_available_models()
-                    
                 if os.getenv('COGNIX_DEBUG') or os.getenv('DEBUG'):
-                    print(f"Debug: OpenAI provider initialized successfully")
+                    if base_url:
+                        print(f"Debug: OpenAI provider initialized with base URL: {base_url}")
+                    else:
+                        print(f"Debug: OpenAI provider initialized successfully")
             except ImportError as e:
                 print(f"Warning: {e}")
         else:
@@ -479,32 +514,45 @@ class LLMManager:
         )
     
     def get_available_models(self) -> List[str]:
-        """Get list of available models (実在するもののみ、エイリアス除外)"""
+        """Get list of available models including OpenRouter"""
         available_models = []
         
+        # 定義済みモデルを追加
         for model, provider_name in self.MODEL_PROVIDERS.items():
-            # プロバイダーが利用可能で、かつエイリアスでない場合のみ追加
             if (provider_name in self.providers and 
                 model not in self.MODEL_ALIASES):
                 available_models.append(model)
+        
+        # OpenRouterの場合は、設定されているが利用可能かは実行時に判断
+        # ここでは何も追加しない
         
         return sorted(available_models)
     
     def set_model(self, model: str):
         """Set the current model"""
-        # エイリアス名を正確な名前に変換
+        # Consider OpenRouter format
+        if os.getenv("OPENAI_BASE_URL") and "/" in model:
+            # For OpenRouter models, set as-is
+            self.current_model = model
+            return
+        
+        # Convert alias names to actual names
         actual_model = self.MODEL_ALIASES.get(model, model)
         
         if actual_model not in self.MODEL_PROVIDERS:
-            # エイリアスも確認
+            # Also check aliases
             if model not in self.MODEL_ALIASES:
+                # Allow OpenRouter models
+                if os.getenv("OPENAI_BASE_URL"):
+                    self.current_model = model
+                    return
                 raise ValueError(f"Unknown model: {model}")
         
         provider_name = self.MODEL_PROVIDERS[actual_model]
         if provider_name not in self.providers:
             raise Exception(f"Provider {provider_name} not available")
         
-        self.current_model = actual_model
+        self.current_model = model  # Changed: use original model name instead of actual_model
     
     def get_model_info(self, model: str = None) -> Dict[str, Any]:
         """Get information about a model"""
