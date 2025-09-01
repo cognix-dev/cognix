@@ -38,7 +38,6 @@ class CognixCLI(cmd.Cmd):
     prompt = "cognix> "
     
     def __init__(self, config: Config, auto_mode: bool = False):
-
         """Initialize CLI"""
         super().__init__()
         
@@ -53,25 +52,30 @@ class CognixCLI(cmd.Cmd):
         
         self.is_first_run = self._check_first_run()
         
-        # プロバイダーの利用可能性チェック
+        # Check provider availability
         available_providers = self.config.get_available_providers()
         if not available_providers:
-            print("❌ APIキーが設定されていません")
-            print("OPENAI_API_KEYまたはANTHROPIC_API_KEYを設定してください")
+            print("⛔ No API keys configured")
+            print("Please set OPENAI_API_KEY or ANTHROPIC_API_KEY")
             sys.exit(1)
         
-        # 利用可能なモデルに自動切り替え
+        # Auto-switch to available models
         current_model = self.config.get("model")
         available_models = self.config.get_available_models_for_providers()
-        
+
         if current_model not in available_models:
-            default_model = self.config.get_default_model()
-            if default_model:
-                print(f"モデル '{current_model}' が利用できません。'{default_model}' に切り替えます。")
-                self.config.set("model", default_model)
+            # Special handling for OpenRouter models
+            if os.getenv("OPENAI_BASE_URL") and "/" in current_model:
+                # Don't switch OpenRouter models
+                pass
             else:
-                print("❌ 利用可能なモデルがありません")
-                sys.exit(1)
+                default_model = self.config.get_default_model()
+                if default_model:
+                    print(f"Model '{current_model}' is not available. Switching to '{default_model}'.")
+                    self.config.set("model", default_model)
+                else:
+                    print("No available models")
+                    sys.exit(1)
 
         self.llm_manager = LLMManager(config.get_effective_config())
         
@@ -100,7 +104,6 @@ class CognixCLI(cmd.Cmd):
         project_root = self.context.root_dir
         if project_root:
             self.config.load_project_config(str(project_root))
-
 
     def _find_reasonable_project_root(self) -> str:
         """Find a reasonable project root directory"""
@@ -190,7 +193,7 @@ class CognixCLI(cmd.Cmd):
                 current_model = current_model[:13] + "..."
             
             # Cyber-style logo without borders
-            logo = f"""{CYAN}Cognix v0.1.0{RESET} {GRAY}// Augmented AI Development Partner for CLI{RESET}
+            logo = f"""{CYAN}Cognix v0.1.3{RESET} {GRAY}// Augmented AI Development Partner for CLI{RESET}
 
 {GREEN}█▀▀ █▀█ █▀▀ █▄░█ █ ▀▄▀
 █▄▄ █▄█ █▄█ █░▀█ █ █░█{RESET}
@@ -789,6 +792,17 @@ Keep each point to 1-2 sentences."""
         # メインコンテンツをタイプライター効果で表示
         self._display_with_typewriter(content, "")
 
+    def _get_model_prefix(self) -> str:
+        """現在のモデルに応じたプレフィックスを取得"""
+        current_model = self.llm_manager.current_model
+        
+        if "claude" in current_model.lower():
+            return "Claude:"
+        elif "gpt" in current_model.lower() or "/" in current_model:
+            # OpenRouterモデルも含む
+            return "AI:"
+        else:
+            return "AI:"
 
     # 設定変更時の便利メソッド（オプション）
     def _toggle_typewriter_effect(self):
@@ -1050,13 +1064,13 @@ Keep each point to 1-2 sentences."""
                 if stats.get('total_entries', 0) > 0:
                     session_context = f"""
 
-    IMPORTANT COGNIX SESSION CONTEXT:
-    - You are operating in Cognix, which has advanced session management
-    - This session has been restored with {stats['total_entries']} previous interactions
-    - All conversation history and context from previous sessions is available to you
-    - When users reference past conversations, you can naturally access them from your memory
-    - Do NOT say information "won't be preserved" - in Cognix, it IS preserved across sessions
-    - Respond naturally as if this is one continuous conversation"""
+        IMPORTANT COGNIX SESSION CONTEXT:
+        - You are operating in Cognix, which has advanced session management
+        - This session has been restored with {stats['total_entries']} previous interactions
+        - All conversation history and context from previous sessions is available to you
+        - When users reference past conversations, you can naturally access them from your memory
+        - Do NOT say information "won't be preserved" - in Cognix, it IS preserved across sessions
+        - Respond naturally as if this is one continuous conversation"""
             
             enhanced_system_prompt = base_system_prompt + session_context
             
@@ -1069,7 +1083,8 @@ Keep each point to 1-2 sentences."""
                     conversation_history=conversation_history,
                     system_prompt=enhanced_system_prompt
                 )
-                response_content = self._stream_with_typewriter(stream_gen, "Claude:")
+                model_prefix = self._get_model_prefix()
+                response_content = self._stream_with_typewriter(stream_gen, model_prefix)
                 
             else:
                 response = self.llm_manager.generate_response(
@@ -1080,7 +1095,8 @@ Keep each point to 1-2 sentences."""
                 )
                 response_content = response.content
                 # 非ストリーミング応答もタイプライター効果で表示
-                self._display_with_typewriter(response_content, "Claude: ")
+                model_prefix = self._get_model_prefix()
+                self._display_with_typewriter(response_content, model_prefix)
             
             # Store in memory
             self.memory.add_entry(
@@ -1102,8 +1118,47 @@ Keep each point to 1-2 sentences."""
                 usage = response.usage
                 print(f"Tokens: {usage['total_entries']} ({usage['prompt_tokens']} + {usage['completion_tokens']})")
             
-        except Exception as e:
-            self.error_handler.handle_error(e, "chat interaction")    
+        except Exception as e:  # インデントを修正
+            # OpenRouterエラーの特別処理
+            error_str = str(e)
+            
+            if ("404" in error_str and "No endpoints found for" in error_str) or \
+            ("400" in error_str and "is not a valid model ID" in error_str):
+                # 404または400エラー（モデル不在・無効）
+                current_model = self.llm_manager.current_model
+                print(f"Model '{current_model}' is not available on OpenRouter.")
+                print("This model may have been removed, renamed, or doesn't exist.")
+                print()
+                print("Try switching to an available model:")
+                print("  /model google/gemini-2.0-flash-exp:free")
+                print("  /model microsoft/phi-3-mini-128k-instruct:free") 
+                print("  /model gpt-4o  (switch back to direct OpenAI)")
+                print()
+                print("Use '/model' to see all configured models.")
+                
+            elif "402" in error_str and "credits" in error_str:
+                # OpenRouter クレジット不足エラー
+                print("OpenRouter account has insufficient credits for this model.")
+                print("Try switching to a free model:")
+                print("  /model google/gemini-2.0-flash-exp:free")
+                print("Or visit https://openrouter.ai/settings/credits to add credits.")
+                
+            elif "429" in error_str and "rate-limited" in error_str:
+                # OpenRouter レート制限エラー
+                current_model = self.llm_manager.current_model
+                print(f"Model '{current_model}' is temporarily rate-limited.")
+                print("This free model has hit its usage limit.")
+                print()
+                print("Options:")
+                print("  • Wait a few minutes and try again")
+                print("  • Try a different free model:")
+                print("    /model microsoft/phi-3-mini-128k-instruct:free")
+                print("  • Add your own API key at: https://openrouter.ai/settings/integrations")
+                print("  • Switch to direct OpenAI: /model gpt-4o")
+                
+            else:
+                # 既存のエラーハンドリング
+                self.error_handler.handle_error(e, "chat interaction")
 
     def get_multiline_input(self, prompt: str, allow_empty: bool = False) -> str:
         """複数行入力を適切に処理する統一関数"""
@@ -1951,116 +2006,202 @@ General:
             print("  /backup restore <backup> <target> - Restore from backup")
 
     def _handle_model_unavailable_error(self, model_name: str, error: Exception):
-        """モデル利用不可エラーを役立つ提案とともに処理"""
+        """Handle model unavailable errors with helpful suggestions"""
         available_providers = self.config.get_available_providers()
         available_models = self.config.get_available_models_for_providers()
         
-        print(f"モデル '{model_name}' は利用できません")
+        print(f"Model '{model_name}' is not available")
         
         if not available_providers:
-            print("APIプロバイダーが設定されていません")
-            print("OPENAI_API_KEYまたはANTHROPIC_API_KEYを設定してください")
+            print("No API providers configured")
+            print("Please set OPENAI_API_KEY or ANTHROPIC_API_KEY")
             return
         
         if "anthropic" in str(error).lower() and "anthropic" not in available_providers:
             print()
-            print("これはClaudeモデルですが、Anthropic APIキーが設定されていません")
-            print("Claudeモデルを使用するには:")
-            print("  1. .envファイルにANTHROPIC_API_KEY=your_key_hereを追加")
-            print("  2. またはコマンドで: export ANTHROPIC_API_KEY=your_key_here")
+            print("This is a Claude model, but Anthropic API key is not configured")
+            print("To use Claude models:")
+            print("  1. Add ANTHROPIC_API_KEY=your_key_here to .env file")
+            print("  2. Or use command: export ANTHROPIC_API_KEY=your_key_here")
         
         elif "openai" in str(error).lower() and "openai" not in available_providers:
             print()
-            print("これはGPTモデルですが、OpenAI APIキーが設定されていません")
-            print("GPTモデルを使用するには:")
-            print("  1. .envファイルにOPENAI_API_KEY=your_key_hereを追加")
-            print("  2. またはコマンドで: export OPENAI_API_KEY=your_key_here")
+            print("This is a GPT model, but OpenAI API key is not configured")
+            print("To use GPT models:")
+            print("  1. Add OPENAI_API_KEY=your_key_here to .env file")
+            print("  2. Or use command: export OPENAI_API_KEY=your_key_here")
         
         if available_models:
             print()
-            print("現在のAPIキーで利用可能なモデル:")
+            print("Available models with current API keys:")
             for model in available_models[:5]:
-                provider = "Claude" if "claude" in model else "GPT" if "gpt" in model else "不明"
+                provider = "Claude" if "claude" in model else "GPT" if "gpt" in model else "Unknown"
                 print(f"  • {model} ({provider})")
             
             if len(available_models) > 5:
-                print(f"  ... その他{len(available_models) - 5}個")
+                print(f"  ... and {len(available_models) - 5} more")
             
             print()
-            print(f"試してください: /model {available_models[0]}")
+            print(f"Try: /model {available_models[0]}")
 
-    # cmd_model メソッドを置き換え
     def cmd_model(self, args: List[str]):
-        """Switch model or show current with better error handling"""
+        """Switch model or show current"""
         if not args:
+            # Show current model and available models with better formatting
             current = self.llm_manager.current_model
-            available_models = self.config.get_available_models_for_providers()
-            available_providers = self.config.get_available_providers()
+            available = self.llm_manager.get_available_models()
             
-            print(f"現在のモデル: {current}")
-            print(f"利用可能プロバイダー: {', '.join(available_providers) if available_providers else 'なし'}")
+            print(f"\n🤖 **Current model**: {current}")
             
-            if available_models:
-                print(f"利用可能なモデル ({len(available_models)}個):")
-                by_provider = {}
-                for model in available_models:
-                    provider = "anthropic" if "claude" in model else "openai" if "gpt" in model else "other"
-                    if provider not in by_provider:
-                        by_provider[provider] = []
-                    by_provider[provider].append(model)
+            # Get provider info
+            try:
+                if "claude" in current:
+                    provider_name = "anthropic"
+                elif "gpt" in current:
+                    provider_name = "openai"
+                else:
+                    provider_name = "unknown"
+                print(f"🔌 **Provider**: {provider_name}")
+            except:
+                print(f"🔌 **Provider**: unknown")
+            
+            print(f"\n📋 **Available models** ({len(available)} total):")
+            
+            # Group models by provider for better display
+            by_provider = {}
+            for model in available:
+                if "claude" in model:
+                    provider = "anthropic"
+                elif "gpt" in model or "/" in model:  # OpenRouter形式を考慮
+                    provider = "openai"
+                else:
+                    provider = "other"
                 
-                for provider, models in by_provider.items():
-                    print(f"  {provider.upper()} ({len(models)}個のモデル):")
-                    for model in models:
-                        marker = " ← 現在使用中" if model == current else ""
-                        print(f"    • {model}{marker}")
-            else:
-                print("利用可能なモデルがありません - APIキーの設定を確認してください")
+                if provider not in by_provider:
+                    by_provider[provider] = []
+                by_provider[provider].append(model)
             
-            return
-        
-        # Switch to specified model
-        model_name = args[0]
-        available_models = self.config.get_available_models_for_providers()
-        
-        if not available_models:
-            print("利用可能なモデルがありません")
-            print("OPENAI_API_KEYまたはANTHROPIC_API_KEYを設定してください")
-            return
-        
-        # Check for exact match
-        if model_name in available_models:
-            target_model = model_name
+            # Display grouped by provider with better formatting
+            for provider, models in by_provider.items():
+                print(f"\n  **{provider.upper()}** ({len(models)} models):")
+                for model in models:
+                    current_marker = " ← current" if model == current else ""
+                    # Truncate long model names for better display
+                    display_name = model if len(model) <= 35 else model[:32] + "..."
+                    print(f"    • {display_name}{current_marker}")
+                    if display_name != model:  # Show full name if truncated
+                        print(f"      ({model})")
+            
+            # Show aliases
+            aliases = getattr(self.llm_manager, 'MODEL_ALIASES', {})
+            if aliases:
+                print(f"\n🔤 **Aliases**:")
+                for alias, full_name in aliases.items():
+                    print(f"    • {alias} → {full_name}")
+            
+            print(f"\n💡 **Usage**: /model <model_name>")
+            print(f"💡 **Tip**: Use aliases or partial names (e.g., 'claude-3-7' for claude-3-7-sonnet-20250219)")
+            
         else:
-            # Try partial matching
-            partial_matches = [m for m in available_models if model_name.lower() in m.lower()]
-            
-            if len(partial_matches) == 1:
-                target_model = partial_matches[0]
-                print(f"部分一致を使用: {model_name} → {target_model}")
-            elif len(partial_matches) > 1:
-                print(f"'{model_name}'に対して複数の一致:")
-                for match in partial_matches:
-                    print(f"  • {match}")
-                print("より具体的に指定してください")
-                return
-            else:
-                print(f"モデル '{model_name}' が見つかりません")
-                print("利用可能なモデル:")
-                for model in available_models[:5]:
-                    print(f"  • {model}")
-                return
-        
-        try:
-            # Switch model
-            self.llm_manager.set_model(target_model)
-            print(f"切り替えました: {target_model}")
-            
-            # Update config
-            self.config.set("model", target_model)
-            
-        except Exception as e:
-            self._handle_model_unavailable_error(target_model, e)   
+            model_name = args[0]
+            try:
+                # OpenRouter特別処理を最初に追加
+                if os.getenv("OPENAI_BASE_URL") and "/" in model_name:
+                    try:
+                        self.llm_manager.set_model(model_name)
+                        provider_name = "openai"
+                        print(f"✅ **Switched to**: {model_name}")
+                        print(f"🔌 **Provider**: {provider_name} (OpenRouter)")
+                        self.config.set("model", model_name)
+                        return
+                    except Exception as e:
+                        print(f"❌ **Error switching to OpenRouter model**: {e}")
+                        return
+                
+                # 通常のモデル処理
+                available = self.llm_manager.get_available_models()
+                aliases = getattr(self.llm_manager, 'MODEL_ALIASES', {})
+                
+                # Check for exact match first
+                if model_name in available:
+                    target_model = model_name
+                # Check aliases
+                elif model_name in aliases:
+                    target_model = aliases[model_name]
+                    print(f"🔄 **Using alias**: {model_name} → {target_model}")
+                else:
+                    # Try partial matching
+                    partial_matches = [m for m in available if model_name in m]
+                    
+                    if len(partial_matches) == 1:
+                        target_model = partial_matches[0]
+                        print(f"🔍 **Partial match found**: {model_name} → {target_model}")
+                    elif len(partial_matches) > 1:
+                        print(f"❌ **Ambiguous model name**: '{model_name}' matches multiple models:")
+                        for match in partial_matches[:5]:
+                            print(f"    • {match}")
+                        if len(partial_matches) > 5:
+                            print(f"    • ... and {len(partial_matches) - 5} more")
+                        print(f"💡 **Tip**: Use more specific name")
+                        return
+                    else:
+                        print(f"❌ **Error**: Model '{model_name}' not found")
+                        print(f"📋 **Available**: {', '.join(available[:3])}{'...' if len(available) > 3 else ''}")
+                        if aliases:
+                            print(f"🔤 **Aliases**: {', '.join(aliases.keys())}")
+                        return
+                
+                # 重要な修正: 直接OpenAI/Anthropicモデルに切り替える際の処理
+                if target_model in ["gpt-4o", "gpt-4", "gpt-3.5-turbo", "gpt-4-turbo", "gpt-4o-mini"] and os.getenv("OPENAI_BASE_URL"):
+                    # OpenRouter環境で直接OpenAIモデルに切り替える場合
+                    try:
+                        # 一時的にOPENAI_BASE_URLを無効化
+                        original_base_url = os.environ.pop("OPENAI_BASE_URL", None)
+                        
+                        # 🔧 重要: プロバイダーを完全に再作成
+                        from cognix.llm import OpenAIProvider
+                        openai_key = self.config.get_api_key("openai")
+                        if openai_key:
+                            # 直接OpenAI接続用の新しいプロバイダーを作成
+                            self.llm_manager.providers["openai"] = OpenAIProvider(
+                                openai_key, 
+                                base_url=None  # base_urlを明示的にNoneに設定
+                            )
+                            
+                            # モデルを設定
+                            self.llm_manager.set_model(target_model)
+                            
+                            print(f"✅ **Switched to**: {target_model}")
+                            print(f"🔌 **Provider**: openai (Direct)")
+                            self.config.set("model", target_model)
+                            
+                            # OPENAI_BASE_URLを復元
+                            if original_base_url:
+                                os.environ["OPENAI_BASE_URL"] = original_base_url
+                            
+                            return
+                        else:
+                            raise Exception("OpenAI API key not found")
+                            
+                    except Exception as e:
+                        # エラー時はOPENAI_BASE_URLを復元
+                        if original_base_url:
+                            os.environ["OPENAI_BASE_URL"] = original_base_url
+                        print(f"❌ **Error switching to direct OpenAI**: {e}")
+                        return                
+                # 通常のモデル切り替え処理
+                self.llm_manager.set_model(target_model)
+                
+                # Get provider info
+                provider_name = "anthropic" if "claude" in target_model else "openai" if "gpt" in target_model else "unknown"
+                print(f"✅ **Switched to**: {target_model}")
+                print(f"🔌 **Provider**: {provider_name}")
+                
+                # Update config
+                self.config.set("model", target_model)
+                
+            except Exception as e:
+                print(f"❌ **Error switching model**: {e}")
     
     def cmd_export(self, args: List[str]):
         """Export memory or configuration"""
