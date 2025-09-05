@@ -469,7 +469,7 @@ class LLMManager:
         
         # Add current prompt
         messages.append({"role": "user", "content": prompt})
-        
+              
         return provider.generate_response(
             messages=messages,
             temperature=temperature,

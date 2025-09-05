@@ -30,6 +30,9 @@ from cognix.utils import (
 )
 from cognix.prompt_templates import prompt_manager
 from cognix.error_handling import ErrorHandler, safe_execute, CognixError
+from cognix.run import RunCommand
+from cognix.reference_parser import ReferenceParser
+from cognix.related_finder import BasicRelatedFinder
 from cognix import __version__  # バージョン情報を取得するため
 
 class CognixCLI(cmd.Cmd):
@@ -87,6 +90,17 @@ class CognixCLI(cmd.Cmd):
         
         self.error_handler = ErrorHandler(debug_mode=config.get('debug_mode', False))
         
+        # Initialize RunCommand
+        self.run_command = RunCommand(self)
+
+        # Initialize related finder
+        try:
+            self.related_finder = BasicRelatedFinder(self.context)
+        except Exception as e:
+            self.related_finder = None
+            if self.config.get('debug_mode', False):
+                print(f"Warning: Failed to initialize related finder: {e}")
+
         # Generate dynamic intro
         self.intro = self._generate_terminal_logo()
         
@@ -191,9 +205,14 @@ class CognixCLI(cmd.Cmd):
             # Truncate long model names to fit layout
             if len(current_model) > 16:
                 current_model = current_model[:13] + "..."
-            
+
+            # バージョンを動的に取得
+            try:
+                from cognix import __version__
+                version = __version__
+                
             # Cyber-style logo without borders
-            logo = f"""{CYAN}Cognix v0.1.3{RESET} {GRAY}// Augmented AI Development Partner for CLI{RESET}
+            logo = f"""{CYAN}Cognix v{version}{RESET} // Augmented AI Development Partner for CLI{RESET}
 
 {GREEN}█▀▀ █▀█ █▀▀ █▄░█ █ ▀▄▀
 █▄▄ █▄█ █▄█ █░▀█ █ █░█{RESET}
@@ -210,6 +229,7 @@ Full-Pipeline Development | Seamless Terminal Experience
 {GREEN}>{RESET} {CYAN}/help{RESET}           - Show all commands
 {GREEN}>{RESET} {CYAN}/think "goal"{RESET}   - Start AI analysis  
 {GREEN}>{RESET} {CYAN}/edit file.py{RESET}   - AI-assisted editing
+{GREEN}>{RESET} {CYAN}/run file.py{RESET}    - Execute code safely
 
 {GRAY}Made by Individual Developer | MIT License{RESET}"""
             
@@ -1017,7 +1037,10 @@ Keep each point to 1-2 sentences."""
             'plan': self.cmd_plan,
             'write': self.cmd_write,
             'workflow-status': self.cmd_workflow_status,
-            'clear-workflow': self.cmd_clear_workflow
+            'clear-workflow': self.cmd_clear_workflow,
+            'run': self.cmd_run,
+            'run-history': self.cmd_run_history,
+            'related': self.cmd_related
         }
         
         if cmd_name in command_map:
@@ -1034,7 +1057,7 @@ Keep each point to 1-2 sentences."""
             print("Type '/help' for available commands.")
 
     def handle_chat(self, user_input: str):
-        """Handle regular chat interaction"""
+        """Handle regular chat interaction with reference parsing"""
         try:
             # 複数行チャット入力のサポート
             if user_input.strip().upper() == "MULTI":
@@ -1045,18 +1068,80 @@ Keep each point to 1-2 sentences."""
                 )
                 if not user_input:
                     return
-            
+
+            # cli.py の handle_chat メソッド内、参照記法処理部分を以下に置き換え
+
             print("Thinking...")
-            
-            # Generate context
-            context = self.context.generate_context_for_prompt(user_input)
-            
+
+            # 新機能 参照記法の解析を追加
+            reference_parser = ReferenceParser(self.context)
+            parsed_refs = reference_parser.parse(user_input)
+
+            # 変数を事前に初期化（重要！参照記法がない場合でも定義）
+            has_errors = False
+            has_valid_content = False
+            error_messages = []
+
+            # 参照記法が見つかった場合の処理（修正版）
+            if parsed_refs.has_references:
+                print("\n🔎 Processing references...")
+                
+                # ファイル参照をチェック
+                for file_ref in parsed_refs.files:
+                    if not file_ref.exists:
+                        error_messages.append(f"❌ File not found: {file_ref.filename}")
+                        has_errors = True
+                    else:
+                        has_valid_content = True
+                
+                # 関数参照をチェック
+                for func_ref in parsed_refs.functions:
+                    if not func_ref.found:
+                        error_messages.append(f"❌ Function not found: #{func_ref.function_name}")
+                        has_errors = True
+                    else:
+                        has_valid_content = True
+                                
+                # エラーメッセージを表示（ただし処理は継続）
+                if error_messages:
+                    for error_msg in error_messages:
+                        print(error_msg)
+                
+                # 有効なコンテンツがある場合は処理を続行
+                if has_valid_content:
+                    if parsed_refs.context_text:
+                        print(parsed_refs.context_text)
+                        print()
+                elif has_errors and not has_valid_content:
+                    # 全ての参照が失敗した場合のみ中断
+                    print("\nAll references failed. Please check the file names and function names, then try again.")
+                    print("💡 Tip: Use exact file names and function names as they appear in your project.")
+                    return  # ← 処理を中断
+
+            # Generate context (既存のコンテキスト + 参照記法のコンテキスト)
+            base_context = self.context.generate_context_for_prompt(user_input)
+
+            # 参照記法のコンテキストを結合（有効なコンテンツがある場合のみ）
+            enhanced_context = base_context
+            if parsed_refs.has_references and parsed_refs.context_text:
+                enhanced_context = f"{base_context}\n\n=== Referenced Content ===\n{parsed_refs.context_text}"
+
             # Get conversation history
             conversation_history = self.memory.get_conversation_context(limit=5)
-            
+
             # Build enhanced system prompt with session awareness
             base_system_prompt = self.config.get_system_prompt("default")
-            
+
+            # 1. 参照記法のシステムプロンプト強化（最優先配置）
+            reference_context = ""
+            if parsed_refs.has_references and has_valid_content:
+                reference_context = f"""CRITICAL: The user has provided specific file content below using reference notation.
+            The following content is the ACTUAL file content from the user's project:
+            {parsed_refs.context_text}
+            You MUST base your analysis on this exact content shown above. 
+            Do NOT make assumptions about what the file might contain based on its name.
+            The content displayed above is the current, real state of the user's files."""
+
             # セッション復元時の自動コンテキスト追加
             session_context = ""
             if self.session_manager.get_session_stats():
@@ -1064,22 +1149,26 @@ Keep each point to 1-2 sentences."""
                 if stats.get('total_entries', 0) > 0:
                     session_context = f"""
 
-        IMPORTANT COGNIX SESSION CONTEXT:
-        - You are operating in Cognix, which has advanced session management
-        - This session has been restored with {stats['total_entries']} previous interactions
-        - All conversation history and context from previous sessions is available to you
-        - When users reference past conversations, you can naturally access them from your memory
-        - Do NOT say information "won't be preserved" - in Cognix, it IS preserved across sessions
-        - Respond naturally as if this is one continuous conversation"""
-            
-            enhanced_system_prompt = base_system_prompt + session_context
-            
+            IMPORTANT COGNIX SESSION CONTEXT:
+            - You are operating in Cognix, which has advanced session management
+            - This session has been restored with {stats['total_entries']} previous interactions
+            - All conversation history and context from previous sessions is available to you
+            - When users reference past conversations, you can naturally access them from your memory
+            - Do NOT say information "won't be preserved" - in Cognix, it IS preserved across sessions
+            - Respond naturally as if this is one continuous conversation"""
+
+            # 2. システムプロンプトの構築（参照コンテキストを最優先配置）
+            if reference_context:
+                enhanced_system_prompt = reference_context + "\n\n" + base_system_prompt + session_context
+            else:
+                enhanced_system_prompt = base_system_prompt + session_context
+
             # Generate response
             if self.config.get("stream_responses", True):
                 # ストリーミング応答をタイプライター効果で表示
                 stream_gen = self.llm_manager.stream_response(
                     prompt=user_input,
-                    context=context,
+                    context=enhanced_context,
                     conversation_history=conversation_history,
                     system_prompt=enhanced_system_prompt
                 )
@@ -1089,7 +1178,7 @@ Keep each point to 1-2 sentences."""
             else:
                 response = self.llm_manager.generate_response(
                     prompt=user_input,
-                    context=context,
+                    context=enhanced_context,
                     conversation_history=conversation_history,
                     system_prompt=enhanced_system_prompt
                 )
@@ -1097,28 +1186,40 @@ Keep each point to 1-2 sentences."""
                 # 非ストリーミング応答もタイプライター効果で表示
                 model_prefix = self._get_model_prefix()
                 self._display_with_typewriter(response_content, model_prefix)
-            
-            # Store in memory
+
+            # Store in memory (参照記法情報も保存)
             self.memory.add_entry(
                 user_prompt=user_input,
                 claude_reply=response_content,
-                model_used=self.llm_manager.current_model
+                model_used=self.llm_manager.current_model,
+                metadata={
+                    "has_references": parsed_refs.has_references,
+                    "referenced_files": [f.filename for f in parsed_refs.files if f.exists],
+                    "referenced_functions": [f.function_name for f in parsed_refs.functions if f.found],
+                    "reference_errors": len(error_messages) if 'error_messages' in locals() else 0
+                }
             )
-            
-            # Store in session
+
+            # Store in session (参照記法情報も保存)
             self.session_manager.add_entry(
                 user_input=user_input,
                 ai_response=response_content,
                 model_used=self.llm_manager.current_model,
-                command_type="chat"
+                command_type="chat",
+                metadata={
+                    "has_references": parsed_refs.has_references,
+                    "referenced_files": [f.filename for f in parsed_refs.files if f.exists],
+                    "referenced_functions": [f.function_name for f in parsed_refs.functions if f.found],
+                    "reference_errors": len(error_messages) if 'error_messages' in locals() else 0
+                }
             )
-            
+
             # Show token usage if enabled
             if self.config.get("show_token_usage", False) and not self.config.get("stream_responses", True):
                 usage = response.usage
                 print(f"Tokens: {usage['total_entries']} ({usage['prompt_tokens']} + {usage['completion_tokens']})")
-            
-        except Exception as e:  # インデントを修正
+
+        except Exception as e:
             # OpenRouterエラーの特別処理
             error_str = str(e)
             
@@ -1799,6 +1900,29 @@ File Operations:
   /review [dir]        - Review and analyze directory
   /diff <file1> <file2> - Show diff between files
   /apply <patch_file>  - Apply patch to files
+
+Code Execution:
+  /run <file>              - Execute code files securely
+  /run <file> --args "..."  - Execute with arguments
+  /run <file> --watch      - Watch file and re-run on changes
+  /run <file> --test       - Test mode (show what would run)
+  /run <file> --profile    - Show execution time and resources
+  /run-history [limit]     - Show recent execution history
+
+File Relationships:
+  /related <filename>    Find files related to target file
+                        Detects imports, tests, and name patterns
+                        
+    Options:
+      --imports          Show files that target imports
+      --used-by         Show files that import target  
+      --tests           Show test files for target
+      
+    Examples:
+      /related main.py                    # All relationships
+      /related auth.py --imports         # Import dependencies
+      /related utils.py --used-by        # Usage analysis  
+      /related auth --tests              # Test coverage
 
 Workflow Commands:
   /think <goal>        - Analyze problem with AI (Step 1)
@@ -2899,6 +3023,106 @@ General:
                 print("Workflow state preserved")
         else:
             print("No active workflow to clear")
+
+    def cmd_run(self, args: List[str]):
+        """Execute code files"""
+        self.run_command.execute(args)
+
+    def cmd_run_history(self, args: List[str]):
+        """Show execution history"""
+        limit = 10
+        if args and args[0].isdigit():
+            limit = int(args[0])
+        self.run_command.show_history(limit)
+
+    def cmd_related(self, args: List[str]):
+        """Find files related to target file"""
+        
+        if not args:
+            print("Usage: related <filename> [--imports|--used-by|--tests]")
+            print("Examples:")
+            print("  related main.py           # All related files")
+            print("  related auth.py --imports # Files imported by auth.py")
+            print("  related utils --used-by   # Files that import utils")
+            print("  related auth --tests      # Test files for auth")
+            return
+        
+        parts = args
+        target_file = parts[0]
+        
+        # Parse option flags
+        imports_flag = '--imports' in parts
+        used_by_flag = '--used-by' in parts
+        tests_flag = '--tests' in parts
+        
+        # Validate only one option at a time
+        option_count = sum([imports_flag, used_by_flag, tests_flag])
+        if option_count > 1:
+            print("Please specify only one option at a time")
+            return
+        
+        try:
+            # Check if related finder is available
+            if not self.related_finder:
+                print("Related finder not available. File context may not be initialized.")
+                return
+            
+            # Execute related file search
+            related_files = self.related_finder.find_related(
+                target_file=target_file,
+                imports=imports_flag,
+                used_by=used_by_flag,
+                tests=tests_flag
+            )
+            
+            # Handle target file not found
+            resolved_path = self.related_finder._resolve_target_file(target_file)
+            if not resolved_path:
+                print(f"File not found: {target_file}")
+                print("Try:")
+                print("  - Check file name spelling")
+                print("  - Include .py extension if needed")
+                print("  - Use relative path from project root")
+                return
+            
+            # Determine display option
+            display_option = None
+            if imports_flag:
+                display_option = 'imports'
+            elif used_by_flag:
+                display_option = 'used_by'
+            elif tests_flag:
+                display_option = 'tests'
+            
+            # Format and show results
+            formatted_output = self.related_finder.format_results(
+                related_files,
+                resolved_path,
+                display_option
+            )
+            
+            print(formatted_output)
+            
+            # Store in session
+            self.session_manager.add_entry(
+                user_input=f"related {' '.join(args)}",
+                ai_response=formatted_output,
+                model_used=self.llm_manager.current_model,
+                command_type="related",
+                target_files=[target_file],
+                metadata={
+                    "imports": imports_flag,
+                    "used_by": used_by_flag,
+                    "tests": tests_flag,
+                    "results_count": len(related_files)
+                }
+            )
+            
+        except Exception as e:
+            print(f"Error finding related files: {e}")
+            if self.config.get('debug_mode', False):
+                import traceback
+                print(traceback.format_exc())
 
 # cognix/cli.py の最後に以下のエントリーポイントを追加
 

@@ -5,6 +5,30 @@ All notable changes to Cognix will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.1.4] - 2025-01-04
+
+### Improved
+- **Reference Notation Resilience** - Enhanced handling of partial file reference failures
+  - Processing continues when some referenced files are found and others are missing
+  - Clear reporting of which specific files could not be located
+  - Graceful degradation instead of complete failure
+- **Error Handling Enhancement** - More user-friendly error messages and recovery
+  - Detailed feedback for file reference issues
+  - Improved system prompt construction optimization
+- **Cross-Model Compatibility** - Consistent behavior across different AI models
+  - Verified functionality with Claude Sonnet 4 and GPT-4o
+  - Standardized error handling across model providers
+
+### Fixed
+- Reference notation (`@file1.py @file2.py`) now continues processing when partial files are missing
+- System prompt construction optimized for better reliability
+- Improved error message clarity for file reference failures
+
+### Technical
+- Enhanced file resolution logic in reference notation processing
+- Optimized error propagation and user feedback mechanisms
+- Comprehensive testing across multiple AI model providers
+
 ## [0.1.3] - 2025-09-01
 
 ### Added

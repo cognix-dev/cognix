@@ -4,9 +4,9 @@
 
 <br clear="left">
 
-🚀 **v0.1.3 released!**
+🚀 **v0.1.4 released!**
 
-OpenRouter integration for access to multiple AI models with single API key.
+Enhanced reference notation resilience and improved error handling.
 
 If you find Cognix useful, please give it a star ⭐ — it helps us reach more developers and build a stronger community.
 
@@ -22,7 +22,7 @@ If you find Cognix useful, please give it a star ⭐ — it helps us reach more 
 Persistent Sessions, Long-Term Memory, Multi-Model Support, and Full-Pipeline Development.  
 Build smarter, faster, and without context loss.
 
-[![Version](https://img.shields.io/badge/version-0.1.3-blue.svg)](https://github.com/cognix-dev/cognix)
+[![Version](https://img.shields.io/badge/version-0.1.4-blue.svg)](https://github.com/cognix-dev/cognix)
 [![License](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
 [![Python](https://img.shields.io/badge/python-3.8+-blue.svg)](https://python.org)
 [![Demo](https://img.shields.io/badge/demo-12_seconds-brightgreen.svg)](https://github.com/cognix-dev/cognix#-see-it-in-action)
@@ -246,15 +246,16 @@ cognix> /write --file clock.py
 **Perfect for rapid prototyping and instant visual results.**
 
 ### ⚡ **Intelligent Context Awareness**
-- 📁 **Auto-scans** your project structure
+- 🔍 **Auto-scans** your project structure
 - 🧠 **Remembers** all previous conversations  
 - 🎯 **Adapts** suggestions to your codebase
 - 📄 **Maintains** context across sessions
-  ## 🆕 What's New in v0.1.3
-- OpenRouter integration for multiple AI models access
-- Enhanced error handling for 402/429/401 API errors
-- Support for free models through OpenRouter
-- Improved model switching and provider management
+
+## 🆕 What's New in v0.1.4
+- Enhanced reference notation resilience for partial file failures
+- Improved error handling and user-friendly messages
+- Cross-model compatibility improvements (Claude Sonnet 4 & GPT-4o tested)
+- Optimized system prompt construction
 
 ---
 
@@ -428,7 +429,7 @@ Cognix checks for API keys in this priority:
 - **Model switching fails** → Use /model to see available options
 - **Session restore errors** → Check ~/.cognix/sessions/ directory permissions
 
-## 📁 Data Storage & Privacy
+## 🔐 Data Storage & Privacy
 
 Cognix stores local data under your home directory:
 
@@ -548,7 +549,7 @@ cognix> /think "Todo app - brief"
 ```bash
 # Edit with AI assistance
 cognix> /edit src/api.py
-📁 Editing: src/api.py
+🔍 Editing: src/api.py
 What changes would you like to make? Add rate limiting
 
 🤖 Generating suggestions...
@@ -566,7 +567,7 @@ cognix> How can I improve the performance of my React components?
 
 # AI automatically analyzes your React project structure
 🧠 Analyzing your React project...
-📁 Found: 15 components, 3 hooks, 2 contexts
+🔍 Found: 15 components, 3 hooks, 2 contexts
 
 💡 Specific recommendations for your codebase:
 1. UserProfile.jsx: Consider React.memo for expensive renders
@@ -619,7 +620,7 @@ MIT License - see [LICENSE](LICENSE) file for details.
 ## 🌟 Roadmap
 
 ### **v0.2.0** - Memory Management & Code Enhancement
-- [ ] 📝 Individual memory entry deletion
+- [ ] 🔍 Individual memory entry deletion
 - [ ] 🗂️ Automatic memory archiving
 - [ ] 📊 Memory size management and cleanup
 - [ ] 🎨 AI code enhancement (/refactor, /lint)
@@ -629,7 +630,7 @@ MIT License - see [LICENSE](LICENSE) file for details.
 - [ ] 🎯 Target file/function specification (@filename, #function)
 - [ ] 🏃 File execution capabilities (/run)
 - [ ] 📱 Browser-based GUI (beta)
-- [ ] 📝 Advanced code analysis features
+- [ ] 🔍 Advanced code analysis features
 
 ### **v0.4.0** - Team Collaboration
 - [ ] 👥 Shared sessions between team members
@@ -650,7 +651,7 @@ MIT License - see [LICENSE](LICENSE) file for details.
 - 💡 **Feature Requests**: [GitHub Discussions](https://github.com/cognix-dev/cognix/discussions)  
 
 ### **Stay Updated**
-- 🦅 **X**: [@Cognix_dev](https://x.com/cognix_dev)
+- 🐦 **X**: [@Cognix_dev](https://x.com/cognix_dev)
 ---
 
 <div align="center">
