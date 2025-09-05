@@ -4,9 +4,9 @@
 
 <br clear="left">
 
-🚀 **v0.1.4 released!**
+🚀 **v0.1.5 released!**
 
-Enhanced reference notation resilience and improved error handling.
+Critical syntax error fix and improved startup reliability.
 
 If you find Cognix useful, please give it a star ⭐ — it helps us reach more developers and build a stronger community.
 
@@ -251,7 +251,7 @@ cognix> /write --file clock.py
 - 🎯 **Adapts** suggestions to your codebase
 - 📄 **Maintains** context across sessions
 
-## 🆕 What's New in v0.1.4
+## 🆕 What's New in v0.1.5
 - Enhanced reference notation resilience for partial file failures
 - Improved error handling and user-friendly messages
 - Cross-model compatibility improvements (Claude Sonnet 4 & GPT-4o tested)
