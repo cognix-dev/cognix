@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "cognix"
-version = "0.1.4"
+version = "0.1.5"
 description = "AI-powered CLI development assistant"
 readme = "README.md"
 license = "MIT"

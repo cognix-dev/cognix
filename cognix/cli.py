@@ -210,6 +210,8 @@ class CognixCLI(cmd.Cmd):
             try:
                 from cognix import __version__
                 version = __version__
+            except:
+                version = "0.1.5"
                 
             # Cyber-style logo without borders
             logo = f"""{CYAN}Cognix v{version}{RESET} // Augmented AI Development Partner for CLI{RESET}
