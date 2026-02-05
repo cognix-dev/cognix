@@ -1,0 +1,1191 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Cognix — 速さではなく品質。派手さではなく堅実さ。</title>
+<meta name="description" content="開発者の66%が「惜しいけど動かないコード」を最大のフラストレーションに挙げている。Cognixは多段階検証でこの問題を解決するAI CLIツール。">
+<meta property="og:title" content="Cognix — 速さではなく品質。派手さではなく堅実さ。">
+<meta property="og:description" content="実際に動くコードを生成するAI CLIツール。MITライセンス。">
+<meta property="og:type" content="website">
+<meta property="og:url" content="https://cognix-dev.github.io/cognix/ja.html">
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:wght@700;800&family=IBM+Plex+Mono:wght@400;500&family=Noto+Sans+JP:ital,wght@0,300;0,400;0,500;0,700;1,400&display=swap');
+
+:root {
+  --green: #78af00;
+  --green-dim: rgba(120,175,0,.1);
+  --green-glow: rgba(120,175,0,.28);
+  --red: #e05a45;
+  --red-dim: rgba(224,90,69,.07);
+  --bg: #070707;
+  --surface: #0e0e0e;
+  --elevated: #141414;
+  --border: rgba(255,255,255,.055);
+  --border-green: rgba(120,175,0,.18);
+  --t1: #e6e6e6;
+  --t2: #737373;
+  --t3: #5a5a5a;
+}
+
+*, *::before, *::after { margin:0; padding:0; box-sizing:border-box; }
+html { scroll-behavior:smooth; }
+
+body {
+  background: var(--bg);
+  color: var(--t1);
+  font-family: 'Noto Sans JP', sans-serif;
+  line-height: 1.75;
+  overflow-x: hidden;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* ── PROGRESS BAR ── */
+.progress-bar {
+  position: fixed;
+  top: 0; left: 0;
+  height: 2px;
+  width: 0%;
+  background: var(--green);
+  z-index: 999;
+  transition: width .15s linear;
+  box-shadow: 0 0 8px var(--green-glow);
+}
+
+/* ── NOISE ── */
+.noise-overlay {
+  position: fixed; inset:0;
+  opacity: .35;
+  pointer-events: none;
+  z-index: 500;
+  background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 512 512' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.75' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='.04'/%3E%3C/svg%3E");
+}
+
+/* ── HERO ── */
+.hero {
+  position: relative;
+  min-height: 100vh;
+  min-height: 100dvh;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  padding: 6rem 2rem 3rem;
+  text-align: center;
+}
+
+.hero-glow {
+  position: absolute;
+  bottom: -200px; left: 50%;
+  transform: translateX(-50%);
+  width: 600px; height: 200px;
+  background: radial-gradient(ellipse, var(--green-glow) 0%, transparent 70%);
+  pointer-events: none;
+  filter: blur(30px);
+  opacity: .6;
+}
+
+.hero-label {
+  font-family: 'IBM Plex Mono', monospace;
+  font-size: .68rem;
+  letter-spacing: .32em;
+  color: var(--green);
+  text-transform: uppercase;
+  margin-bottom: 1.4rem;
+  opacity: 0;
+  animation: fadeUp .9s .15s cubic-bezier(.22,1,.36,1) forwards;
+}
+
+.hero h1 {
+  font-family: 'Bricolage Grotesque', sans-serif;
+  font-size: clamp(2.6rem, 6.5vw, 5rem);
+  font-weight: 800;
+  line-height: 1.2;
+  letter-spacing: -.025em;
+  color: var(--t1);
+  opacity: 0;
+  animation: fadeUp .9s .3s cubic-bezier(.22,1,.36,1) forwards;
+}
+.hero h1 .g { 
+  color: var(--green); 
+}
+.hero h1 .brand {
+  font-size: 1.25em;
+  letter-spacing: -.03em;
+}
+
+.hero-sub {
+  margin-top: 1.5rem;
+  font-size: .98rem;
+  color: var(--t2);
+  font-weight: 300;
+  max-width: 520px;
+  line-height: 1.7;
+  opacity: 0;
+  animation: fadeUp .9s .5s cubic-bezier(.22,1,.36,1) forwards;
+}
+
+.hero-stats {
+  display: flex;
+  gap: 3rem;
+  margin-top: 2.8rem;
+  opacity: 0;
+  animation: fadeUp .9s .65s cubic-bezier(.22,1,.36,1) forwards;
+}
+.stat { text-align: center; }
+.stat-val {
+  font-family: 'Bricolage Grotesque', sans-serif;
+  font-size: 1.6rem;
+  font-weight: 800;
+  color: var(--green);
+}
+.stat-label {
+  font-family: 'IBM Plex Mono', monospace;
+  font-size: .72rem;
+  color: var(--t1);
+  opacity: 0.7;
+  letter-spacing: .1em;
+  text-transform: uppercase;
+  margin-top: .35rem;
+}
+
+.scroll-cue {
+  position: absolute;
+  bottom: 2rem; left: 50%;
+  transform: translateX(-50%);
+  text-align: center;
+  opacity: 0;
+  animation: fadeUp .9s .9s cubic-bezier(.22,1,.36,1) forwards;
+}
+.scroll-line {
+  width: 14px; height: 14px;
+  margin: 0 auto;
+  border-right: 2px solid rgba(255,255,255,.35);
+  border-bottom: 2px solid rgba(255,255,255,.35);
+  border-radius: 1px;
+  transform: rotate(45deg);
+  animation: scrollPulse 2.4s ease-in-out infinite;
+}
+@keyframes scrollPulse {
+  0%, 100% { opacity: .5; transform: rotate(45deg) translateY(0); }
+  50%      { opacity: .12; transform: rotate(45deg) translateY(4px); }
+}
+
+@keyframes fadeUp {
+  from { opacity:0; transform: translateY(28px); }
+  to   { opacity:1; transform: translateY(0); }
+}
+
+/* ── INTRO ── */
+.intro {
+  max-width: 700px;
+  margin: 0 auto;
+  padding: 1.5rem 2rem 1.5rem;
+  text-align: center;
+}
+.intro p {
+  font-size: 1.25rem;
+  color: var(--t2);
+  font-weight: 300;
+  line-height: 1.9;
+}
+.intro strong { color: var(--t1); font-weight: 500; }
+
+/* ── FEATURES ── */
+.features {
+  max-width: 820px;
+  margin: 0 auto;
+  padding: 3rem 2rem 2rem;
+}
+
+.feature {
+  position: relative;
+  padding: 3.8rem 0 4.8rem;
+  border-bottom: 1px solid var(--border);
+  opacity: 0;
+  transform: translateY(36px);
+  transition: opacity .75s cubic-bezier(.22,1,.36,1),
+              transform .75s cubic-bezier(.22,1,.36,1);
+}
+.feature:last-child { border-bottom: none; }
+.feature.visible { opacity:1; transform: translateY(0); }
+
+/* Number */
+.f-num {
+  font-family: 'Bricolage Grotesque', sans-serif;
+  font-size: 6.5rem;
+  font-weight: 800;
+  color: var(--green);
+  opacity: .14;
+  line-height: 1;
+  position: absolute;
+  top: 2.8rem; right: -.5rem;
+  pointer-events: none;
+  user-select: none;
+  letter-spacing: -.04em;
+  transition: opacity .6s;
+}
+.feature.visible .f-num { opacity: .2; }
+
+/* Title */
+.f-tag {
+  font-family: 'IBM Plex Mono', monospace;
+  font-size: .7rem;
+  color: var(--green);
+  letter-spacing: .06em;
+  font-weight: 500;
+  margin-bottom: .35rem;
+}
+.f-title {
+  font-family: 'Bricolage Grotesque', sans-serif;
+  font-size: 1.65rem;
+  font-weight: 800;
+  color: var(--t1);
+  line-height: 1.25;
+  margin-bottom: .1rem;
+  position: relative;
+  z-index: 1;
+  max-width: 82%;
+}
+
+/* Problem */
+.problem {
+  background: var(--red-dim);
+  border-left: 2.5px solid var(--red);
+  border-radius: 0 6px 6px 0;
+  padding: 1rem 1.3rem;
+  margin: 1.4rem 0 1.2rem;
+}
+.problem-label {
+  font-family: 'IBM Plex Mono', monospace;
+  font-size: .62rem;
+  letter-spacing: .14em;
+  color: var(--red);
+  text-transform: uppercase;
+  margin-bottom: .35rem;
+  opacity: .85;
+}
+.problem p {
+  font-size: .88rem;
+  color: #bbb;
+  font-style: italic;
+  font-weight: 300;
+  line-height: 1.6;
+}
+
+/* Desc */
+.f-desc {
+  font-size: .9rem;
+  color: var(--t2);
+  line-height: 1.9;
+  margin-bottom: 1.4rem;
+  font-weight: 300;
+}
+.f-desc strong { color: var(--t1); font-weight: 500; }
+.f-desc em { color: var(--green); font-style: normal; font-weight: 500; }
+
+/* Comparison */
+.comparison {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: .9rem;
+  margin-bottom: 1rem;
+}
+.comp {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 1rem 1.1rem;
+}
+.comp.other { border-color: rgba(224,90,69,.18); }
+.comp.cognix { border-color: var(--border-green); }
+
+.comp-head {
+  display: flex;
+  align-items: center;
+  gap: .45rem;
+  margin-bottom: .7rem;
+}
+.comp-dot {
+  width: 7px; height: 7px;
+  border-radius: 50%;
+}
+.comp.other .comp-dot { background: var(--red); }
+.comp.cognix .comp-dot { background: var(--green); box-shadow: 0 0 6px var(--green-glow); }
+.comp-head span {
+  font-family: 'IBM Plex Mono', monospace;
+  font-size: .62rem;
+  letter-spacing: .12em;
+  text-transform: uppercase;
+}
+.comp.other .comp-head span { color: var(--red); }
+.comp.cognix .comp-head span { color: var(--green); }
+
+.comp-flow { font-family: 'IBM Plex Mono', monospace; font-size: .73rem; }
+.comp-step {
+  color: var(--t2);
+  padding: .22rem 0;
+  line-height: 1.5;
+}
+.comp-arrow { color: var(--t3); font-size: .65rem; padding: .05rem 0 .05rem .5rem; }
+.comp-step.bad { color: var(--red); }
+.comp-step.good { color: var(--green); }
+.comp-step.hl {
+  background: var(--green-dim);
+  color: var(--green);
+  padding: .2rem .45rem;
+  border-radius: 4px;
+  margin-left: -.45rem;
+  font-weight: 500;
+}
+
+/* Tech */
+.f-tech {
+  font-family: 'IBM Plex Mono', monospace;
+  font-size: .67rem;
+  color: var(--t3);
+  padding-top: .7rem;
+  border-top: 1px solid var(--border);
+  line-height: 1.7;
+}
+.f-tech .code { color: var(--green); opacity: .55; }
+
+/* ── FOOTER ── */
+.footer {
+  text-align: center;
+  padding: 4rem 2rem 7rem;
+  position: relative;
+}
+.footer::before {
+  content: '';
+  position: absolute;
+  top: -1px; left: 10%; right: 10%;
+  height: 1px;
+  background: linear-gradient(to right, transparent, var(--border), transparent);
+}
+.footer-title {
+  font-family: 'Bricolage Grotesque', sans-serif;
+  font-size: clamp(1.5rem, 3.5vw, 2.1rem);
+  font-weight: 800;
+  line-height: 1.3;
+  margin-bottom: 1rem;
+  color: var(--t1);
+}
+.footer-title .g { color: var(--green); }
+.footer p {
+  color: var(--t2);
+  font-size: .88rem;
+  font-weight: 300;
+  max-width: 500px;
+  margin: 0 auto;
+  line-height: 1.8;
+}
+.footer-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: .5rem;
+  margin-top: 2.2rem;
+  background: var(--green-dim);
+  border: 1px solid var(--border-green);
+  border-radius: 20px;
+  padding: .4rem 1rem .4rem .5rem;
+}
+.footer-badge .badge-dot {
+  width: 8px; height: 8px;
+  border-radius: 50%;
+  background: var(--green);
+  box-shadow: 0 0 6px var(--green-glow);
+}
+.footer-badge span {
+  font-family: 'IBM Plex Mono', monospace;
+  font-size: .68rem;
+  color: var(--green);
+  letter-spacing: .08em;
+}
+
+/* ── NAV BAR ── */
+nav {
+  position: fixed;
+  top: 0; left: 0; right: 0;
+  z-index: 900;
+  background: rgba(7,7,7,.88);
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
+  border-bottom: 1px solid var(--border);
+}
+.nav-inner {
+  max-width: 820px;
+  margin: 0 auto;
+  padding: 0 2rem;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  height: 54px;
+}
+.nav-logo {
+  font-family: 'IBM Plex Mono', monospace;
+  font-weight: 500;
+  font-size: 1.05rem;
+  color: var(--green);
+  text-decoration: none;
+  letter-spacing: -.02em;
+}
+.nav-logo span { color: var(--t3); }
+.nav-links {
+  display: flex;
+  gap: 22px;
+  align-items: center;
+}
+.nav-links a {
+  font-family: 'Noto Sans JP', sans-serif;
+  font-size: .82rem;
+  color: var(--t2);
+  text-decoration: none;
+  transition: color .2s;
+}
+.nav-links a:hover { color: var(--t1); }
+.nav-lang {
+  font-family: 'IBM Plex Mono', monospace;
+  font-size: .75rem;
+  color: var(--t2);
+  text-decoration: none;
+  border: 1px solid var(--border);
+  padding: 4px 10px;
+  border-radius: 4px;
+  transition: border-color .2s, color .2s;
+}
+.nav-lang:hover { border-color: var(--t2); color: var(--t1); }
+.nav-gh {
+  font-family: 'IBM Plex Mono', monospace;
+  font-size: .75rem;
+  font-weight: 500;
+  background: var(--green);
+  color: #000;
+  padding: 5px 14px;
+  border-radius: 4px;
+  text-decoration: none;
+  transition: background .2s;
+}
+.nav-gh:hover { background: #6a9c00; }
+
+/* ── HERO CTA BOX ── */
+.hero-cta {
+  display: inline-flex;
+  align-items: center;
+  gap: 12px;
+  background: var(--surface);
+  border: 1px solid var(--border-green);
+  border-radius: 8px;
+  padding: 14px 26px;
+  font-family: 'IBM Plex Mono', monospace;
+  font-size: .92rem;
+  color: var(--t1);
+  cursor: pointer;
+  transition: border-color .3s, box-shadow .3s;
+  margin-top: 2.5rem;
+  position: relative;
+}
+.hero-cta:hover {
+  border-color: var(--green);
+  box-shadow: 0 0 20px rgba(120,175,0,.12);
+}
+.hero-cta .prompt { color: var(--green); user-select: none; }
+.hero-cta-hint {
+  position: absolute;
+  top: -22px; right: 10px;
+  font-size: .62rem;
+  color: var(--t3);
+  font-family: 'IBM Plex Mono', monospace;
+  opacity: 0;
+  transition: opacity .2s;
+}
+.hero-cta:hover .hero-cta-hint { opacity: 1; }
+
+/* ── PAIN CARDS ── */
+.pain-section {
+  max-width: 820px;
+  margin: 0 auto;
+  padding: 2.5rem 2rem 1.5rem;
+}
+.pain-label {
+  font-family: 'IBM Plex Mono', monospace;
+  font-size: .68rem;
+  letter-spacing: .25em;
+  color: var(--t3);
+  text-transform: uppercase;
+  margin-bottom: 1.2rem;
+}
+.pain-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 1rem;
+  margin-bottom: 1.2rem;
+}
+.pain-card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 1.8rem 1.6rem;
+}
+.pain-num {
+  font-family: 'Bricolage Grotesque', sans-serif;
+  font-size: clamp(2.8rem, 6vw, 3.8rem);
+  font-weight: 800;
+  color: var(--green);
+  line-height: 1;
+  margin-bottom: .7rem;
+}
+.pain-desc {
+  font-size: .92rem;
+  color: var(--t2);
+  line-height: 1.6;
+  font-weight: 300;
+}
+.pain-source {
+  font-family: 'IBM Plex Mono', monospace;
+  font-size: .68rem;
+  color: var(--t3);
+}
+.pain-source a {
+  color: var(--t3);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+  transition: color .2s;
+}
+.pain-source a:hover { color: var(--t2); }
+
+/* ── DEMO TERMINAL ── */
+.demo-section {
+  max-width: 820px;
+  margin: 0 auto;
+  padding: 1rem 2rem 2.5rem;
+}
+.demo-label {
+  font-family: 'IBM Plex Mono', monospace;
+  font-size: .68rem;
+  letter-spacing: .25em;
+  color: var(--t3);
+  text-transform: uppercase;
+  margin-bottom: 1.2rem;
+}
+.demo-terminal {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  overflow: hidden;
+}
+.demo-bar {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  padding: 10px 16px;
+  background: rgba(255,255,255,.02);
+  border-bottom: 1px solid var(--border);
+}
+.demo-dot {
+  width: 10px; height: 10px;
+  border-radius: 50%;
+  background: var(--t3);
+}
+.demo-dot:first-child { background: #e05a45; }
+.demo-dot:nth-child(2) { background: #e0a535; }
+.demo-dot:nth-child(3) { background: #78af00; }
+.demo-bar-title {
+  font-family: 'IBM Plex Mono', monospace;
+  font-size: .65rem;
+  color: var(--t3);
+  margin-left: 8px;
+}
+.demo-body {
+  padding: 1.3rem 1.6rem;
+  font-family: 'IBM Plex Mono', monospace;
+  font-size: .78rem;
+  line-height: 1.85;
+  color: var(--t2);
+}
+.demo-body .cmd {
+  color: var(--t1);
+  margin-bottom: .4rem;
+}
+.demo-body .cmd .p { color: var(--green); }
+.demo-body .ok { color: var(--green); }
+.demo-body .dim { color: var(--t3); }
+.demo-body .result {
+  margin-top: .6rem;
+  padding-top: .6rem;
+  border-top: 1px solid var(--border);
+  color: var(--t1);
+}
+.demo-body .result strong { color: var(--green); font-weight: 500; }
+
+/* ── CREDIT ── */
+.credit {
+  text-align: center;
+  padding: 3rem 2rem 1rem;
+  border-top: 1px solid var(--border);
+  max-width: 500px;
+  margin: 0 auto;
+}
+.credit p {
+  font-size: .85rem;
+  color: var(--t2);
+  font-weight: 300;
+  line-height: 1.7;
+}
+.credit a {
+  color: var(--green);
+  text-decoration: none;
+}
+.credit a:hover { text-decoration: underline; }
+
+/* ── CAPABILITY CARDS ── */
+.capabilities {
+  max-width: 900px;
+  margin: 0 auto;
+  padding: 1.5rem 1.2rem 2rem;
+}
+.cap-label {
+  font-family: var(--mono);
+  font-size: .75rem;
+  letter-spacing: .15em;
+  text-transform: uppercase;
+  color: var(--green);
+  margin-bottom: 2rem;
+  opacity: .7;
+}
+.cap-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr 1fr;
+  gap: 20px;
+}
+.cap-card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 28px;
+}
+.cap-icon {
+  font-family: var(--mono);
+  font-size: .8rem;
+  color: var(--green);
+  margin-bottom: 12px;
+  opacity: .7;
+}
+.cap-title {
+  font-family: 'Noto Sans JP', sans-serif;
+  font-weight: 600;
+  font-size: .95rem;
+  color: var(--t1);
+  margin-bottom: 8px;
+}
+.cap-desc {
+  font-size: .85rem;
+  color: var(--t2);
+  line-height: 1.5;
+}
+
+/* ── RESPONSIVE ── */
+@media (max-width: 600px) {
+  .f-num { font-size: 4rem; top: 2.2rem; right: 0; }
+  .f-title { max-width: 100%; font-size: 1.35rem; }
+  .comparison { grid-template-columns: 1fr; }
+  .hero-stats { gap: 1.8rem; }
+  .pain-grid { grid-template-columns: 1fr; }
+  .nav-links a:not(.nav-gh):not(.nav-lang) { display: none; }
+  .cap-grid { grid-template-columns: 1fr; }
+}
+</style>
+</head>
+<body>
+
+<div class="progress-bar" id="progressBar"></div>
+<div class="noise-overlay"></div>
+
+<!-- ── NAV ── -->
+<nav>
+  <div class="nav-inner">
+    <a href="#" class="nav-logo">cognix</a>
+    <div class="nav-links">
+      <a href="#features">仕組み</a>
+      <a href="#install">インストール</a>
+      <a href="#">TOPへ</a>
+      <a href="index.html" class="nav-lang">English</a>
+      <a href="https://github.com/cognix-dev/cognix" target="_blank" rel="noopener" class="nav-gh">GitHub</a>
+    </div>
+  </div>
+</nav>
+
+<!-- ── HERO ── -->
+<header class="hero" style="padding-top:7rem">
+  <div class="hero-glow"></div>
+  <div class="hero-label">Autonomous code generation powered by flow engineering.</div>
+  <h1>速さではなく<span class="g">品質</span>。<br>派手さではなく<span class="g">堅実さ</span>。</h1>
+  <p class="hero-sub">AIコード生成の66%は「惜しいけど動かない」。<br>Cognixは多段階検証で、<strong style="color:var(--t1)">動くコード</strong>を出力する。</p>
+  <div class="hero-cta" onclick="navigator.clipboard.writeText('pipx install cognix')">
+    <span class="hero-cta-hint">click to copy</span>
+    <span class="prompt">$</span> pipx install cognix
+  </div>
+  <div class="scroll-cue">
+    <div class="scroll-line"></div>
+  </div>
+</header>
+
+<!-- ── PAIN POINT CARDS ── -->
+<section class="pain-section">
+  <div class="pain-label">The Problem</div>
+  <div class="pain-grid">
+    <div class="pain-card">
+      <div class="pain-num">66%</div>
+      <div class="pain-desc">の開発者が「惜しいけど動かないコード」を最大のフラストレーションに挙げている</div>
+    </div>
+    <div class="pain-card">
+      <div class="pain-num">45%</div>
+      <div class="pain-desc">がAI生成コードの修正に、自分で書くより時間がかかると回答</div>
+    </div>
+  </div>
+  <div class="pain-source">出典: <a href="https://survey.stackoverflow.co/2025/" target="_blank" rel="noopener">Stack Overflow Developer Survey 2025</a></div>
+</section>
+
+<!-- ── PRINCIPLE ── -->
+<div class="intro">
+  <p>
+    すべてのAIコーディングツールが「速さ」を約束する。<br>
+    Cognixは<strong style="color:var(--green)">動くコード</strong>を約束する。
+  </p>
+  <p style="margin-top:.8rem;font-size:.88rem;color:var(--t2);font-weight:300">
+    最も速いコードは、デバッグ不要なコードだから。
+  </p>
+</div>
+
+<!-- ── WHY 10 FEATURES ── -->
+<div class="intro" style="padding-top:0">
+  <p style="font-size:1.05rem;">
+    なぜ「動くコード」を約束できるのか。<br>
+    その理由は、<strong>8つの品質保証機構</strong>にある。
+  </p>
+</div>
+
+<!-- ── FEATURES ── -->
+<main class="features" id="features">
+
+<!-- ═══ 01 ═══ -->
+<section class="feature">
+  <div class="f-num">01</div>
+  <div class="f-tag">SCOPE CONTROL</div>
+  <h2 class="f-title">AIの「はみ出し」を根絶する二層防衛</h2>
+  <div class="problem">
+    <div class="problem-label">💀 他のツールでの経験</div>
+    <p>「一行だけ変えてほしかったのに、AIがファイル全体を書き換えた。変えたくないコードが全部消えた。」</p>
+  </div>
+  <p class="f-desc">
+    プロンプト層で <strong>SCOPE ENFORCEMENT</strong>（「surgery robot」の比喩で範囲限定を強制）を指示し、さらに実装層で <strong>Diff Sanitizer</strong> が許可範囲外の変更を <em>機械的に除去</em> する。LLMの出力を「信じず」、二つの独立した防衛が同時に動作する。はみ出しは物理的に不可能になる。
+  </p>
+  <div class="comparison">
+    <div class="comp other">
+      <div class="comp-head"><div class="comp-dot"></div><span>他のツール</span></div>
+      <div class="comp-flow">
+        <div class="comp-step">LLM 出力</div>
+        <div class="comp-arrow">↓</div>
+        <div class="comp-step bad">✗ 範囲外変更あり → 直接適用</div>
+        <div class="comp-arrow">↓</div>
+        <div class="comp-step bad">コード破綻</div>
+      </div>
+    </div>
+    <div class="comp cognix">
+      <div class="comp-head"><div class="comp-dot"></div><span>Cognix</span></div>
+      <div class="comp-flow">
+        <div class="comp-step">LLM 出力</div>
+        <div class="comp-arrow">↓</div>
+        <div class="comp-step hl">Diff Sanitizer（範囲外を除去）</div>
+        <div class="comp-arrow">↓</div>
+        <div class="comp-step good">✓ 安全に適用</div>
+      </div>
+    </div>
+  </div>
+  <div class="f-tech">実装: <span class="code">SequenceMatcher opcodes × allowed_lines whitelist</span> — 許可行番号セットと差分オペコードで行ごとに判定し、許可範囲外は元に戻す</div>
+</section>
+
+<!-- ═══ 02 ═══ -->
+<section class="feature">
+  <div class="f-num">02</div>
+  <div class="f-tag">FORMAL PROOF</div>
+  <h2 class="f-title">正確性を証明しなければ実行しない</h2>
+  <div class="problem">
+    <div class="problem-label">💀 他のツールでの経験</div>
+    <p>「Aを修正したらBが壊れた。Bを修正したらCが壊れた。無限ループに陥った。」</p>
+  </div>
+  <p class="f-desc">
+    修正を実行する <strong>前に</strong>、LLMに3つの正確性証明を強制する。<strong>LOCALITY</strong>（範囲が限定されているか）・<strong>ISOLATION</strong>（他のファイルに干渉しないか）・<strong>NON-RECURRENCE</strong>（体系的問題ではないか）。いずれかでも証明できなければ、別の戦略に <em>自動でエスカレーション</em> される。「やって失敗してから」ではなく「正当性を確認してから実行」する。
+  </p>
+  <div class="comparison">
+    <div class="comp other">
+      <div class="comp-head"><div class="comp-dot"></div><span>他のツール</span></div>
+      <div class="comp-flow">
+        <div class="comp-step">修正を試みる</div>
+        <div class="comp-arrow">↓</div>
+        <div class="comp-step bad">✗ 失敗 → リトライ</div>
+        <div class="comp-arrow">↓</div>
+        <div class="comp-step bad">同じ戦略で無限リトライ</div>
+      </div>
+    </div>
+    <div class="comp cognix">
+      <div class="comp-head"><div class="comp-dot"></div><span>Cognix</span></div>
+      <div class="comp-flow">
+        <div class="comp-step">3つの証明を強制</div>
+        <div class="comp-arrow">↓</div>
+        <div class="comp-step hl">証明失敗 → 戦略を変更</div>
+        <div class="comp-arrow">↓</div>
+        <div class="comp-step good">✓ 適切な戦略で実行</div>
+      </div>
+    </div>
+  </div>
+  <div class="f-tech">実装: <span class="code">&lt;escalate&gt; タグ検出 → 5段階エスカレーションチェーン</span> — MINIMAL → DESIGN CHANGE → SIC Retry → Reject まで自動遷移</div>
+</section>
+
+<!-- ═══ 03 ═══ -->
+<section class="feature">
+  <div class="f-num">03</div>
+  <div class="f-tag">STRUCTURAL INTEGRITY CHECK</div>
+  <h2 class="f-title">見えない構造破綻を検知し、自動で修復する</h2>
+  <div class="problem">
+    <div class="problem-label">💀 他のツールでの経験</div>
+    <p>「コードは動く。テストも通る。でも後になって深刻なバグを発見した。原因は構造の微妙な崩壊だった。」</p>
+  </div>
+  <p class="f-desc">
+    Python の <strong>ast モジュール</strong> で修正前後の構造スナップショットを比較する。クラス消滅・属性モジュールレベル漏れ・型ヒント消失など <strong>5種類の破綻パターン</strong> を検知する。SIC失敗時は「DNA（元のコード）」を基準にした <em>3者比較リカバリー</em> で自動に修復を試みる。
+  </p>
+  <div class="comparison">
+    <div class="comp other">
+      <div class="comp-head"><div class="comp-dot"></div><span>他のツール</span></div>
+      <div class="comp-flow">
+        <div class="comp-step">修正コード生成</div>
+        <div class="comp-arrow">↓</div>
+        <div class="comp-step bad">✗ 構造チェックなし</div>
+        <div class="comp-arrow">↓</div>
+        <div class="comp-step bad">サイレント破綻を出力</div>
+      </div>
+    </div>
+    <div class="comp cognix">
+      <div class="comp-head"><div class="comp-dot"></div><span>Cognix</span></div>
+      <div class="comp-flow">
+        <div class="comp-step">修正コード生成</div>
+        <div class="comp-arrow">↓</div>
+        <div class="comp-step hl">AST構造比較（5チェック）</div>
+        <div class="comp-arrow">↓</div>
+        <div class="comp-step good">✓ 破綻なし → 適用</div>
+      </div>
+    </div>
+  </div>
+  <div class="f-tech">実装: <span class="code">ast.parse() → structural snapshot diff</span> — クラス名・属性位置・型ヒント付与の前後比較で5種類の破綻を検知</div>
+</section>
+
+<!-- ═══ 04 ═══ -->
+<section class="feature">
+  <div class="f-num">04</div>
+  <div class="f-tag">VALIDATION CHAIN</div>
+  <h2 class="f-title">フレームワーク固有のバグを自動で撲滅する</h2>
+  <div class="problem">
+    <div class="problem-label">💀 他のツールでの経験</div>
+    <p>「生成されたコードを動かしたら「relationship 'xxx' is not defined」。原因を理解するまで数時間かかった。」</p>
+  </div>
+  <p class="f-desc">
+    SQLAlchemy・Flask・Marshmallow・HTML/CSS/JS間の整合性を <strong>32種類の検証（G-1〜G-32）</strong> で自動チェックする。検出したバグを <strong>29種類の自動修正</strong> で解決する。外部キー参照・リレーションシップの重複・予約語の衝突など、開発者がハンドリングすべき問題が <em>生成時点で消える</em>。
+  </p>
+  <div class="comparison">
+    <div class="comp other">
+      <div class="comp-head"><div class="comp-dot"></div><span>他のツール</span></div>
+      <div class="comp-flow">
+        <div class="comp-step">汎用Lint（構文チェックのみ）</div>
+        <div class="comp-arrow">↓</div>
+        <div class="comp-step bad">✗ フレームワーク固有バグを検知しない</div>
+        <div class="comp-arrow">↓</div>
+        <div class="comp-step bad">開発者が手動デバッグ</div>
+      </div>
+    </div>
+    <div class="comp cognix">
+      <div class="comp-head"><div class="comp-dot"></div><span>Cognix</span></div>
+      <div class="comp-flow">
+        <div class="comp-step">32検証で自動検知</div>
+        <div class="comp-arrow">↓</div>
+        <div class="comp-step hl">29自動修正で解決</div>
+        <div class="comp-arrow">↓</div>
+        <div class="comp-step good">✓ クリーンなコードを出力</div>
+      </div>
+    </div>
+  </div>
+  <div class="f-tech">実装: <span class="code">G-1〜G-32: foreignkey_references, relationship_overlaps, back_populates_consistency, marshmallow_api_misuse…</span> と29のペア自動修正が対応</div>
+</section>
+
+<!-- ═══ 05 ═══ -->
+<section class="feature">
+  <div class="f-num">05</div>
+  <div class="f-tag">MULTI-STAGE GENERATION</div>
+  <h2 class="f-title">大規模プロジェクトも整合性を維持して生成する</h2>
+  <div class="problem">
+    <div class="problem-label">💀 他のツールでの経験</div>
+    <p>「大きなプロジェクトを一気に生成したら、ファイル間の依存関係がバラバラになった。」</p>
+  </div>
+  <p class="f-desc">
+    <strong>Phase 1（基盤層）</strong> で models・schemas・config を先に生成し、<strong>Phase 2（アプリ層）</strong> で routers・services を構築し、<strong>Phase 3（環境設定）</strong> で仕上げる。各フェーズで前のフェーズの出力を確認してから生成するため、ファイル間の整合性が <em>設計で保障される</em>。
+  </p>
+  <div class="comparison">
+    <div class="comp other">
+      <div class="comp-head"><div class="comp-dot"></div><span>他のツール</span></div>
+      <div class="comp-flow">
+        <div class="comp-step">全ファイルを一次生成</div>
+        <div class="comp-arrow">↓</div>
+        <div class="comp-step bad">✗ ファイル間参照がバラバラ</div>
+      </div>
+    </div>
+    <div class="comp cognix">
+      <div class="comp-head"><div class="comp-dot"></div><span>Cognix</span></div>
+      <div class="comp-flow">
+        <div class="comp-step">Phase 1: 基盤層</div>
+        <div class="comp-arrow">↓</div>
+        <div class="comp-step">Phase 2: アプリ層（基盤を参照）</div>
+        <div class="comp-arrow">↓</div>
+        <div class="comp-step hl">Phase 3: 環境設定</div>
+        <div class="comp-arrow">↓</div>
+        <div class="comp-step good">✓ 整合性あり</div>
+      </div>
+    </div>
+  </div>
+  <div class="f-tech">実装: <span class="code">Foundation → Application → Environment</span> — 3フェーズ9ステップのStepHUD付き段階生成パイプライン</div>
+</section>
+
+<!-- ═══ 06 ═══ -->
+<section class="feature">
+  <div class="f-num">06</div>
+  <div class="f-tag">POST-GENERATION VALIDATOR</div>
+  <h2 class="f-title">生成後に抜けたファイルを自動で補完する</h2>
+  <div class="problem">
+    <div class="problem-label">💀 他のツールでの経験</div>
+    <p>「生成直後に <code style="color:#e05a45;font-size:.82rem">ModuleNotFoundError</code> が出る。ファイルが生成されていなかった。」</p>
+  </div>
+  <p class="f-desc">
+    生成されたファイルの <strong>全import文を解析</strong> し、参照先が存在するか検証する。抜けたファイルを自動で検知し、既存ファイルのコンテキストを活用して <em>補完生成</em> する。「import error で起動できない」という問題が生成時点で消える。
+  </p>
+  <div class="comparison">
+    <div class="comp other">
+      <div class="comp-head"><div class="comp-dot"></div><span>他のツール</span></div>
+      <div class="comp-flow">
+        <div class="comp-step">コード生成で終わり</div>
+        <div class="comp-arrow">↓</div>
+        <div class="comp-step bad">✗ 開発者がimport errorに直面</div>
+      </div>
+    </div>
+    <div class="comp cognix">
+      <div class="comp-head"><div class="comp-dot"></div><span>Cognix</span></div>
+      <div class="comp-flow">
+        <div class="comp-step">生成 → import文全数解析</div>
+        <div class="comp-arrow">↓</div>
+        <div class="comp-step hl">抜け検知 → 自動補完生成</div>
+        <div class="comp-arrow">↓</div>
+        <div class="comp-step good">✓ 全依存関係を満たす</div>
+      </div>
+    </div>
+  </div>
+  <div class="f-tech">実装: <span class="code">_validate_import_dependencies → _generate_missing_files</span> — import文のAST解析で参照先を特定し、コンテキスト付きで補完生成</div>
+</section>
+
+<!-- ═══ 07 ═══ -->
+<section class="feature">
+  <div class="f-num">07</div>
+  <div class="f-tag">RUNTIME VALIDATION</div>
+  <h2 class="f-title">動かないコードは返してくれない</h2>
+  <div class="problem">
+    <div class="problem-label">💀 他のツールでの経験</div>
+    <p>「生成されたコードを実行したら、即座にクラッシュ。生成には「成功」と表示されたのに。」</p>
+  </div>
+  <p class="f-desc">
+    修正後のコードを <strong>実際にインポート実行</strong> し動作確認する。インポートに失敗した場合は、失敗したファイルの変更を <em>自動で巻き戻し</em>、廃棄する。静的チェックを超えて実行検証まで行うため、「見た目は正しいが動かないコード」が出力されることがない。
+  </p>
+  <div class="comparison">
+    <div class="comp other">
+      <div class="comp-head"><div class="comp-dot"></div><span>他のツール</span></div>
+      <div class="comp-flow">
+        <div class="comp-step">静的チェック（構文のみ）</div>
+        <div class="comp-arrow">↓</div>
+        <div class="comp-step bad">✗ 動作確認なし → 出力</div>
+        <div class="comp-arrow">↓</div>
+        <div class="comp-step bad">実行時にクラッシュ</div>
+      </div>
+    </div>
+    <div class="comp cognix">
+      <div class="comp-head"><div class="comp-dot"></div><span>Cognix</span></div>
+      <div class="comp-flow">
+        <div class="comp-step">実行検証（import実行）</div>
+        <div class="comp-arrow">↓</div>
+        <div class="comp-step hl">失敗 → 自動巻き戻し</div>
+        <div class="comp-arrow">↓</div>
+        <div class="comp-step good">✓ 動作確認済みコードのみ出力</div>
+      </div>
+    </div>
+  </div>
+  <div class="f-tech">実装: <span class="code">_validate_runtime_import() → auto-revert on ImportError</span> — 実行時エラーで対象ファイルのみ元に戻し、他の修正は維持</div>
+</section>
+
+<!-- ═══ 08 ═══ -->
+<section class="feature">
+  <div class="f-num">08</div>
+  <div class="f-tag">COMPREHENSIVE CODE REVIEW</div>
+  <h2 class="f-title">25種類の問題を見逃さない</h2>
+  <div class="problem">
+    <div class="problem-label">💀 他のツールでの経験</div>
+    <p>「構文は正しい。Lintも通る。でも『保存』ボタンを押しても保存されない。気づいたのは1週間後。」</p>
+  </div>
+  <p class="f-desc">
+    構文を超え、Lintを超え — <strong>25種類の意味的問題</strong> を徹底的に追跡する。TODO残存、デッドコード、動作しないボタン、保存/読込の不整合、await漏れ、未処理のPromise、セキュリティホール、リソースリーク、残存デバッグコード。すべての生成ファイルがこの <em>論理的完全性スキャン</em> を通過する。「コンパイルは通るが動かない」がなくなる。
+  </p>
+  <div class="comparison">
+    <div class="comp other">
+      <div class="comp-head"><div class="comp-dot"></div><span>他のツール</span></div>
+      <div class="comp-flow">
+        <div class="comp-step">構文チェック → 完了</div>
+        <div class="comp-arrow">↓</div>
+        <div class="comp-step bad">✗ ロジックバグを検知しない</div>
+        <div class="comp-arrow">↓</div>
+        <div class="comp-step bad">壊れた機能が出力される</div>
+      </div>
+    </div>
+    <div class="comp cognix">
+      <div class="comp-head"><div class="comp-dot"></div><span>Cognix</span></div>
+      <div class="comp-flow">
+        <div class="comp-step">25種類の意味的レビュー</div>
+        <div class="comp-arrow">↓</div>
+        <div class="comp-step hl">自動修正またはエスカレート</div>
+        <div class="comp-arrow">↓</div>
+        <div class="comp-step good">✓ 論理的に完全なコード</div>
+      </div>
+    </div>
+  </div>
+  <div class="f-tech">実装: <span class="code">_final_comprehensive_review()</span> — 25種類: TODO残存、デッドコード、動作しないUI、保存/読込不整合、await漏れ、セキュリティ問題、リソースリーク、デバッグコード...</div>
+</section>
+
+</main>
+
+<!-- ── CAPABILITY CARDS ── -->
+<section class="capabilities">
+  <div class="cap-label">Also built in</div>
+  <div class="cap-grid">
+    <div class="cap-card">
+      <div class="cap-icon">[ models ]</div>
+      <div class="cap-title">マルチモデル</div>
+      <div class="cap-desc">Claude、GPT、OpenRouter経由で100以上のモデルに対応。コマンド1つで切替可能。</div>
+    </div>
+    <div class="cap-card">
+      <div class="cap-icon">[ score ]</div>
+      <div class="cap-title">品質スコアリング</div>
+      <div class="cap-desc">生成ファイルごとに0〜1.0の品質スコアを算出。残イシューはファイル別・行番号別に明示。</div>
+    </div>
+    <div class="cap-card">
+      <div class="cap-icon">[ local ]</div>
+      <div class="cap-title">ロックインなし</div>
+      <div class="cap-desc">IDE依存なし、サブスク不要、テレメトリなし。すべてのデータはローカルに残る。</div>
+    </div>
+    <div class="cap-card">
+      <div class="cap-icon">[ backup ]</div>
+      <div class="cap-title">自動バックアップ</div>
+      <div class="cap-desc">変更前に自動バックアップ。いつでも復元可能。Git不要。</div>
+    </div>
+    <div class="cap-card">
+      <div class="cap-icon">[ repo ]</div>
+      <div class="cap-title">リポジトリコンテキスト</div>
+      <div class="cap-desc">プロジェクト構造を継続的に理解。依存グラフと影響分析をセッション横断で保持。</div>
+    </div>
+    <div class="cap-card">
+      <div class="cap-icon">[ mcp ]</div>
+      <div class="cap-title">MCPサーバー</div>
+      <div class="cap-desc">Claude Desktop、Cursor、その他MCP対応ツールから利用可能。</div>
+    </div>
+  </div>
+</section>
+
+<div id="install"></div>
+
+<!-- ── CREDIT ── -->
+<div class="credit">
+  <p>Cognixは個人開発者 <a href="https://github.com/cognix-dev" target="_blank" rel="noopener">Shinichiro</a> が設計・開発しています。<br>AIツールを使う側の開発者が本当に必要としているものを、一人で作っています。</p>
+</div>
+
+<!-- ── FOOTER ── -->
+<footer class="footer">
+  <h2 class="footer-title"><span class="g">最も速いコード</span>は、<br>デバッグ不要なコードだ。</h2>
+  <p>8つの品質保証機構が「LLMの出力を信じない」という共通の設計思想で構成される。プロンプト層・実装層・検証層が独立に動作し、いずれかが失敗しても他の層がカバーする。</p>
+  
+  <div style="margin-top:2.5rem;display:flex;gap:16px;justify-content:center;flex-wrap:wrap">
+    <div style="background:var(--surface);border:1px solid var(--border-green);border-radius:8px;padding:16px 24px;font-family:'IBM Plex Mono',monospace;font-size:.85rem;cursor:pointer;transition:border-color .2s" onclick="navigator.clipboard.writeText('pipx install cognix')" onmouseover="this.style.borderColor='var(--green)'" onmouseout="this.style.borderColor='var(--border-green)'">
+      <span style="color:var(--green)">$</span> pipx install cognix
+    </div>
+    <a href="https://github.com/cognix-dev/cognix" target="_blank" rel="noopener" style="background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:16px 24px;font-family:'IBM Plex Mono',monospace;font-size:.85rem;color:var(--t2);text-decoration:none;transition:border-color .2s" onmouseover="this.style.borderColor='var(--t2)'" onmouseout="this.style.borderColor='var(--border)'">
+      GitHub →
+    </a>
+  </div>
+
+  <div style="margin-top:2rem;display:flex;gap:20px;justify-content:center">
+    <a href="https://github.com/cognix-dev/cognix/issues" style="font-family:'IBM Plex Mono',monospace;font-size:.7rem;color:#8a8a8a;text-decoration:none">Issues</a>
+    <a href="https://github.com/cognix-dev/cognix/discussions" style="font-family:'IBM Plex Mono',monospace;font-size:.7rem;color:#8a8a8a;text-decoration:none">Discussions</a>
+    <a href="index.html" style="font-family:'IBM Plex Mono',monospace;font-size:.7rem;color:#8a8a8a;text-decoration:none">English</a>
+  </div>
+
+  <div class="footer-badge">
+    <div class="badge-dot"></div>
+    <span>COGNIX v0.2.0 — MIT License — © 2025-2026</span>
+  </div>
+</footer>
+
+<script>
+// ── Scroll Progress Bar ──
+const bar = document.getElementById('progressBar');
+bar.style.top = '54px'; // nav height
+window.addEventListener('scroll', () => {
+  const s = document.documentElement.scrollTop || document.body.scrollTop;
+  const h = document.documentElement.scrollHeight - window.innerHeight;
+  bar.style.width = (s / h * 100) + '%';
+});
+
+// ── Scroll Reveal (features) ──
+const obs = new IntersectionObserver((entries) => {
+  entries.forEach(e => { if (e.isIntersecting) e.target.classList.add('visible'); });
+}, { threshold: 0.12, rootMargin: '0px 0px -50px 0px' });
+
+document.querySelectorAll('.feature').forEach(el => obs.observe(el));
+
+// ── Scroll Reveal (pain cards) ──
+const obsCards = new IntersectionObserver((entries) => {
+  entries.forEach(e => {
+    if (e.isIntersecting) {
+      e.target.style.opacity = '1';
+      e.target.style.transform = 'translateY(0)';
+      obsCards.unobserve(e.target);
+    }
+  });
+}, { threshold: 0.15 });
+
+document.querySelectorAll('.pain-card').forEach(el => {
+  el.style.opacity = '0';
+  el.style.transform = 'translateY(24px)';
+  el.style.transition = 'opacity .6s cubic-bezier(.22,1,.36,1), transform .6s cubic-bezier(.22,1,.36,1)';
+  obsCards.observe(el);
+});
+
+// ── Scroll Reveal (demo terminal) ──
+const demoEl = document.querySelector('.demo-terminal');
+if (demoEl) {
+  demoEl.style.opacity = '0';
+  demoEl.style.transform = 'translateY(24px)';
+  demoEl.style.transition = 'opacity .7s cubic-bezier(.22,1,.36,1), transform .7s cubic-bezier(.22,1,.36,1)';
+  const obsDemo = new IntersectionObserver((entries) => {
+    entries.forEach(e => {
+      if (e.isIntersecting) {
+        e.target.style.opacity = '1';
+        e.target.style.transform = 'translateY(0)';
+        obsDemo.unobserve(e.target);
+      }
+    });
+  }, { threshold: 0.15 });
+  obsDemo.observe(demoEl);
+}
+</script>
+</body>
+</html>
