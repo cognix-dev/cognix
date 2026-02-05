@@ -1,0 +1,1205 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Cognix — Not speed — quality. Not flash — reliability.</title>
+<meta name="description" content="66% of developers say "almost-right code" is their biggest frustration with AI. Cognix solves this with multi-stage validation.">
+<meta property="og:title" content="Cognix — Not speed — quality. Not flash — reliability.">
+<meta property="og:description" content="AI CLI tool that generates code that actually works. MIT License.">
+<meta property="og:type" content="website">
+<meta property="og:url" content="https://cognix-dev.github.io/cognix/">
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Archivo+Black&family=IBM+Plex+Mono:wght@400;500&family=DM+Sans:ital,wght@0,300;0,400;0,500;0,700;1,400&family=Inter:wght@700;800&display=swap');
+
+:root {
+  --green: #78af00;
+  --green-dim: rgba(120,175,0,.1);
+  --green-glow: rgba(120,175,0,.28);
+  --red: #e05a45;
+  --red-dim: rgba(224,90,69,.07);
+  --bg: #070707;
+  --surface: #0e0e0e;
+  --elevated: #141414;
+  --border: rgba(255,255,255,.055);
+  --border-green: rgba(120,175,0,.18);
+  --t1: #e6e6e6;
+  --t2: #737373;
+  --t3: #5a5a5a;
+}
+
+*, *::before, *::after { margin:0; padding:0; box-sizing:border-box; }
+html { scroll-behavior:smooth; }
+
+body {
+  background: var(--bg);
+  color: var(--t1);
+  font-family: 'DM Sans', sans-serif;
+  line-height: 1.75;
+  overflow-x: hidden;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* ── PROGRESS BAR ── */
+.progress-bar {
+  position: fixed;
+  top: 0; left: 0;
+  height: 2px;
+  width: 0%;
+  background: var(--green);
+  z-index: 999;
+  transition: width .15s linear;
+  box-shadow: 0 0 8px var(--green-glow);
+}
+
+/* ── NOISE ── */
+.noise-overlay {
+  position: fixed; inset:0;
+  opacity: .35;
+  pointer-events: none;
+  z-index: 500;
+  background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 512 512' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.75' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='.04'/%3E%3C/svg%3E");
+}
+
+/* ── HERO ── */
+.hero {
+  position: relative;
+  min-height: 100vh;
+  min-height: 100dvh;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  padding: 6rem 2rem 3rem;
+}
+  text-align: center;
+}
+
+.hero-inner {
+  text-align: left;
+  max-width: 820px;
+  width: 100%;
+}
+
+.hero-glow {
+  position: absolute;
+  bottom: -200px; left: 50%;
+  transform: translateX(-50%);
+  width: 600px; height: 200px;
+  background: radial-gradient(ellipse, var(--green-glow) 0%, transparent 70%);
+  pointer-events: none;
+  filter: blur(30px);
+  opacity: .6;
+}
+
+.hero-label {
+  font-family: 'IBM Plex Mono', monospace;
+  font-size: .68rem;
+  letter-spacing: .32em;
+  color: var(--green);
+  text-transform: uppercase;
+  margin-bottom: 1.4rem;
+  opacity: 0;
+  animation: fadeUp .9s .15s cubic-bezier(.22,1,.36,1) forwards;
+}
+
+.hero h1 {
+  font-family: 'Inter', sans-serif;
+  font-size: clamp(2.6rem, 6vw, 4.2rem);
+  font-weight: 800;
+  line-height: 1.15;
+  letter-spacing: -.03em;
+  color: var(--t1);
+  border-left: 4px solid var(--green);
+  padding-left: .5em;
+  opacity: 0;
+  animation: fadeUp .9s .3s cubic-bezier(.22,1,.36,1) forwards;
+}
+.hero h1 .g { 
+  color: var(--green);
+  font-style: normal;
+}
+.hero h1 .brand {
+  font-size: 1.25em;
+  letter-spacing: -.03em;
+}
+
+.hero-sub {
+  margin-top: 1.5rem;
+  font-family: 'Inter', sans-serif;
+  font-size: 1.08rem;
+  color: var(--t2);
+  font-weight: 400;
+  max-width: 560px;
+  line-height: 1.7;
+  opacity: 0;
+  animation: fadeUp .9s .5s cubic-bezier(.22,1,.36,1) forwards;
+}
+
+.hero-stats {
+  display: flex;
+  gap: 3rem;
+  margin-top: 2.8rem;
+  opacity: 0;
+  animation: fadeUp .9s .65s cubic-bezier(.22,1,.36,1) forwards;
+}
+.stat { text-align: center; }
+.stat-val {
+  font-family: 'Archivo Black', sans-serif;
+  font-size: 1.6rem;
+  font-weight: 400;
+  color: var(--green);
+}
+.stat-label {
+  font-family: 'IBM Plex Mono', monospace;
+  font-size: .72rem;
+  color: var(--t1);
+  opacity: 0.7;
+  letter-spacing: .1em;
+  text-transform: uppercase;
+  margin-top: .35rem;
+}
+
+.scroll-cue {
+  position: absolute;
+  bottom: 2rem; left: 50%;
+  transform: translateX(-50%);
+  text-align: center;
+  opacity: 0;
+  animation: fadeUp .9s .9s cubic-bezier(.22,1,.36,1) forwards;
+}
+.scroll-line {
+  width: 14px; height: 14px;
+  margin: 0 auto;
+  border-right: 2px solid rgba(255,255,255,.35);
+  border-bottom: 2px solid rgba(255,255,255,.35);
+  border-radius: 1px;
+  transform: rotate(45deg);
+  animation: scrollPulse 2.4s ease-in-out infinite;
+}
+@keyframes scrollPulse {
+  0%, 100% { opacity: .5; transform: rotate(45deg) translateY(0); }
+  50%      { opacity: .12; transform: rotate(45deg) translateY(4px); }
+}
+
+@keyframes fadeUp {
+  from { opacity:0; transform: translateY(28px); }
+  to   { opacity:1; transform: translateY(0); }
+}
+
+/* ── INTRO ── */
+.intro {
+  max-width: 700px;
+  margin: 0 auto;
+  padding: 1.5rem 2rem 1.5rem;
+  text-align: center;
+}
+.intro p {
+  font-size: 1.25rem;
+  color: var(--t2);
+  font-weight: 300;
+  line-height: 1.9;
+}
+.intro strong { color: var(--t1); font-weight: 500; }
+
+/* ── FEATURES ── */
+.features {
+  max-width: 820px;
+  margin: 0 auto;
+  padding: 3rem 2rem 2rem;
+}
+
+.feature {
+  position: relative;
+  padding: 3.8rem 0 4.8rem;
+  border-bottom: 1px solid var(--border);
+  opacity: 0;
+  transform: translateY(36px);
+  transition: opacity .75s cubic-bezier(.22,1,.36,1),
+              transform .75s cubic-bezier(.22,1,.36,1);
+}
+.feature:last-child { border-bottom: none; }
+.feature.visible { opacity:1; transform: translateY(0); }
+
+/* Number */
+.f-num {
+  font-family: 'Archivo Black', sans-serif;
+  font-size: 6.5rem;
+  font-weight: 400;
+  color: var(--green);
+  opacity: .14;
+  line-height: 1;
+  position: absolute;
+  top: 2.8rem; right: -.5rem;
+  pointer-events: none;
+  user-select: none;
+  letter-spacing: -.04em;
+  transition: opacity .6s;
+}
+.feature.visible .f-num { opacity: .2; }
+
+/* Title */
+.f-tag {
+  font-family: 'IBM Plex Mono', monospace;
+  font-size: .7rem;
+  color: var(--green);
+  letter-spacing: .06em;
+  font-weight: 500;
+  margin-bottom: .35rem;
+}
+.f-title {
+  font-family: 'Archivo Black', sans-serif;
+  font-size: 1.65rem;
+  font-weight: 400;
+  color: var(--t1);
+  line-height: 1.25;
+  margin-bottom: .1rem;
+  position: relative;
+  z-index: 1;
+  max-width: 82%;
+}
+
+/* Problem */
+.problem {
+  background: var(--red-dim);
+  border-left: 2.5px solid var(--red);
+  border-radius: 0 6px 6px 0;
+  padding: 1rem 1.3rem;
+  margin: 1.4rem 0 1.2rem;
+}
+.problem-label {
+  font-family: 'IBM Plex Mono', monospace;
+  font-size: .62rem;
+  letter-spacing: .14em;
+  color: var(--red);
+  text-transform: uppercase;
+  margin-bottom: .35rem;
+  opacity: .85;
+}
+.problem p {
+  font-size: .88rem;
+  color: #bbb;
+  font-style: italic;
+  font-weight: 300;
+  line-height: 1.6;
+}
+
+/* Desc */
+.f-desc {
+  font-size: .9rem;
+  color: var(--t2);
+  line-height: 1.9;
+  margin-bottom: 1.4rem;
+  font-weight: 300;
+}
+.f-desc strong { color: var(--t1); font-weight: 500; }
+.f-desc em { color: var(--green); font-style: normal; font-weight: 500; }
+
+/* Comparison */
+.comparison {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: .9rem;
+  margin-bottom: 1rem;
+}
+.comp {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 1rem 1.1rem;
+}
+.comp.other { border-color: rgba(224,90,69,.18); }
+.comp.cognix { border-color: var(--border-green); }
+
+.comp-head {
+  display: flex;
+  align-items: center;
+  gap: .45rem;
+  margin-bottom: .7rem;
+}
+.comp-dot {
+  width: 7px; height: 7px;
+  border-radius: 50%;
+}
+.comp.other .comp-dot { background: var(--red); }
+.comp.cognix .comp-dot { background: var(--green); box-shadow: 0 0 6px var(--green-glow); }
+.comp-head span {
+  font-family: 'IBM Plex Mono', monospace;
+  font-size: .62rem;
+  letter-spacing: .12em;
+  text-transform: uppercase;
+}
+.comp.other .comp-head span { color: var(--red); }
+.comp.cognix .comp-head span { color: var(--green); }
+
+.comp-flow { font-family: 'IBM Plex Mono', monospace; font-size: .73rem; }
+.comp-step {
+  color: var(--t2);
+  padding: .22rem 0;
+  line-height: 1.5;
+}
+.comp-arrow { color: var(--t3); font-size: .65rem; padding: .05rem 0 .05rem .5rem; }
+.comp-step.bad { color: var(--red); }
+.comp-step.good { color: var(--green); }
+.comp-step.hl {
+  background: var(--green-dim);
+  color: var(--green);
+  padding: .2rem .45rem;
+  border-radius: 4px;
+  margin-left: -.45rem;
+  font-weight: 500;
+}
+
+/* Tech */
+.f-tech {
+  font-family: 'IBM Plex Mono', monospace;
+  font-size: .67rem;
+  color: var(--t3);
+  padding-top: .7rem;
+  border-top: 1px solid var(--border);
+  line-height: 1.7;
+}
+.f-tech .code { color: var(--green); opacity: .55; }
+
+/* ── FOOTER ── */
+.footer {
+  text-align: center;
+  padding: 4rem 2rem 7rem;
+  position: relative;
+}
+.footer::before {
+  content: '';
+  position: absolute;
+  top: -1px; left: 10%; right: 10%;
+  height: 1px;
+  background: linear-gradient(to right, transparent, var(--border), transparent);
+}
+.footer-title {
+  font-family: 'Archivo Black', sans-serif;
+  font-size: clamp(1.5rem, 3.5vw, 2.1rem);
+  font-weight: 400;
+  line-height: 1.3;
+  margin-bottom: 1rem;
+  color: var(--t1);
+}
+.footer-title .g { color: var(--green); }
+.footer p {
+  color: var(--t2);
+  font-size: .88rem;
+  font-weight: 300;
+  max-width: 500px;
+  margin: 0 auto;
+  line-height: 1.8;
+}
+.footer-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: .5rem;
+  margin-top: 2.2rem;
+  background: var(--green-dim);
+  border: 1px solid var(--border-green);
+  border-radius: 20px;
+  padding: .4rem 1rem .4rem .5rem;
+}
+.footer-badge .badge-dot {
+  width: 8px; height: 8px;
+  border-radius: 50%;
+  background: var(--green);
+  box-shadow: 0 0 6px var(--green-glow);
+}
+.footer-badge span {
+  font-family: 'IBM Plex Mono', monospace;
+  font-size: .68rem;
+  color: var(--green);
+  letter-spacing: .08em;
+}
+
+/* ── NAV BAR ── */
+nav {
+  position: fixed;
+  top: 0; left: 0; right: 0;
+  z-index: 900;
+  background: rgba(7,7,7,.88);
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
+  border-bottom: 1px solid var(--border);
+}
+.nav-inner {
+  max-width: 820px;
+  margin: 0 auto;
+  padding: 0 2rem;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  height: 54px;
+}
+.nav-logo {
+  font-family: 'IBM Plex Mono', monospace;
+  font-weight: 500;
+  font-size: 1.05rem;
+  color: var(--green);
+  text-decoration: none;
+  letter-spacing: -.02em;
+}
+.nav-logo span { color: var(--t3); }
+.nav-links {
+  display: flex;
+  gap: 22px;
+  align-items: center;
+}
+.nav-links a {
+  font-family: 'DM Sans', sans-serif;
+  font-size: .82rem;
+  color: var(--t2);
+  text-decoration: none;
+  transition: color .2s;
+}
+.nav-links a:hover { color: var(--t1); }
+.nav-lang {
+  font-family: 'IBM Plex Mono', monospace;
+  font-size: .75rem;
+  color: var(--t2);
+  text-decoration: none;
+  border: 1px solid var(--border);
+  padding: 4px 10px;
+  border-radius: 4px;
+  transition: border-color .2s, color .2s;
+}
+.nav-lang:hover { border-color: var(--t2); color: var(--t1); }
+.nav-gh {
+  font-family: 'IBM Plex Mono', monospace;
+  font-size: .75rem;
+  font-weight: 500;
+  background: var(--green);
+  color: #000;
+  padding: 5px 14px;
+  border-radius: 4px;
+  text-decoration: none;
+  transition: background .2s;
+}
+.nav-gh:hover { background: #6a9c00; }
+
+/* ── HERO CTA BOX ── */
+.hero-cta {
+  display: inline-flex;
+  align-items: center;
+  align-self: center;
+  gap: 12px;
+  background: var(--surface);
+  border: 1px solid var(--border-green);
+  border-radius: 8px;
+  padding: 14px 26px;
+  font-family: 'IBM Plex Mono', monospace;
+  font-size: .92rem;
+  color: var(--t1);
+  cursor: pointer;
+  transition: border-color .3s, box-shadow .3s;
+  margin-top: 2.5rem;
+  position: relative;
+}
+.hero-cta:hover {
+  border-color: var(--green);
+  box-shadow: 0 0 20px rgba(120,175,0,.12);
+}
+.hero-cta .prompt { color: var(--green); user-select: none; }
+.hero-cta-hint {
+  position: absolute;
+  top: -22px; right: 10px;
+  font-size: .62rem;
+  color: var(--t3);
+  font-family: 'IBM Plex Mono', monospace;
+  opacity: 0;
+  transition: opacity .2s;
+}
+.hero-cta:hover .hero-cta-hint { opacity: 1; }
+
+/* ── PAIN CARDS ── */
+.pain-section {
+  max-width: 820px;
+  margin: 0 auto;
+  padding: 2.5rem 2rem 1.5rem;
+}
+.pain-label {
+  font-family: 'IBM Plex Mono', monospace;
+  font-size: .68rem;
+  letter-spacing: .25em;
+  color: var(--t3);
+  text-transform: uppercase;
+  margin-bottom: 1.2rem;
+}
+.pain-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 1rem;
+  margin-bottom: 1.2rem;
+}
+.pain-card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 1.8rem 1.6rem;
+}
+.pain-num {
+  font-family: 'Archivo Black', sans-serif;
+  font-size: clamp(2.8rem, 6vw, 3.8rem);
+  font-weight: 400;
+  color: var(--green);
+  line-height: 1;
+  margin-bottom: .7rem;
+}
+.pain-desc {
+  font-size: .92rem;
+  color: var(--t2);
+  line-height: 1.6;
+  font-weight: 300;
+}
+.pain-source {
+  font-family: 'IBM Plex Mono', monospace;
+  font-size: .68rem;
+  color: var(--t3);
+}
+.pain-source a {
+  color: var(--t3);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+  transition: color .2s;
+}
+.pain-source a:hover { color: var(--t2); }
+
+/* ── DEMO TERMINAL ── */
+.demo-section {
+  max-width: 820px;
+  margin: 0 auto;
+  padding: 1rem 2rem 2.5rem;
+}
+.demo-label {
+  font-family: 'IBM Plex Mono', monospace;
+  font-size: .68rem;
+  letter-spacing: .25em;
+  color: var(--t3);
+  text-transform: uppercase;
+  margin-bottom: 1.2rem;
+}
+.demo-terminal {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  overflow: hidden;
+}
+.demo-bar {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  padding: 10px 16px;
+  background: rgba(255,255,255,.02);
+  border-bottom: 1px solid var(--border);
+}
+.demo-dot {
+  width: 10px; height: 10px;
+  border-radius: 50%;
+  background: var(--t3);
+}
+.demo-dot:first-child { background: #e05a45; }
+.demo-dot:nth-child(2) { background: #e0a535; }
+.demo-dot:nth-child(3) { background: #78af00; }
+.demo-bar-title {
+  font-family: 'IBM Plex Mono', monospace;
+  font-size: .65rem;
+  color: var(--t3);
+  margin-left: 8px;
+}
+.demo-body {
+  padding: 1.3rem 1.6rem;
+  font-family: 'IBM Plex Mono', monospace;
+  font-size: .78rem;
+  line-height: 1.85;
+  color: var(--t2);
+}
+.demo-body .cmd {
+  color: var(--t1);
+  margin-bottom: .4rem;
+}
+.demo-body .cmd .p { color: var(--green); }
+.demo-body .ok { color: var(--green); }
+.demo-body .dim { color: var(--t3); }
+.demo-body .result {
+  margin-top: .6rem;
+  padding-top: .6rem;
+  border-top: 1px solid var(--border);
+  color: var(--t1);
+}
+.demo-body .result strong { color: var(--green); font-weight: 500; }
+
+/* ── CREDIT ── */
+.credit {
+  text-align: center;
+  padding: 3rem 2rem 1rem;
+  border-top: 1px solid var(--border);
+  max-width: 500px;
+  margin: 0 auto;
+}
+.credit p {
+  font-size: .85rem;
+  color: var(--t2);
+  font-weight: 300;
+  line-height: 1.7;
+}
+.credit a {
+  color: var(--green);
+  text-decoration: none;
+}
+.credit a:hover { text-decoration: underline; }
+
+/* ── CAPABILITY CARDS ── */
+.capabilities {
+  max-width: 900px;
+  margin: 0 auto;
+  padding: 1.5rem 1.2rem 2rem;
+}
+.cap-label {
+  font-family: var(--mono);
+  font-size: .75rem;
+  letter-spacing: .15em;
+  text-transform: uppercase;
+  color: var(--green);
+  margin-bottom: 2rem;
+  opacity: .7;
+}
+.cap-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr 1fr;
+  gap: 20px;
+}
+.cap-card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 28px;
+}
+.cap-icon {
+  font-family: var(--mono);
+  font-size: .8rem;
+  color: var(--green);
+  margin-bottom: 12px;
+  opacity: .7;
+}
+.cap-title {
+  font-family: 'DM Sans', sans-serif;
+  font-weight: 600;
+  font-size: .95rem;
+  color: var(--t1);
+  margin-bottom: 8px;
+}
+.cap-desc {
+  font-size: .85rem;
+  color: var(--t2);
+  line-height: 1.5;
+}
+
+/* ── RESPONSIVE ── */
+@media (max-width: 600px) {
+  .f-num { font-size: 4rem; top: 2.2rem; right: 0; }
+  .f-title { max-width: 100%; font-size: 1.35rem; }
+  .comparison { grid-template-columns: 1fr; }
+  .hero-stats { gap: 1.8rem; }
+  .pain-grid { grid-template-columns: 1fr; }
+  .nav-links a:not(.nav-gh):not(.nav-lang) { display: none; }
+  .cap-grid { grid-template-columns: 1fr; }
+}
+</style>
+</head>
+<body>
+
+<div class="progress-bar" id="progressBar"></div>
+<div class="noise-overlay"></div>
+
+<!-- ── NAV ── -->
+<nav>
+  <div class="nav-inner">
+    <a href="#" class="nav-logo">cognix</a>
+    <div class="nav-links">
+      <a href="#features">How It Works</a>
+      <a href="#install">Install</a>
+      <a href="#">Top</a>
+      <a href="ja.html" class="nav-lang">日本語</a>
+      <a href="https://github.com/cognix-dev/cognix" target="_blank" rel="noopener" class="nav-gh">GitHub</a>
+    </div>
+  </div>
+</nav>
+
+<!-- ── HERO ── -->
+<header class="hero" style="padding-top:7rem">
+  <div class="hero-glow"></div>
+  <div class="hero-inner">
+    <div class="hero-label">Autonomous code generation powered by flow engineering.</div>
+    <h1>Not speed. <span class="g">QUALITY.</span><br>Not flash. <span class="g">RIGOR.</span></h1>
+    <p class="hero-sub">66% of AI-generated code is "almost right but doesn't work."<br>Cognix uses multi-stage validation to output <strong style="color:var(--t1)">code that works</strong>.</p>
+  </div>
+  <div class="hero-cta" onclick="navigator.clipboard.writeText('pipx install cognix')">
+    <span class="hero-cta-hint">click to copy</span>
+    <span class="prompt">$</span> pipx install cognix
+  </div>
+  <div class="scroll-cue">
+    <div class="scroll-line"></div>
+  </div>
+</header>
+
+<!-- ── PAIN POINT CARDS ── -->
+<section class="pain-section">
+  <div class="pain-label">The Problem</div>
+  <div class="pain-grid">
+    <div class="pain-card">
+      <div class="pain-num">66%</div>
+      <div class="pain-desc">of developers say "almost-right code" is their biggest frustration with AI tools</div>
+    </div>
+    <div class="pain-card">
+      <div class="pain-num">45%</div>
+      <div class="pain-desc">spend more time fixing AI-generated code than writing it themselves</div>
+    </div>
+  </div>
+  <div class="pain-source">Source: <a href="https://survey.stackoverflow.co/2025/" target="_blank" rel="noopener">Stack Overflow Developer Survey 2025</a></div>
+</section>
+
+<!-- ── PRINCIPLE ── -->
+<div class="intro">
+  <p>
+    Every AI coding tool promises <strong>speed</strong>.<br>
+    Cognix promises <strong style="color:var(--green)">code that works</strong>.
+  </p>
+  <p style="margin-top:.8rem;font-size:.88rem;color:var(--t2);font-weight:300">
+    The fastest code is the code that needs no debugging.
+  </p>
+</div>
+
+<!-- ── WHY 10 FEATURES ── -->
+<div class="intro" style="padding-top:0">
+  <p style="font-size:1.05rem;">
+    How can we promise "code that works"?<br>
+    The answer lies in <strong>8 quality assurance mechanisms</strong>.
+  </p>
+</div>
+
+<!-- ── FEATURES ── -->
+<main class="features" id="features">
+
+<!-- ═══ 01 ═══ -->
+<section class="feature">
+  <div class="f-num">01</div>
+  <div class="f-tag">SCOPE CONTROL</div>
+  <h2 class="f-title">Two-layer defense that eliminates AI "scope creep"</h2>
+  <div class="problem">
+    <div class="problem-label">💀 With other tools</div>
+    <p>"I asked it to change one line, and it rewrote the entire file. All the code I didn't want touched was gone."</p>
+  </div>
+  <p class="f-desc">
+    At the prompt layer, <strong>SCOPE ENFORCEMENT</strong> (using a "surgery robot" metaphor to constrain scope) instructs the LLM. At the implementation layer, a <strong>Diff Sanitizer</strong> <em>mechanically strips</em> any changes outside the allowed range. Two independent defenses operate simultaneously — scope creep becomes physically impossible.
+  </p>
+  <div class="comparison">
+    <div class="comp other">
+      <div class="comp-head"><div class="comp-dot"></div><span>Other tools</span></div>
+      <div class="comp-flow">
+        <div class="comp-step">LLM output</div>
+        <div class="comp-arrow">↓</div>
+        <div class="comp-step bad">✗ Out-of-scope changes → applied directly</div>
+        <div class="comp-arrow">↓</div>
+        <div class="comp-step bad">Code breaks</div>
+      </div>
+    </div>
+    <div class="comp cognix">
+      <div class="comp-head"><div class="comp-dot"></div><span>Cognix</span></div>
+      <div class="comp-flow">
+        <div class="comp-step">LLM output</div>
+        <div class="comp-arrow">↓</div>
+        <div class="comp-step hl">Diff Sanitizer (strips out-of-scope)</div>
+        <div class="comp-arrow">↓</div>
+        <div class="comp-step good">✓ Safely applied</div>
+      </div>
+    </div>
+  </div>
+  <div class="f-tech">Impl: <span class="code">SequenceMatcher opcodes × allowed_lines whitelist</span> — line-by-line judgment against allowed line number set; out-of-scope reverted</div>
+</section>
+
+<!-- ═══ 02 ═══ -->
+<section class="feature">
+  <div class="f-num">02</div>
+  <div class="f-tag">FORMAL PROOF</div>
+  <h2 class="f-title">Won't execute without proving correctness first</h2>
+  <div class="problem">
+    <div class="problem-label">💀 With other tools</div>
+    <p>"Fixed A, broke B. Fixed B, broke C. Stuck in an infinite loop."</p>
+  </div>
+  <p class="f-desc">
+    <strong>Before</strong> executing a fix, the LLM is forced to provide three correctness proofs: <strong>LOCALITY</strong> (is the scope limited?), <strong>ISOLATION</strong> (does it interfere with other files?), and <strong>NON-RECURRENCE</strong> (is this a systemic issue?). If any proof fails, the strategy is <em>automatically escalated</em>. Not "try and fail" — "prove correctness, then execute."
+  </p>
+  <div class="comparison">
+    <div class="comp other">
+      <div class="comp-head"><div class="comp-dot"></div><span>Other tools</span></div>
+      <div class="comp-flow">
+        <div class="comp-step">Attempt fix</div>
+        <div class="comp-arrow">↓</div>
+        <div class="comp-step bad">✗ Fails → retry</div>
+        <div class="comp-arrow">↓</div>
+        <div class="comp-step bad">Infinite retry with same strategy</div>
+      </div>
+    </div>
+    <div class="comp cognix">
+      <div class="comp-head"><div class="comp-dot"></div><span>Cognix</span></div>
+      <div class="comp-flow">
+        <div class="comp-step">Force 3 proofs</div>
+        <div class="comp-arrow">↓</div>
+        <div class="comp-step hl">Proof fails → change strategy</div>
+        <div class="comp-arrow">↓</div>
+        <div class="comp-step good">✓ Execute with correct strategy</div>
+      </div>
+    </div>
+  </div>
+  <div class="f-tech">Impl: <span class="code">&lt;escalate&gt; tag detection → 5-stage escalation chain</span> — MINIMAL → DESIGN CHANGE → SIC Retry → Reject auto-transition</div>
+</section>
+
+<!-- ═══ 03 ═══ -->
+<section class="feature">
+  <div class="f-num">03</div>
+  <div class="f-tag">STRUCTURAL INTEGRITY CHECK</div>
+  <h2 class="f-title">Detects invisible structural corruption and auto-repairs</h2>
+  <div class="problem">
+    <div class="problem-label">💀 With other tools</div>
+    <p>"Code works. Tests pass. But weeks later, a critical bug surfaces. The cause was subtle structural decay."</p>
+  </div>
+  <p class="f-desc">
+    Uses Python's <strong>ast module</strong> to compare structural snapshots before and after modifications. Detects <strong>5 types of corruption patterns</strong> including class disappearance, attribute module-level leakage, and type hint loss. On SIC failure, attempts auto-repair via <em>three-way comparison recovery</em> using the "DNA" (original code) as reference.
+  </p>
+  <div class="comparison">
+    <div class="comp other">
+      <div class="comp-head"><div class="comp-dot"></div><span>Other tools</span></div>
+      <div class="comp-flow">
+        <div class="comp-step">Generate modified code</div>
+        <div class="comp-arrow">↓</div>
+        <div class="comp-step bad">✗ No structural check</div>
+        <div class="comp-arrow">↓</div>
+        <div class="comp-step bad">Silent corruption shipped</div>
+      </div>
+    </div>
+    <div class="comp cognix">
+      <div class="comp-head"><div class="comp-dot"></div><span>Cognix</span></div>
+      <div class="comp-flow">
+        <div class="comp-step">Generate modified code</div>
+        <div class="comp-arrow">↓</div>
+        <div class="comp-step hl">AST structural diff (5 checks)</div>
+        <div class="comp-arrow">↓</div>
+        <div class="comp-step good">✓ No corruption → apply</div>
+      </div>
+    </div>
+  </div>
+  <div class="f-tech">Impl: <span class="code">ast.parse() → structural snapshot diff</span> — before/after comparison of class names, attribute positions, type hints across 5 corruption types</div>
+</section>
+
+<!-- ═══ 04 ═══ -->
+<section class="feature">
+  <div class="f-num">04</div>
+  <div class="f-tag">VALIDATION CHAIN</div>
+  <h2 class="f-title">Automatically eliminates framework-specific bugs</h2>
+  <div class="problem">
+    <div class="problem-label">💀 With other tools</div>
+    <p>"Ran the generated code and got 'relationship xxx is not defined.' Took hours to understand why."</p>
+  </div>
+  <p class="f-desc">
+    Automatically validates consistency across SQLAlchemy, Flask, Marshmallow, and HTML/CSS/JS with <strong>32 validation rules (G-1 to G-32)</strong>. Resolves detected bugs with <strong>29 auto-fix rules</strong>. Foreign key references, relationship overlaps, reserved word conflicts — issues developers would need to debug manually <em>vanish at generation time</em>.
+  </p>
+  <div class="comparison">
+    <div class="comp other">
+      <div class="comp-head"><div class="comp-dot"></div><span>Other tools</span></div>
+      <div class="comp-flow">
+        <div class="comp-step">Generic lint (syntax only)</div>
+        <div class="comp-arrow">↓</div>
+        <div class="comp-step bad">✗ Framework bugs undetected</div>
+        <div class="comp-arrow">↓</div>
+        <div class="comp-step bad">Developer debugs manually</div>
+      </div>
+    </div>
+    <div class="comp cognix">
+      <div class="comp-head"><div class="comp-dot"></div><span>Cognix</span></div>
+      <div class="comp-flow">
+        <div class="comp-step">32 validations auto-detect</div>
+        <div class="comp-arrow">↓</div>
+        <div class="comp-step hl">29 auto-fixes resolve</div>
+        <div class="comp-arrow">↓</div>
+        <div class="comp-step good">✓ Clean code output</div>
+      </div>
+    </div>
+  </div>
+  <div class="f-tech">Impl: <span class="code">G-1 to G-32: foreignkey_references, relationship_overlaps, back_populates_consistency, marshmallow_api_misuse…</span> with 29 paired auto-fixes</div>
+</section>
+
+<!-- ═══ 05 ═══ -->
+<section class="feature">
+  <div class="f-num">05</div>
+  <div class="f-tag">MULTI-STAGE GENERATION</div>
+  <h2 class="f-title">Maintains consistency even for large-scale projects</h2>
+  <div class="problem">
+    <div class="problem-label">💀 With other tools</div>
+    <p>"Generated a large project all at once. Cross-file dependencies were completely broken."</p>
+  </div>
+  <p class="f-desc">
+    <strong>Phase 1 (Foundation)</strong> generates models, schemas, and config first. <strong>Phase 2 (Application)</strong> builds routers and services. <strong>Phase 3 (Environment)</strong> finishes setup. Each phase verifies the previous phase's output before generating — cross-file consistency is <em>guaranteed by design</em>.
+  </p>
+  <div class="comparison">
+    <div class="comp other">
+      <div class="comp-head"><div class="comp-dot"></div><span>Other tools</span></div>
+      <div class="comp-flow">
+        <div class="comp-step">Generate all files at once</div>
+        <div class="comp-arrow">↓</div>
+        <div class="comp-step bad">✗ Cross-file references broken</div>
+      </div>
+    </div>
+    <div class="comp cognix">
+      <div class="comp-head"><div class="comp-dot"></div><span>Cognix</span></div>
+      <div class="comp-flow">
+        <div class="comp-step">Phase 1: Foundation</div>
+        <div class="comp-arrow">↓</div>
+        <div class="comp-step">Phase 2: Application (refs foundation)</div>
+        <div class="comp-arrow">↓</div>
+        <div class="comp-step hl">Phase 3: Environment</div>
+        <div class="comp-arrow">↓</div>
+        <div class="comp-step good">✓ Consistency maintained</div>
+      </div>
+    </div>
+  </div>
+  <div class="f-tech">Impl: <span class="code">Foundation → Application → Environment</span> — 3-phase, 9-step staged generation pipeline with StepHUD</div>
+</section>
+
+<!-- ═══ 06 ═══ -->
+<section class="feature">
+  <div class="f-num">06</div>
+  <div class="f-tag">POST-GENERATION VALIDATOR</div>
+  <h2 class="f-title">Auto-completes missing files after generation</h2>
+  <div class="problem">
+    <div class="problem-label">💀 With other tools</div>
+    <p>"Right after generation: <code style="color:#e05a45;font-size:.82rem">ModuleNotFoundError</code>. A file simply wasn't generated."</p>
+  </div>
+  <p class="f-desc">
+    Analyzes <strong>every import statement</strong> in generated files and verifies that referenced modules exist. Automatically detects missing files and <em>generates completions</em> using existing file context. The "import error on first run" problem disappears at generation time.
+  </p>
+  <div class="comparison">
+    <div class="comp other">
+      <div class="comp-head"><div class="comp-dot"></div><span>Other tools</span></div>
+      <div class="comp-flow">
+        <div class="comp-step">Code generation → done</div>
+        <div class="comp-arrow">↓</div>
+        <div class="comp-step bad">✗ Developer hits import errors</div>
+      </div>
+    </div>
+    <div class="comp cognix">
+      <div class="comp-head"><div class="comp-dot"></div><span>Cognix</span></div>
+      <div class="comp-flow">
+        <div class="comp-step">Generate → analyze all imports</div>
+        <div class="comp-arrow">↓</div>
+        <div class="comp-step hl">Detect gaps → auto-complete</div>
+        <div class="comp-arrow">↓</div>
+        <div class="comp-step good">✓ All dependencies resolved</div>
+      </div>
+    </div>
+  </div>
+  <div class="f-tech">Impl: <span class="code">_validate_import_dependencies → _generate_missing_files</span> — AST analysis of imports to identify references; context-aware completion generation</div>
+</section>
+
+<!-- ═══ 07 ═══ -->
+<section class="feature">
+  <div class="f-num">07</div>
+  <div class="f-tag">RUNTIME VALIDATION</div>
+  <h2 class="f-title">Never returns code that doesn't run</h2>
+  <div class="problem">
+    <div class="problem-label">💀 With other tools</div>
+    <p>"Ran the generated code — instant crash. The generation showed 'success.'"</p>
+  </div>
+  <p class="f-desc">
+    <strong>Actually executes imports</strong> on modified code to verify it works. If an import fails, changes to the failing file are <em>automatically reverted</em>. By going beyond static checks to runtime verification, "looks correct but doesn't run" code is never output.
+  </p>
+  <div class="comparison">
+    <div class="comp other">
+      <div class="comp-head"><div class="comp-dot"></div><span>Other tools</span></div>
+      <div class="comp-flow">
+        <div class="comp-step">Static check (syntax only)</div>
+        <div class="comp-arrow">↓</div>
+        <div class="comp-step bad">✗ No runtime check → output</div>
+        <div class="comp-arrow">↓</div>
+        <div class="comp-step bad">Crashes at runtime</div>
+      </div>
+    </div>
+    <div class="comp cognix">
+      <div class="comp-head"><div class="comp-dot"></div><span>Cognix</span></div>
+      <div class="comp-flow">
+        <div class="comp-step">Runtime verification (import execution)</div>
+        <div class="comp-arrow">↓</div>
+        <div class="comp-step hl">Failure → auto-revert</div>
+        <div class="comp-arrow">↓</div>
+        <div class="comp-step good">✓ Only verified code output</div>
+      </div>
+    </div>
+  </div>
+  <div class="f-tech">Impl: <span class="code">_validate_runtime_import() → auto-revert on ImportError</span> — reverts only failing files; preserves other changes</div>
+</section>
+
+<!-- ═══ 08 ═══ -->
+<section class="feature">
+  <div class="f-num">08</div>
+  <div class="f-tag">COMPREHENSIVE CODE REVIEW</div>
+  <h2 class="f-title">Catches 25 types of problems that lint can't</h2>
+  <div class="problem">
+    <div class="problem-label">💀 With other tools</div>
+    <p>"Syntax is correct. Lint passes. But the 'Save' button doesn't actually save. Found out a week later."</p>
+  </div>
+  <p class="f-desc">
+    Beyond syntax, beyond lint — tracks <strong>25 types of semantic issues</strong> exhaustively. Leftover TODOs, dead code, non-functional buttons, save/load inconsistencies, missing awaits, unhandled Promises, security holes, resource leaks, leftover debug code. Every generated file passes this <em>logical completeness scan</em>. "It compiles but doesn't work" is eliminated.
+  </p>
+  <div class="comparison">
+    <div class="comp other">
+      <div class="comp-head"><div class="comp-dot"></div><span>Other tools</span></div>
+      <div class="comp-flow">
+        <div class="comp-step">Syntax check → done</div>
+        <div class="comp-arrow">↓</div>
+        <div class="comp-step bad">✗ Logic bugs undetected</div>
+        <div class="comp-arrow">↓</div>
+        <div class="comp-step bad">Broken features shipped</div>
+      </div>
+    </div>
+    <div class="comp cognix">
+      <div class="comp-head"><div class="comp-dot"></div><span>Cognix</span></div>
+      <div class="comp-flow">
+        <div class="comp-step">25-type semantic review</div>
+        <div class="comp-arrow">↓</div>
+        <div class="comp-step hl">Auto-fix or escalate</div>
+        <div class="comp-arrow">↓</div>
+        <div class="comp-step good">✓ Logically complete code</div>
+      </div>
+    </div>
+  </div>
+  <div class="f-tech">Impl: <span class="code">_final_comprehensive_review()</span> — 25 types: leftover TODOs, dead code, non-functional UI, save/load mismatch, missing awaits, security issues, resource leaks, debug code…</div>
+</section>
+
+</main>
+
+<!-- ── CAPABILITY CARDS ── -->
+<section class="capabilities">
+  <div class="cap-label">Also built in</div>
+  <div class="cap-grid">
+    <div class="cap-card">
+      <div class="cap-icon">[ models ]</div>
+      <div class="cap-title">Multi-model</div>
+      <div class="cap-desc">Claude, GPT, and 100+ models via OpenRouter. Switch with one command.</div>
+    </div>
+    <div class="cap-card">
+      <div class="cap-icon">[ score ]</div>
+      <div class="cap-title">Quality scoring</div>
+      <div class="cap-desc">Every generated file gets a 0–1.0 quality score. Remaining issues are listed per file, per line.</div>
+    </div>
+    <div class="cap-card">
+      <div class="cap-icon">[ local ]</div>
+      <div class="cap-title">No lock-in</div>
+      <div class="cap-desc">No IDE dependency, no subscription, no telemetry. All data stays on your machine.</div>
+    </div>
+    <div class="cap-card">
+      <div class="cap-icon">[ backup ]</div>
+      <div class="cap-title">Auto-backup</div>
+      <div class="cap-desc">Every file is backed up before modification. Restore anytime. No Git required.</div>
+    </div>
+    <div class="cap-card">
+      <div class="cap-icon">[ repo ]</div>
+      <div class="cap-title">Repository context</div>
+      <div class="cap-desc">Persistent project understanding. Dependency graphs and impact analysis across sessions.</div>
+    </div>
+    <div class="cap-card">
+      <div class="cap-icon">[ mcp ]</div>
+      <div class="cap-title">MCP server</div>
+      <div class="cap-desc">Use from Claude Desktop, Cursor, or any MCP-compatible tool.</div>
+    </div>
+  </div>
+</section>
+
+<div id="install"></div>
+
+<!-- ── CREDIT ── -->
+<div class="credit">
+  <p>Cognix is designed and built by <a href="https://github.com/cognix-dev" target="_blank" rel="noopener">Shinichiro</a>, a solo developer.<br>Building what developers who use AI tools actually need.</p>
+</div>
+
+<!-- ── FOOTER ── -->
+<footer class="footer">
+  <h2 class="footer-title"><span class="g">The fastest code</span> is code<br>that needs no debugging.</h2>
+  <p>All 8 quality assurance mechanisms share one design philosophy: "never trust LLM output." Prompt layer, implementation layer, and validation layer operate independently — if one fails, the others cover.</p>
+  
+  <div style="margin-top:2.5rem;display:flex;gap:16px;justify-content:center;flex-wrap:wrap">
+    <div style="background:var(--surface);border:1px solid var(--border-green);border-radius:8px;padding:16px 24px;font-family:'IBM Plex Mono',monospace;font-size:.85rem;cursor:pointer;transition:border-color .2s" onclick="navigator.clipboard.writeText('pipx install cognix')" onmouseover="this.style.borderColor='var(--green)'" onmouseout="this.style.borderColor='var(--border-green)'">
+      <span style="color:var(--green)">$</span> pipx install cognix
+    </div>
+    <a href="https://github.com/cognix-dev/cognix" target="_blank" rel="noopener" style="background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:16px 24px;font-family:'IBM Plex Mono',monospace;font-size:.85rem;color:var(--t2);text-decoration:none;transition:border-color .2s" onmouseover="this.style.borderColor='var(--t2)'" onmouseout="this.style.borderColor='var(--border)'">
+      GitHub →
+    </a>
+  </div>
+
+  <div style="margin-top:2rem;display:flex;gap:20px;justify-content:center">
+    <a href="https://github.com/cognix-dev/cognix/issues" style="font-family:'IBM Plex Mono',monospace;font-size:.7rem;color:#8a8a8a;text-decoration:none">Issues</a>
+    <a href="https://github.com/cognix-dev/cognix/discussions" style="font-family:'IBM Plex Mono',monospace;font-size:.7rem;color:#8a8a8a;text-decoration:none">Discussions</a>
+    <a href="ja.html" style="font-family:'IBM Plex Mono',monospace;font-size:.7rem;color:#8a8a8a;text-decoration:none">日本語</a>
+  </div>
+
+  <div class="footer-badge">
+    <div class="badge-dot"></div>
+    <span>COGNIX v0.2.0 — MIT License — © 2025-2026</span>
+  </div>
+</footer>
+
+<script>
+// ── Scroll Progress Bar ──
+const bar = document.getElementById('progressBar');
+bar.style.top = '54px'; // nav height
+window.addEventListener('scroll', () => {
+  const s = document.documentElement.scrollTop || document.body.scrollTop;
+  const h = document.documentElement.scrollHeight - window.innerHeight;
+  bar.style.width = (s / h * 100) + '%';
+});
+
+// ── Scroll Reveal (features) ──
+const obs = new IntersectionObserver((entries) => {
+  entries.forEach(e => { if (e.isIntersecting) e.target.classList.add('visible'); });
+}, { threshold: 0.12, rootMargin: '0px 0px -50px 0px' });
+
+document.querySelectorAll('.feature').forEach(el => obs.observe(el));
+
+// ── Scroll Reveal (pain cards) ──
+const obsCards = new IntersectionObserver((entries) => {
+  entries.forEach(e => {
+    if (e.isIntersecting) {
+      e.target.style.opacity = '1';
+      e.target.style.transform = 'translateY(0)';
+      obsCards.unobserve(e.target);
+    }
+  });
+}, { threshold: 0.15 });
+
+document.querySelectorAll('.pain-card').forEach(el => {
+  el.style.opacity = '0';
+  el.style.transform = 'translateY(24px)';
+  el.style.transition = 'opacity .6s cubic-bezier(.22,1,.36,1), transform .6s cubic-bezier(.22,1,.36,1)';
+  obsCards.observe(el);
+});
+
+// ── Scroll Reveal (demo terminal) ──
+const demoEl = document.querySelector('.demo-terminal');
+if (demoEl) {
+  demoEl.style.opacity = '0';
+  demoEl.style.transform = 'translateY(24px)';
+  demoEl.style.transition = 'opacity .7s cubic-bezier(.22,1,.36,1), transform .7s cubic-bezier(.22,1,.36,1)';
+  const obsDemo = new IntersectionObserver((entries) => {
+    entries.forEach(e => {
+      if (e.isIntersecting) {
+        e.target.style.opacity = '1';
+        e.target.style.transform = 'translateY(0)';
+        obsDemo.unobserve(e.target);
+      }
+    });
+  }, { threshold: 0.15 });
+  obsDemo.observe(demoEl);
+}
+</script>
+</body>
+</html>
