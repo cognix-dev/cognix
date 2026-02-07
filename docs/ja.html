@@ -6,7 +6,7 @@
 <title>Cognix — 速さではなく、品質。派手さではなく、堅実。</title>
 <meta name="description" content="開発者の66%が「惜しいけど動かないコード」を最大のフラストレーションに挙げている。Cognixは多段階検証でこの問題を解決するAI CLIツール。">
 <meta property="og:title" content="Cognix — 速さではなく、品質。派手さではなく、堅実。">
-<meta property="og:description" content="実際に動くコードを生成するAI CLIツール。MITライセンス。">
+<meta property="og:description" content="実際に動くコードを生成するAI CLIツール。Apache License 2.0。">
 <meta property="og:type" content="website">
 <meta property="og:url" content="https://cognix-dev.github.io/cognix/ja.html">
 <style>
@@ -479,7 +479,8 @@ nav {
   padding: 14px 26px;
   font-family: 'IBM Plex Mono', monospace;
   font-size: .92rem;
-  color: var(--t1);
+  color: #ffffff;
+  text-decoration: none;
   cursor: pointer;
   transition: border-color .3s, box-shadow .3s;
   margin-top: 2.5rem;
@@ -721,10 +722,9 @@ nav {
   <div class="hero-label">Autonomous code generation powered by flow engineering.</div>
   <h1>速さではなく<span class="g">品質</span>。<br>派手さではなく<span class="g">堅実さ</span>。</h1>
   <p class="hero-sub">AIコード生成の66%は「惜しいけど動かない」。<br>Cognixは多段階検証で、<strong style="color:var(--t1)">動くコード</strong>を出力する。</p>
-  <div class="hero-cta" onclick="navigator.clipboard.writeText('pipx install cognix')">
-    <span class="hero-cta-hint">click to copy</span>
-    <span class="prompt">$</span> pipx install cognix
-  </div>
+  <a class="hero-cta" href="https://github.com/cognix-dev/cognix/blob/main/README_JA.md#installation" target="_blank" rel="noopener">
+    pipx install cognix
+  </a>
   <div class="scroll-cue">
     <div class="scroll-line"></div>
   </div>
@@ -1114,23 +1114,23 @@ nav {
   <p>8つの品質保証機構が「LLMの出力を信じない」という共通の設計思想で構成される。プロンプト層・実装層・検証層が独立に動作し、いずれかが失敗しても他の層がカバーする。</p>
   
   <div style="margin-top:2.5rem;display:flex;gap:16px;justify-content:center;flex-wrap:wrap">
-    <div style="background:var(--surface);border:1px solid var(--border-green);border-radius:8px;padding:16px 24px;font-family:'IBM Plex Mono',monospace;font-size:.85rem;cursor:pointer;transition:border-color .2s" onclick="navigator.clipboard.writeText('pipx install cognix')" onmouseover="this.style.borderColor='var(--green)'" onmouseout="this.style.borderColor='var(--border-green)'">
-      <span style="color:var(--green)">$</span> pipx install cognix
-    </div>
+    <a href="https://github.com/cognix-dev/cognix/blob/main/README_JA.md#installation" target="_blank" rel="noopener" style="background:var(--surface);border:1px solid var(--border-green);border-radius:8px;padding:16px 24px;font-family:'IBM Plex Mono',monospace;font-size:.85rem;color:var(--t1);text-decoration:none;transition:border-color .2s" onmouseover="this.style.borderColor='var(--green)'" onmouseout="this.style.borderColor='var(--border-green)'">
+      pipx install cognix
+    </a>
     <a href="https://github.com/cognix-dev/cognix" target="_blank" rel="noopener" style="background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:16px 24px;font-family:'IBM Plex Mono',monospace;font-size:.85rem;color:var(--t2);text-decoration:none;transition:border-color .2s" onmouseover="this.style.borderColor='var(--t2)'" onmouseout="this.style.borderColor='var(--border)'">
       GitHub →
     </a>
   </div>
 
   <div style="margin-top:2rem;display:flex;gap:20px;justify-content:center">
-    <a href="https://github.com/cognix-dev/cognix/issues" style="font-family:'IBM Plex Mono',monospace;font-size:.7rem;color:#8a8a8a;text-decoration:none">Issues</a>
-    <a href="https://github.com/cognix-dev/cognix/discussions" style="font-family:'IBM Plex Mono',monospace;font-size:.7rem;color:#8a8a8a;text-decoration:none">Discussions</a>
-    <a href="index.html" style="font-family:'IBM Plex Mono',monospace;font-size:.7rem;color:#8a8a8a;text-decoration:none">English</a>
+    <a href="https://github.com/cognix-dev/cognix/issues" style="font-family:'IBM Plex Mono',monospace;font-size:.7rem;color:#ffffff;text-decoration:none">Issues</a>
+    <a href="https://github.com/cognix-dev/cognix/discussions" style="font-family:'IBM Plex Mono',monospace;font-size:.7rem;color:#ffffff;text-decoration:none">Discussions</a>
+    <a href="index.html" style="font-family:'IBM Plex Mono',monospace;font-size:.7rem;color:#ffffff;text-decoration:none">English</a>
   </div>
 
   <div class="footer-badge">
     <div class="badge-dot"></div>
-    <span>COGNIX v0.2.0 — MIT License — © 2025-2026</span>
+    <span>COGNIX v0.2.0 — Apache License 2.0 — © 2025-2026</span>
   </div>
 </footer>
 

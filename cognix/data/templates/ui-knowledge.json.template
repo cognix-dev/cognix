@@ -1,0 +1,4688 @@
+{
+  "schema_version": "3.3.0",
+  "knowledge_type": "ui_components",
+  "description": "UI component specifications for LLM context (OpenUI Spec format) - Complete Edition v3.3.0 (46 components, 30 UX Laws) - Enhanced with insights from Shadcn/ui, Material-UI, Chakra UI, Radix UI + Material Design 3 fundamentals + Complete Laws of UX",
+  "components": {
+    "button": {
+      "type": "interactive_element",
+      "html_element": "button",
+      "description": "Clickable button component for user actions",
+      "props": {
+        "variant": {
+          "type": "enum",
+          "values": [
+            "primary",
+            "secondary",
+            "outline",
+            "ghost",
+            "danger"
+          ],
+          "default": "primary",
+          "description": "Visual style variant"
+        },
+        "size": {
+          "type": "enum",
+          "values": [
+            "sm",
+            "md",
+            "lg"
+          ],
+          "default": "md",
+          "description": "Button size"
+        },
+        "disabled": {
+          "type": "boolean",
+          "default": false,
+          "description": "Whether button is disabled"
+        },
+        "fullWidth": {
+          "type": "boolean",
+          "default": false,
+          "description": "Whether button should take full width of container"
+        }
+      },
+      "anatomy": {
+        "root": {
+          "element": "button",
+          "role": "container",
+          "attributes": [
+            "type",
+            "disabled"
+          ]
+        },
+        "content": {
+          "element": "span",
+          "role": "text_container",
+          "optional": false
+        },
+        "icon": {
+          "element": "svg",
+          "role": "icon",
+          "optional": true,
+          "position": [
+            "leading",
+            "trailing"
+          ]
+        }
+      },
+      "states": {
+        "default": {
+          "cursor": "pointer",
+          "opacity": 1.0
+        },
+        "hover": {
+          "triggers": [
+            "mouseenter"
+          ],
+          "typical_changes": [
+            "background_darken",
+            "shadow_increase"
+          ]
+        },
+        "active": {
+          "triggers": [
+            "mousedown"
+          ],
+          "typical_changes": [
+            "background_lighten",
+            "scale_decrease"
+          ]
+        },
+        "focus": {
+          "triggers": [
+            "focus"
+          ],
+          "typical_changes": [
+            "outline_visible",
+            "ring_visible"
+          ]
+        },
+        "disabled": {
+          "cursor": "not-allowed",
+          "opacity": 0.6,
+          "pointer_events": "none"
+        }
+      },
+      "accessibility": {
+        "required_attributes": [
+          "type (button|submit|reset)",
+          "aria-label (if text-less)"
+        ],
+        "keyboard": {
+          "activators": [
+            "Space",
+            "Enter"
+          ],
+          "focusable": true
+        },
+        "wcag_requirements": {
+          "contrast_ratio": 4.5,
+          "touch_target_min": "44x44px",
+          "focus_indicator": "visible"
+        }
+      }
+    },
+    "input": {
+      "type": "form_element",
+      "html_element": "input",
+      "description": "Text input field for user data entry",
+      "props": {
+        "type": {
+          "type": "enum",
+          "values": [
+            "text",
+            "email",
+            "password",
+            "number",
+            "tel",
+            "url",
+            "search"
+          ],
+          "default": "text",
+          "description": "Input type"
+        },
+        "placeholder": {
+          "type": "string",
+          "default": "",
+          "description": "Placeholder text"
+        },
+        "disabled": {
+          "type": "boolean",
+          "default": false
+        },
+        "required": {
+          "type": "boolean",
+          "default": false
+        },
+        "error": {
+          "type": "boolean",
+          "default": false,
+          "description": "Whether input is in error state"
+        }
+      },
+      "anatomy": {
+        "root": {
+          "element": "div",
+          "role": "container"
+        },
+        "label": {
+          "element": "label",
+          "role": "label",
+          "optional": false,
+          "attributes": [
+            "for"
+          ]
+        },
+        "input": {
+          "element": "input",
+          "role": "input_field",
+          "attributes": [
+            "type",
+            "name",
+            "id",
+            "placeholder",
+            "required",
+            "disabled"
+          ]
+        },
+        "error_message": {
+          "element": "span",
+          "role": "error_text",
+          "optional": true
+        },
+        "helper_text": {
+          "element": "span",
+          "role": "helper_text",
+          "optional": true
+        }
+      },
+      "states": {
+        "default": {
+          "border_color": "neutral",
+          "background": "white"
+        },
+        "focus": {
+          "triggers": [
+            "focus"
+          ],
+          "typical_changes": [
+            "border_color_primary",
+            "ring_visible"
+          ]
+        },
+        "error": {
+          "triggers": [
+            "validation_failed"
+          ],
+          "typical_changes": [
+            "border_color_danger",
+            "error_message_visible"
+          ]
+        },
+        "disabled": {
+          "cursor": "not-allowed",
+          "opacity": 0.6,
+          "background": "gray_light"
+        }
+      },
+      "accessibility": {
+        "required_attributes": [
+          "id",
+          "name",
+          "aria-label or label element",
+          "aria-invalid (if error)",
+          "aria-describedby (if helper/error text)"
+        ],
+        "keyboard": {
+          "focusable": true
+        },
+        "wcag_requirements": {
+          "label_association": "explicit (for attribute or aria-label)",
+          "error_identification": "text + visual indicator",
+          "focus_indicator": "visible"
+        }
+      }
+    },
+    "card": {
+      "type": "layout_element",
+      "html_element": "div",
+      "description": "Container component for grouping related content",
+      "props": {
+        "variant": {
+          "type": "enum",
+          "values": [
+            "elevated",
+            "outlined",
+            "filled"
+          ],
+          "default": "elevated",
+          "description": "Visual style variant"
+        },
+        "padding": {
+          "type": "enum",
+          "values": [
+            "none",
+            "sm",
+            "md",
+            "lg"
+          ],
+          "default": "md"
+        },
+        "clickable": {
+          "type": "boolean",
+          "default": false,
+          "description": "Whether card is interactive"
+        }
+      },
+      "anatomy": {
+        "root": {
+          "element": "div",
+          "role": "container"
+        },
+        "header": {
+          "element": "div",
+          "role": "header",
+          "optional": true
+        },
+        "body": {
+          "element": "div",
+          "role": "content",
+          "optional": false
+        },
+        "footer": {
+          "element": "div",
+          "role": "footer",
+          "optional": true
+        }
+      },
+      "states": {
+        "default": {
+          "shadow": "sm",
+          "border": "1px solid neutral"
+        },
+        "hover": {
+          "triggers": [
+            "mouseenter"
+          ],
+          "typical_changes": [
+            "shadow_increase"
+          ],
+          "condition": "only if clickable=true"
+        }
+      },
+      "accessibility": {
+        "wcag_requirements": {
+          "focus_indicator": "visible (if clickable)",
+          "keyboard_navigation": "tab-accessible (if clickable)"
+        }
+      }
+    },
+    "modal": {
+      "type": "overlay_element",
+      "html_element": "div",
+      "description": "Dialog overlay for focused user interaction",
+      "props": {
+        "size": {
+          "type": "enum",
+          "values": [
+            "sm",
+            "md",
+            "lg",
+            "xl",
+            "full"
+          ],
+          "default": "md"
+        },
+        "closeOnOverlayClick": {
+          "type": "boolean",
+          "default": true
+        },
+        "closeOnEscape": {
+          "type": "boolean",
+          "default": true
+        }
+      },
+      "anatomy": {
+        "overlay": {
+          "element": "div",
+          "role": "backdrop",
+          "attributes": [
+            "data-overlay"
+          ]
+        },
+        "dialog": {
+          "element": "div",
+          "role": "dialog",
+          "attributes": [
+            "role=\"dialog\"",
+            "aria-modal=\"true\""
+          ]
+        },
+        "close_button": {
+          "element": "button",
+          "role": "close",
+          "optional": true,
+          "attributes": [
+            "aria-label=\"Close\""
+          ]
+        },
+        "header": {
+          "element": "div",
+          "role": "header",
+          "optional": true
+        },
+        "body": {
+          "element": "div",
+          "role": "content"
+        },
+        "footer": {
+          "element": "div",
+          "role": "footer",
+          "optional": true
+        }
+      },
+      "states": {
+        "opening": {
+          "triggers": [
+            "open"
+          ],
+          "typical_changes": [
+            "fade_in",
+            "scale_in"
+          ]
+        },
+        "closing": {
+          "triggers": [
+            "close"
+          ],
+          "typical_changes": [
+            "fade_out",
+            "scale_out"
+          ]
+        }
+      },
+      "accessibility": {
+        "required_attributes": [
+          "role=\"dialog\"",
+          "aria-modal=\"true\"",
+          "aria-labelledby (title)",
+          "aria-describedby (description)"
+        ],
+        "keyboard": {
+          "close_keys": [
+            "Escape"
+          ],
+          "focus_trap": true,
+          "initial_focus": "first_focusable_element"
+        },
+        "wcag_requirements": {
+          "focus_management": "trap focus within modal",
+          "background_inert": "disable interaction with background content"
+        }
+      }
+    },
+    "form": {
+      "type": "form_element",
+      "html_element": "form",
+      "description": "Form container for user data input",
+      "props": {
+        "layout": {
+          "type": "enum",
+          "values": [
+            "vertical",
+            "horizontal",
+            "inline"
+          ],
+          "default": "vertical"
+        },
+        "validation": {
+          "type": "enum",
+          "values": [
+            "onBlur",
+            "onChange",
+            "onSubmit"
+          ],
+          "default": "onSubmit"
+        }
+      },
+      "anatomy": {
+        "form": {
+          "element": "form",
+          "role": "container",
+          "attributes": [
+            "novalidate"
+          ]
+        },
+        "field_group": {
+          "element": "div",
+          "role": "field_container",
+          "repeatable": true
+        },
+        "submit_button": {
+          "element": "button",
+          "role": "submit",
+          "attributes": [
+            "type=\"submit\""
+          ]
+        }
+      },
+      "accessibility": {
+        "required_attributes": [
+          "novalidate (for custom validation)"
+        ],
+        "wcag_requirements": {
+          "error_identification": "clear error messages",
+          "label_association": "all inputs must have labels",
+          "keyboard_navigation": "tab order logical"
+        }
+      }
+    },
+    "select": {
+      "type": "form_element",
+      "html_element": "select",
+      "description": "Dropdown selection for choosing from options",
+      "props": {
+        "multiple": {
+          "type": "boolean",
+          "default": false
+        },
+        "disabled": {
+          "type": "boolean",
+          "default": false
+        },
+        "required": {
+          "type": "boolean",
+          "default": false
+        }
+      },
+      "anatomy": {
+        "label": {
+          "element": "label",
+          "optional": false,
+          "attributes": [
+            "for"
+          ]
+        },
+        "select": {
+          "element": "select",
+          "attributes": [
+            "id",
+            "name",
+            "required"
+          ]
+        },
+        "option": {
+          "element": "option",
+          "repeatable": true,
+          "attributes": [
+            "value",
+            "selected"
+          ]
+        }
+      },
+      "accessibility": {
+        "required_attributes": [
+          "id",
+          "name",
+          "aria-label or label"
+        ],
+        "keyboard": {
+          "open": [
+            "Space",
+            "Enter",
+            "ArrowDown"
+          ],
+          "navigate": [
+            "ArrowUp",
+            "ArrowDown"
+          ],
+          "select": [
+            "Enter"
+          ]
+        }
+      }
+    },
+    "checkbox": {
+      "type": "form_element",
+      "html_element": "input[type=checkbox]",
+      "description": "Checkbox for binary or multiple selections",
+      "props": {
+        "checked": {
+          "type": "boolean",
+          "default": false
+        },
+        "disabled": {
+          "type": "boolean",
+          "default": false
+        },
+        "indeterminate": {
+          "type": "boolean",
+          "default": false,
+          "description": "Partially checked state"
+        }
+      },
+      "anatomy": {
+        "wrapper": {
+          "element": "div",
+          "role": "container"
+        },
+        "input": {
+          "element": "input",
+          "attributes": [
+            "type=\"checkbox\"",
+            "id",
+            "name",
+            "checked"
+          ]
+        },
+        "label": {
+          "element": "label",
+          "optional": false,
+          "attributes": [
+            "for"
+          ]
+        },
+        "checkmark": {
+          "element": "svg or span",
+          "role": "visual_indicator",
+          "optional": true
+        }
+      },
+      "states": {
+        "unchecked": {
+          "checked": false
+        },
+        "checked": {
+          "checked": true,
+          "typical_changes": [
+            "checkmark_visible",
+            "background_primary"
+          ]
+        },
+        "indeterminate": {
+          "typical_changes": [
+            "dash_icon",
+            "background_primary"
+          ]
+        },
+        "disabled": {
+          "cursor": "not-allowed",
+          "opacity": 0.6
+        }
+      },
+      "accessibility": {
+        "required_attributes": [
+          "id",
+          "aria-label or label",
+          "aria-checked"
+        ],
+        "keyboard": {
+          "toggle": [
+            "Space"
+          ],
+          "focusable": true
+        },
+        "wcag_requirements": {
+          "label_association": "explicit",
+          "touch_target_min": "44x44px"
+        }
+      }
+    },
+    "radio": {
+      "type": "form_element",
+      "html_element": "input[type=radio]",
+      "description": "Radio button for single selection from group",
+      "props": {
+        "checked": {
+          "type": "boolean",
+          "default": false
+        },
+        "disabled": {
+          "type": "boolean",
+          "default": false
+        },
+        "name": {
+          "type": "string",
+          "required": true,
+          "description": "Group name for related radios"
+        }
+      },
+      "anatomy": {
+        "group": {
+          "element": "div or fieldset",
+          "role": "group_container"
+        },
+        "group_label": {
+          "element": "legend or label",
+          "role": "group_label"
+        },
+        "radio_item": {
+          "element": "div",
+          "role": "radio_container",
+          "repeatable": true
+        },
+        "input": {
+          "element": "input",
+          "attributes": [
+            "type=\"radio\"",
+            "id",
+            "name",
+            "value"
+          ]
+        },
+        "label": {
+          "element": "label",
+          "attributes": [
+            "for"
+          ]
+        }
+      },
+      "accessibility": {
+        "required_attributes": [
+          "id",
+          "name",
+          "aria-label or label"
+        ],
+        "keyboard": {
+          "navigate": [
+            "ArrowUp",
+            "ArrowDown",
+            "ArrowLeft",
+            "ArrowRight"
+          ],
+          "select": [
+            "Space"
+          ],
+          "focusable": true
+        },
+        "wcag_requirements": {
+          "group_label": "required for multiple radios",
+          "touch_target_min": "44x44px"
+        }
+      }
+    },
+    "navigation": {
+      "type": "navigation_element",
+      "html_element": "nav",
+      "description": "Main site navigation component",
+      "props": {
+        "orientation": {
+          "type": "enum",
+          "values": [
+            "horizontal",
+            "vertical"
+          ],
+          "default": "horizontal"
+        },
+        "variant": {
+          "type": "enum",
+          "values": [
+            "primary",
+            "secondary",
+            "sidebar"
+          ],
+          "default": "primary"
+        },
+        "sticky": {
+          "type": "boolean",
+          "default": false,
+          "description": "Fixed position on scroll"
+        }
+      },
+      "anatomy": {
+        "nav": {
+          "element": "nav",
+          "attributes": [
+            "aria-label"
+          ]
+        },
+        "logo": {
+          "element": "a or div",
+          "role": "brand",
+          "optional": true
+        },
+        "nav_list": {
+          "element": "ul",
+          "role": "menu_list"
+        },
+        "nav_item": {
+          "element": "li",
+          "repeatable": true
+        },
+        "nav_link": {
+          "element": "a",
+          "attributes": [
+            "href",
+            "aria-current"
+          ]
+        },
+        "mobile_toggle": {
+          "element": "button",
+          "role": "menu_toggle",
+          "optional": true,
+          "attributes": [
+            "aria-label=\"Menu\"",
+            "aria-expanded"
+          ]
+        }
+      },
+      "states": {
+        "default": {
+          "mobile_menu": "hidden"
+        },
+        "mobile_open": {
+          "triggers": [
+            "mobile_toggle_click"
+          ],
+          "typical_changes": [
+            "menu_visible",
+            "overlay_visible"
+          ]
+        },
+        "link_active": {
+          "aria_current": "page",
+          "typical_changes": [
+            "background_highlight",
+            "border_indicator"
+          ]
+        }
+      },
+      "accessibility": {
+        "required_attributes": [
+          "aria-label on nav",
+          "aria-current on active link"
+        ],
+        "keyboard": {
+          "navigate": [
+            "Tab",
+            "Shift+Tab"
+          ],
+          "activate": [
+            "Enter"
+          ],
+          "focusable": true
+        },
+        "wcag_requirements": {
+          "skip_link": "provide skip to content",
+          "mobile_menu": "keyboard accessible"
+        }
+      }
+    },
+    "alert": {
+      "type": "feedback_element",
+      "html_element": "div",
+      "description": "Alert/notification component for user feedback",
+      "props": {
+        "variant": {
+          "type": "enum",
+          "values": [
+            "success",
+            "error",
+            "warning",
+            "info"
+          ],
+          "default": "info"
+        },
+        "dismissible": {
+          "type": "boolean",
+          "default": false
+        },
+        "icon": {
+          "type": "boolean",
+          "default": true,
+          "description": "Show variant icon"
+        }
+      },
+      "anatomy": {
+        "root": {
+          "element": "div",
+          "attributes": [
+            "role=\"alert\"",
+            "aria-live=\"polite\""
+          ]
+        },
+        "icon": {
+          "element": "svg",
+          "role": "status_icon",
+          "optional": true
+        },
+        "content": {
+          "element": "div",
+          "role": "message"
+        },
+        "title": {
+          "element": "strong or h4",
+          "role": "title",
+          "optional": true
+        },
+        "description": {
+          "element": "p",
+          "role": "description"
+        },
+        "close_button": {
+          "element": "button",
+          "role": "dismiss",
+          "optional": true,
+          "attributes": [
+            "aria-label=\"Close\""
+          ]
+        }
+      },
+      "states": {
+        "visible": {
+          "typical_changes": [
+            "fade_in",
+            "slide_down"
+          ]
+        },
+        "dismissing": {
+          "triggers": [
+            "close_button_click"
+          ],
+          "typical_changes": [
+            "fade_out",
+            "slide_up"
+          ]
+        }
+      },
+      "accessibility": {
+        "required_attributes": [
+          "role=\"alert\"",
+          "aria-live=\"polite\""
+        ],
+        "keyboard": {
+          "dismiss": [
+            "Escape"
+          ],
+          "focusable": true
+        },
+        "wcag_requirements": {
+          "color_not_only": "use icon + text, not color alone",
+          "dismiss_accessible": "keyboard accessible close"
+        }
+      }
+    },
+    "table": {
+      "type": "data_display_element",
+      "html_element": "table",
+      "description": "Tabular data display component for structured information",
+      "props": {
+        "variant": {
+          "type": "enum",
+          "values": [
+            "default",
+            "striped",
+            "bordered",
+            "hoverable"
+          ],
+          "default": "default",
+          "description": "Visual style variant"
+        },
+        "size": {
+          "type": "enum",
+          "values": [
+            "sm",
+            "md",
+            "lg"
+          ],
+          "default": "md",
+          "description": "Cell padding size"
+        },
+        "responsive": {
+          "type": "boolean",
+          "default": true,
+          "description": "Enable horizontal scroll on mobile"
+        },
+        "sortable": {
+          "type": "boolean",
+          "default": false,
+          "description": "Enable column sorting"
+        },
+        "selectable": {
+          "type": "boolean",
+          "default": false,
+          "description": "Enable row selection with checkboxes"
+        }
+      },
+      "anatomy": {
+        "container": {
+          "element": "div",
+          "role": "table_wrapper",
+          "description": "Wrapper for responsive scrolling"
+        },
+        "table": {
+          "element": "table",
+          "role": "data_table",
+          "attributes": [
+            "role=\"table\""
+          ]
+        },
+        "thead": {
+          "element": "thead",
+          "role": "table_header",
+          "optional": false
+        },
+        "thead_row": {
+          "element": "tr",
+          "role": "header_row"
+        },
+        "th": {
+          "element": "th",
+          "role": "column_header",
+          "repeatable": true,
+          "attributes": [
+            "scope=\"col\""
+          ]
+        },
+        "sort_button": {
+          "element": "button",
+          "role": "sort_trigger",
+          "optional": true,
+          "attributes": [
+            "aria-label",
+            "aria-sort"
+          ]
+        },
+        "tbody": {
+          "element": "tbody",
+          "role": "table_body"
+        },
+        "tbody_row": {
+          "element": "tr",
+          "role": "data_row",
+          "repeatable": true
+        },
+        "td": {
+          "element": "td",
+          "role": "data_cell",
+          "repeatable": true
+        },
+        "tfoot": {
+          "element": "tfoot",
+          "role": "table_footer",
+          "optional": true
+        }
+      },
+      "states": {
+        "default": {
+          "border": "1px solid neutral",
+          "background": "white"
+        },
+        "row_hover": {
+          "triggers": [
+            "mouseenter on tr"
+          ],
+          "typical_changes": [
+            "background_light_gray"
+          ],
+          "condition": "only if variant=hoverable"
+        },
+        "row_selected": {
+          "typical_changes": [
+            "background_primary_light",
+            "checkbox_checked"
+          ],
+          "condition": "only if selectable=true"
+        },
+        "column_sorted": {
+          "typical_changes": [
+            "header_background_highlight",
+            "sort_icon_visible"
+          ],
+          "aria_sort": "ascending or descending"
+        }
+      },
+      "accessibility": {
+        "required_attributes": [
+          "role=\"table\" on table",
+          "scope=\"col\" on th",
+          "scope=\"row\" on first td (if applicable)"
+        ],
+        "keyboard": {
+          "navigate": [
+            "Tab"
+          ],
+          "sort": [
+            "Enter",
+            "Space"
+          ],
+          "select": [
+            "Space"
+          ],
+          "focusable": true
+        },
+        "wcag_requirements": {
+          "header_cells": "use <th> with scope attribute",
+          "data_cells": "use <td>",
+          "caption": "provide <caption> or aria-label",
+          "sort_indication": "use aria-sort attribute",
+          "responsive": "ensure horizontal scroll is keyboard accessible"
+        }
+      },
+      "best_practices": {
+        "performance": [
+          "Use pagination for >50 rows",
+          "Virtualize for >1000 rows",
+          "Lazy load data when possible"
+        ],
+        "design": [
+          "Left-align text columns",
+          "Right-align number columns",
+          "Use monospace fonts for numbers",
+          "Provide column width constraints"
+        ],
+        "mobile": [
+          "Enable horizontal scroll",
+          "Consider card layout for narrow screens",
+          "Make headers sticky on scroll"
+        ]
+      }
+    },
+    "tabs": {
+      "type": "navigation_element",
+      "html_element": "div",
+      "description": "Tabbed interface for switching between content sections",
+      "props": {
+        "variant": {
+          "type": "enum",
+          "values": [
+            "default",
+            "pills",
+            "underline"
+          ],
+          "default": "default",
+          "description": "Visual style variant"
+        },
+        "orientation": {
+          "type": "enum",
+          "values": [
+            "horizontal",
+            "vertical"
+          ],
+          "default": "horizontal"
+        },
+        "defaultActiveTab": {
+          "type": "string or number",
+          "default": "0",
+          "description": "Initially active tab"
+        },
+        "fullWidth": {
+          "type": "boolean",
+          "default": false,
+          "description": "Distribute tabs evenly across width"
+        }
+      },
+      "anatomy": {
+        "container": {
+          "element": "div",
+          "role": "tabs_container"
+        },
+        "tab_list": {
+          "element": "div",
+          "role": "tablist",
+          "attributes": [
+            "role=\"tablist\"",
+            "aria-label"
+          ]
+        },
+        "tab": {
+          "element": "button",
+          "role": "tab",
+          "repeatable": true,
+          "attributes": [
+            "role=\"tab\"",
+            "aria-selected",
+            "aria-controls",
+            "id",
+            "tabindex"
+          ]
+        },
+        "tab_panel": {
+          "element": "div",
+          "role": "tabpanel",
+          "repeatable": true,
+          "attributes": [
+            "role=\"tabpanel\"",
+            "aria-labelledby",
+            "id",
+            "tabindex=\"0\""
+          ]
+        }
+      },
+      "states": {
+        "tab_inactive": {
+          "aria_selected": "false",
+          "tabindex": "-1",
+          "typical_changes": [
+            "opacity_reduced",
+            "border_hidden"
+          ]
+        },
+        "tab_active": {
+          "aria_selected": "true",
+          "tabindex": "0",
+          "typical_changes": [
+            "border_visible",
+            "background_highlight"
+          ]
+        },
+        "tab_hover": {
+          "triggers": [
+            "mouseenter"
+          ],
+          "typical_changes": [
+            "background_light"
+          ]
+        },
+        "tab_focus": {
+          "triggers": [
+            "focus"
+          ],
+          "typical_changes": [
+            "outline_visible"
+          ]
+        },
+        "panel_hidden": {
+          "display": "none",
+          "hidden": true
+        },
+        "panel_visible": {
+          "display": "block",
+          "hidden": false
+        }
+      },
+      "accessibility": {
+        "required_attributes": [
+          "role=\"tablist\" on tab list",
+          "role=\"tab\" on each tab button",
+          "role=\"tabpanel\" on each panel",
+          "aria-selected on tabs",
+          "aria-controls linking tab to panel",
+          "aria-labelledby linking panel to tab",
+          "id on all tabs and panels"
+        ],
+        "keyboard": {
+          "navigate_tabs": [
+            "ArrowLeft",
+            "ArrowRight",
+            "ArrowUp",
+            "ArrowDown"
+          ],
+          "activate_tab": [
+            "Enter",
+            "Space"
+          ],
+          "first_tab": [
+            "Home"
+          ],
+          "last_tab": [
+            "End"
+          ],
+          "focusable": true
+        },
+        "focus_management": {
+          "tab_activation": "focus moves to newly activated tab",
+          "panel_focus": "panel should be focusable (tabindex=0)",
+          "initial_focus": "first tab or defaultActiveTab"
+        },
+        "wcag_requirements": {
+          "keyboard_navigation": "full arrow key support",
+          "focus_indicator": "visible on tabs",
+          "panel_labeling": "each panel labeled by its tab",
+          "roving_tabindex": "only active tab is tab-stoppable"
+        }
+      },
+      "best_practices": {
+        "design": [
+          "Keep tab labels short (1-2 words)",
+          "Use icons with text for clarity",
+          "Limit to 5-7 tabs (use dropdown for more)",
+          "Indicate active tab clearly"
+        ],
+        "implementation": [
+          "Preserve tab state in URL hash",
+          "Lazy load tab content when activated",
+          "Support swipe gestures on mobile",
+          "Animate panel transitions smoothly"
+        ],
+        "mobile": [
+          "Use horizontal scroll for many tabs",
+          "Consider accordion layout for mobile",
+          "Make tabs touch-friendly (44px+ height)"
+        ]
+      }
+    },
+    "tooltip": {
+      "type": "overlay_element",
+      "html_element": "div",
+      "description": "Tooltip for additional information on hover/focus",
+      "props": {
+        "position": {
+          "type": "enum",
+          "values": [
+            "top",
+            "bottom",
+            "left",
+            "right"
+          ],
+          "default": "top"
+        },
+        "trigger": {
+          "type": "enum",
+          "values": [
+            "hover",
+            "click",
+            "focus"
+          ],
+          "default": "hover"
+        },
+        "delay": {
+          "type": "number",
+          "default": 200,
+          "description": "Delay in ms before showing"
+        }
+      },
+      "anatomy": {
+        "trigger": {
+          "element": "button or span",
+          "role": "trigger_element",
+          "attributes": [
+            "aria-describedby"
+          ]
+        },
+        "tooltip": {
+          "element": "div",
+          "role": "tooltip",
+          "attributes": [
+            "role=\"tooltip\"",
+            "id"
+          ]
+        },
+        "arrow": {
+          "element": "div",
+          "role": "arrow",
+          "optional": true
+        }
+      },
+      "states": {
+        "hidden": {
+          "display": "none",
+          "opacity": 0
+        },
+        "visible": {
+          "triggers": [
+            "hover",
+            "focus"
+          ],
+          "typical_changes": [
+            "fade_in",
+            "translate_in"
+          ]
+        }
+      },
+      "accessibility": {
+        "required_attributes": [
+          "role=\"tooltip\"",
+          "aria-describedby"
+        ],
+        "keyboard": {
+          "show": [
+            "Focus"
+          ],
+          "hide": [
+            "Blur",
+            "Escape"
+          ]
+        }
+      }
+    },
+    "breadcrumb": {
+      "type": "navigation_element",
+      "html_element": "nav",
+      "description": "Breadcrumb navigation showing current page location",
+      "props": {
+        "separator": {
+          "type": "string",
+          "default": "/",
+          "description": "Visual separator between items"
+        },
+        "maxItems": {
+          "type": "number",
+          "default": null,
+          "description": "Max items to show (collapse middle)"
+        }
+      },
+      "anatomy": {
+        "nav": {
+          "element": "nav",
+          "attributes": [
+            "aria-label=\"Breadcrumb\""
+          ]
+        },
+        "list": {
+          "element": "ol",
+          "role": "breadcrumb_list"
+        },
+        "item": {
+          "element": "li",
+          "repeatable": true
+        },
+        "link": {
+          "element": "a",
+          "attributes": [
+            "href"
+          ]
+        },
+        "current": {
+          "element": "span or a",
+          "attributes": [
+            "aria-current=\"page\""
+          ]
+        },
+        "separator": {
+          "element": "span",
+          "role": "separator",
+          "attributes": [
+            "aria-hidden=\"true\""
+          ]
+        }
+      },
+      "accessibility": {
+        "required_attributes": [
+          "aria-label=\"Breadcrumb\" on nav",
+          "aria-current=\"page\" on last item"
+        ],
+        "wcag_requirements": {
+          "semantic_list": "use <ol> for breadcrumbs",
+          "current_indicator": "mark current page"
+        }
+      }
+    },
+    "accordion": {
+      "type": "disclosure_element",
+      "html_element": "div",
+      "description": "Vertically stacked collapsible sections for content organization",
+      "props": {
+        "variant": {
+          "type": "enum",
+          "values": [
+            "default",
+            "separated",
+            "contained"
+          ],
+          "default": "default"
+        },
+        "allowMultiple": {
+          "type": "boolean",
+          "default": false,
+          "description": "Allow multiple sections to be expanded simultaneously"
+        },
+        "defaultIndex": {
+          "type": "array<number> or number",
+          "default": null,
+          "description": "Initially expanded section(s)"
+        }
+      },
+      "anatomy": {
+        "container": {
+          "element": "div",
+          "role": "container"
+        },
+        "item": {
+          "element": "div",
+          "role": "accordion_item",
+          "repeatable": true
+        },
+        "trigger": {
+          "element": "button",
+          "role": "accordion_trigger",
+          "attributes": [
+            "aria-expanded",
+            "aria-controls"
+          ]
+        },
+        "content": {
+          "element": "div",
+          "role": "accordion_content",
+          "attributes": [
+            "role=\"region\"",
+            "aria-labelledby"
+          ]
+        },
+        "icon": {
+          "element": "svg",
+          "role": "expand_indicator",
+          "optional": true
+        }
+      },
+      "states": {
+        "collapsed": {
+          "aria_expanded": "false",
+          "typical_changes": [
+            "content_hidden",
+            "icon_rotate_0"
+          ]
+        },
+        "expanded": {
+          "aria_expanded": "true",
+          "typical_changes": [
+            "content_visible",
+            "icon_rotate_180"
+          ]
+        }
+      },
+      "accessibility": {
+        "required_attributes": [
+          "aria-expanded on trigger",
+          "aria-controls linking trigger to content",
+          "role=\"region\" on content",
+          "aria-labelledby on content"
+        ],
+        "keyboard": {
+          "toggle": [
+            "Enter",
+            "Space"
+          ],
+          "navigate": [
+            "Tab"
+          ]
+        }
+      }
+    },
+    "avatar": {
+      "type": "display_element",
+      "html_element": "div",
+      "description": "User profile image with fallback initials or icon",
+      "props": {
+        "size": {
+          "type": "enum",
+          "values": [
+            "xs",
+            "sm",
+            "md",
+            "lg",
+            "xl"
+          ],
+          "default": "md"
+        },
+        "shape": {
+          "type": "enum",
+          "values": [
+            "circle",
+            "square"
+          ],
+          "default": "circle"
+        },
+        "src": {
+          "type": "string",
+          "description": "Image URL"
+        },
+        "name": {
+          "type": "string",
+          "description": "User name for generating initials"
+        }
+      },
+      "anatomy": {
+        "container": {
+          "element": "div",
+          "role": "avatar_container"
+        },
+        "image": {
+          "element": "img",
+          "role": "avatar_image",
+          "optional": true,
+          "attributes": [
+            "alt"
+          ]
+        },
+        "fallback": {
+          "element": "div",
+          "role": "fallback",
+          "description": "Initials or icon when image fails"
+        },
+        "badge": {
+          "element": "div",
+          "role": "status_badge",
+          "optional": true
+        }
+      },
+      "accessibility": {
+        "required_attributes": [
+          "alt on img (user's name)"
+        ]
+      }
+    },
+    "badge": {
+      "type": "display_element",
+      "html_element": "span",
+      "description": "Small label for status or count display",
+      "props": {
+        "variant": {
+          "type": "enum",
+          "values": [
+            "solid",
+            "subtle",
+            "outline"
+          ],
+          "default": "solid"
+        },
+        "colorScheme": {
+          "type": "enum",
+          "values": [
+            "gray",
+            "red",
+            "yellow",
+            "green",
+            "blue",
+            "purple"
+          ],
+          "default": "gray"
+        },
+        "size": {
+          "type": "enum",
+          "values": [
+            "sm",
+            "md",
+            "lg"
+          ],
+          "default": "md"
+        }
+      },
+      "anatomy": {
+        "root": {
+          "element": "span",
+          "role": "badge"
+        },
+        "content": {
+          "element": "text",
+          "role": "label"
+        },
+        "icon": {
+          "element": "svg",
+          "role": "icon",
+          "optional": true
+        }
+      },
+      "use_cases": [
+        "Status indicators (online, offline, pending)",
+        "Notification counts",
+        "Tags and labels",
+        "Version numbers"
+      ]
+    },
+    "drawer": {
+      "type": "overlay_element",
+      "html_element": "div",
+      "description": "Slide-out panel from screen edge",
+      "props": {
+        "side": {
+          "type": "enum",
+          "values": [
+            "left",
+            "right",
+            "top",
+            "bottom"
+          ],
+          "default": "right"
+        },
+        "size": {
+          "type": "enum",
+          "values": [
+            "sm",
+            "md",
+            "lg",
+            "full"
+          ],
+          "default": "md"
+        }
+      },
+      "anatomy": {
+        "overlay": {
+          "element": "div",
+          "role": "backdrop"
+        },
+        "content": {
+          "element": "div",
+          "role": "dialog",
+          "attributes": [
+            "role=\"dialog\"",
+            "aria-modal=\"true\""
+          ]
+        },
+        "header": {
+          "element": "div",
+          "optional": true
+        },
+        "body": {
+          "element": "div"
+        },
+        "footer": {
+          "element": "div",
+          "optional": true
+        },
+        "close_button": {
+          "element": "button",
+          "attributes": [
+            "aria-label=\"Close\""
+          ]
+        }
+      },
+      "accessibility": {
+        "required_attributes": [
+          "role=\"dialog\"",
+          "aria-modal=\"true\""
+        ],
+        "keyboard": {
+          "close": [
+            "Escape"
+          ],
+          "focus_trap": true
+        }
+      }
+    },
+    "popover": {
+      "type": "overlay_element",
+      "html_element": "div",
+      "description": "Floating content panel anchored to trigger",
+      "props": {
+        "side": {
+          "type": "enum",
+          "values": [
+            "top",
+            "right",
+            "bottom",
+            "left"
+          ],
+          "default": "bottom"
+        },
+        "align": {
+          "type": "enum",
+          "values": [
+            "start",
+            "center",
+            "end"
+          ],
+          "default": "center"
+        }
+      },
+      "anatomy": {
+        "trigger": {
+          "element": "button",
+          "attributes": [
+            "aria-haspopup=\"dialog\"",
+            "aria-expanded"
+          ]
+        },
+        "content": {
+          "element": "div",
+          "role": "dialog",
+          "attributes": [
+            "role=\"dialog\""
+          ]
+        },
+        "arrow": {
+          "element": "div",
+          "optional": true
+        }
+      },
+      "accessibility": {
+        "required_attributes": [
+          "aria-haspopup",
+          "aria-expanded"
+        ],
+        "keyboard": {
+          "open": [
+            "Enter",
+            "Space"
+          ],
+          "close": [
+            "Escape"
+          ]
+        }
+      }
+    },
+    "progress": {
+      "type": "feedback_element",
+      "html_element": "div",
+      "description": "Linear progress indicator for task completion",
+      "props": {
+        "value": {
+          "type": "number",
+          "description": "Current value (0-100)"
+        },
+        "max": {
+          "type": "number",
+          "default": 100
+        },
+        "variant": {
+          "type": "enum",
+          "values": [
+            "linear",
+            "circular"
+          ],
+          "default": "linear"
+        },
+        "size": {
+          "type": "enum",
+          "values": [
+            "sm",
+            "md",
+            "lg"
+          ],
+          "default": "md"
+        },
+        "indeterminate": {
+          "type": "boolean",
+          "default": false,
+          "description": "Show loading animation without specific progress"
+        }
+      },
+      "anatomy": {
+        "root": {
+          "element": "div",
+          "role": "progressbar",
+          "attributes": [
+            "role=\"progressbar\"",
+            "aria-valuenow",
+            "aria-valuemin",
+            "aria-valuemax"
+          ]
+        },
+        "track": {
+          "element": "div",
+          "role": "track"
+        },
+        "indicator": {
+          "element": "div",
+          "role": "indicator"
+        },
+        "label": {
+          "element": "span",
+          "role": "label",
+          "optional": true
+        }
+      },
+      "accessibility": {
+        "required_attributes": [
+          "role=\"progressbar\"",
+          "aria-valuenow",
+          "aria-valuemin=\"0\"",
+          "aria-valuemax=\"100\""
+        ]
+      }
+    },
+    "slider": {
+      "type": "form_element",
+      "html_element": "div",
+      "description": "Input for selecting a value from a range",
+      "props": {
+        "min": {
+          "type": "number",
+          "default": 0
+        },
+        "max": {
+          "type": "number",
+          "default": 100
+        },
+        "step": {
+          "type": "number",
+          "default": 1
+        },
+        "value": {
+          "type": "number or array<number>",
+          "description": "Current value(s)"
+        },
+        "orientation": {
+          "type": "enum",
+          "values": [
+            "horizontal",
+            "vertical"
+          ],
+          "default": "horizontal"
+        }
+      },
+      "anatomy": {
+        "root": {
+          "element": "div",
+          "role": "slider_container"
+        },
+        "track": {
+          "element": "div",
+          "role": "track"
+        },
+        "filled_track": {
+          "element": "div",
+          "role": "filled_portion"
+        },
+        "thumb": {
+          "element": "div",
+          "role": "slider",
+          "attributes": [
+            "role=\"slider\"",
+            "aria-valuenow",
+            "aria-valuemin",
+            "aria-valuemax",
+            "tabindex=\"0\""
+          ]
+        },
+        "mark": {
+          "element": "div",
+          "role": "mark",
+          "repeatable": true,
+          "optional": true
+        }
+      },
+      "accessibility": {
+        "required_attributes": [
+          "role=\"slider\" on thumb",
+          "aria-valuenow",
+          "aria-valuemin",
+          "aria-valuemax",
+          "aria-label or aria-labelledby"
+        ],
+        "keyboard": {
+          "increment": [
+            "ArrowRight",
+            "ArrowUp"
+          ],
+          "decrement": [
+            "ArrowLeft",
+            "ArrowDown"
+          ],
+          "page_increment": [
+            "PageUp"
+          ],
+          "page_decrement": [
+            "PageDown"
+          ],
+          "min": [
+            "Home"
+          ],
+          "max": [
+            "End"
+          ]
+        }
+      }
+    },
+    "switch": {
+      "type": "form_element",
+      "html_element": "button",
+      "description": "Toggle control for binary on/off states",
+      "props": {
+        "checked": {
+          "type": "boolean",
+          "default": false
+        },
+        "disabled": {
+          "type": "boolean",
+          "default": false
+        },
+        "size": {
+          "type": "enum",
+          "values": [
+            "sm",
+            "md",
+            "lg"
+          ],
+          "default": "md"
+        }
+      },
+      "anatomy": {
+        "root": {
+          "element": "button",
+          "role": "switch",
+          "attributes": [
+            "role=\"switch\"",
+            "aria-checked"
+          ]
+        },
+        "track": {
+          "element": "span",
+          "role": "track"
+        },
+        "thumb": {
+          "element": "span",
+          "role": "thumb"
+        },
+        "label": {
+          "element": "label",
+          "role": "label",
+          "optional": false
+        }
+      },
+      "states": {
+        "off": {
+          "aria_checked": "false",
+          "typical_changes": [
+            "track_gray",
+            "thumb_left"
+          ]
+        },
+        "on": {
+          "aria_checked": "true",
+          "typical_changes": [
+            "track_primary",
+            "thumb_right"
+          ]
+        }
+      },
+      "accessibility": {
+        "required_attributes": [
+          "role=\"switch\"",
+          "aria-checked",
+          "aria-label or label element"
+        ],
+        "keyboard": {
+          "toggle": [
+            "Space",
+            "Enter"
+          ]
+        },
+        "wcag_requirements": {
+          "label_association": "explicit",
+          "focus_indicator": "visible"
+        }
+      }
+    },
+    "skeleton": {
+      "type": "display_element",
+      "html_element": "div",
+      "description": "Loading placeholder that mimics content shape",
+      "props": {
+        "animation": {
+          "type": "enum",
+          "values": [
+            "pulse",
+            "wave",
+            "none"
+          ],
+          "default": "pulse"
+        }
+      },
+      "anatomy": {
+        "root": {
+          "element": "div",
+          "attributes": [
+            "aria-busy=\"true\"",
+            "aria-live=\"polite\""
+          ]
+        }
+      },
+      "accessibility": {
+        "required_attributes": [
+          "aria-busy=\"true\"",
+          "role=\"status\""
+        ],
+        "notes": "Should be replaced with actual content once loaded"
+      }
+    },
+    "toast": {
+      "type": "feedback_element",
+      "html_element": "div",
+      "description": "Temporary notification message",
+      "props": {
+        "variant": {
+          "type": "enum",
+          "values": [
+            "success",
+            "error",
+            "warning",
+            "info"
+          ],
+          "default": "info"
+        },
+        "position": {
+          "type": "enum",
+          "values": [
+            "top",
+            "top-right",
+            "top-left",
+            "bottom",
+            "bottom-right",
+            "bottom-left"
+          ],
+          "default": "bottom"
+        },
+        "duration": {
+          "type": "number",
+          "default": 5000,
+          "description": "Auto-dismiss time in ms"
+        },
+        "isClosable": {
+          "type": "boolean",
+          "default": true
+        }
+      },
+      "anatomy": {
+        "container": {
+          "element": "div",
+          "role": "toast_container",
+          "attributes": [
+            "aria-live=\"polite\"",
+            "role=\"status\""
+          ]
+        },
+        "toast": {
+          "element": "div",
+          "role": "toast_item"
+        },
+        "icon": {
+          "element": "svg",
+          "role": "status_icon",
+          "optional": true
+        },
+        "title": {
+          "element": "div",
+          "role": "title",
+          "optional": true
+        },
+        "description": {
+          "element": "div",
+          "role": "description"
+        },
+        "close_button": {
+          "element": "button",
+          "role": "close",
+          "optional": true
+        }
+      },
+      "states": {
+        "entering": {
+          "typical_changes": [
+            "slide_in",
+            "fade_in"
+          ]
+        },
+        "exiting": {
+          "typical_changes": [
+            "slide_out",
+            "fade_out"
+          ]
+        }
+      },
+      "accessibility": {
+        "required_attributes": [
+          "role=\"status\" or role=\"alert\"",
+          "aria-live=\"polite\" or \"assertive\""
+        ]
+      },
+      "best_practices": [
+        "Use for temporary feedback (success, error messages)",
+        "Auto-dismiss after 3-7 seconds",
+        "Allow manual dismissal",
+        "Limit to 1-3 toasts simultaneously",
+        "Position consistently (usually bottom or top-right)"
+      ]
+    },
+    "textarea": {
+      "type": "form_element",
+      "html_element": "textarea",
+      "description": "Multi-line text input field",
+      "props": {
+        "rows": {
+          "type": "number",
+          "default": 4,
+          "description": "Visible lines"
+        },
+        "resize": {
+          "type": "enum",
+          "values": [
+            "none",
+            "both",
+            "horizontal",
+            "vertical"
+          ],
+          "default": "vertical"
+        },
+        "placeholder": {
+          "type": "string",
+          "default": ""
+        },
+        "disabled": {
+          "type": "boolean",
+          "default": false
+        },
+        "required": {
+          "type": "boolean",
+          "default": false
+        },
+        "maxLength": {
+          "type": "number",
+          "optional": true
+        }
+      },
+      "anatomy": {
+        "root": {
+          "element": "div",
+          "role": "container"
+        },
+        "label": {
+          "element": "label",
+          "role": "label",
+          "optional": false
+        },
+        "textarea": {
+          "element": "textarea",
+          "role": "textarea",
+          "attributes": [
+            "id",
+            "name",
+            "rows",
+            "placeholder",
+            "required",
+            "disabled",
+            "maxlength"
+          ]
+        },
+        "character_count": {
+          "element": "span",
+          "role": "counter",
+          "optional": true
+        }
+      },
+      "states": {
+        "default": {
+          "border_color": "neutral"
+        },
+        "focus": {
+          "triggers": [
+            "focus"
+          ],
+          "typical_changes": [
+            "border_color_primary",
+            "ring_visible"
+          ]
+        },
+        "error": {
+          "typical_changes": [
+            "border_color_danger"
+          ]
+        },
+        "disabled": {
+          "cursor": "not-allowed",
+          "opacity": 0.6
+        }
+      },
+      "accessibility": {
+        "required_attributes": [
+          "id",
+          "name",
+          "aria-label or label element",
+          "aria-invalid (if error)"
+        ],
+        "wcag_requirements": {
+          "label_association": "explicit",
+          "resize_accessible": "ensure resize handle is accessible"
+        }
+      }
+    },
+    "calendar": {
+      "type": "form_element",
+      "html_element": "div",
+      "description": "Date picker calendar for selecting dates",
+      "props": {
+        "mode": {
+          "type": "enum",
+          "values": [
+            "single",
+            "range",
+            "multiple"
+          ],
+          "default": "single",
+          "description": "Selection mode"
+        },
+        "disabled": {
+          "type": "boolean",
+          "default": false
+        },
+        "minDate": {
+          "type": "date",
+          "description": "Minimum selectable date"
+        },
+        "maxDate": {
+          "type": "date",
+          "description": "Maximum selectable date"
+        }
+      },
+      "anatomy": {
+        "root": {
+          "element": "div",
+          "role": "container"
+        },
+        "header": {
+          "element": "div",
+          "role": "month_navigation",
+          "children": [
+            "prev_button",
+            "month_year_display",
+            "next_button"
+          ]
+        },
+        "weekday_header": {
+          "element": "div",
+          "role": "weekday_labels"
+        },
+        "grid": {
+          "element": "div",
+          "role": "grid",
+          "attributes": [
+            "role=\"grid\""
+          ]
+        },
+        "day_cell": {
+          "element": "button",
+          "role": "gridcell",
+          "repeatable": true
+        }
+      },
+      "states": {
+        "default": {},
+        "selected": {
+          "typical_changes": [
+            "background_primary",
+            "text_white"
+          ]
+        },
+        "today": {
+          "typical_changes": [
+            "border_primary"
+          ]
+        },
+        "disabled": {
+          "opacity": 0.5,
+          "cursor": "not-allowed"
+        },
+        "range_start": {
+          "typical_changes": [
+            "rounded_left",
+            "background_primary"
+          ]
+        },
+        "range_end": {
+          "typical_changes": [
+            "rounded_right",
+            "background_primary"
+          ]
+        },
+        "in_range": {
+          "typical_changes": [
+            "background_primary_light"
+          ]
+        }
+      },
+      "accessibility": {
+        "required_attributes": [
+          "role=\"grid\"",
+          "aria-label"
+        ],
+        "keyboard": {
+          "navigate": [
+            "ArrowUp",
+            "ArrowDown",
+            "ArrowLeft",
+            "ArrowRight"
+          ],
+          "select": [
+            "Enter",
+            "Space"
+          ],
+          "page": [
+            "PageUp",
+            "PageDown"
+          ]
+        },
+        "wcag_requirements": {
+          "focus_indicator": "visible on day cells",
+          "screen_reader": "announce date, month, year"
+        }
+      }
+    },
+    "carousel": {
+      "type": "layout_element",
+      "html_element": "div",
+      "description": "Slideshow component for cycling through content",
+      "props": {
+        "autoplay": {
+          "type": "boolean",
+          "default": false
+        },
+        "interval": {
+          "type": "number",
+          "default": 5000,
+          "description": "Autoplay interval in ms"
+        },
+        "loop": {
+          "type": "boolean",
+          "default": true
+        },
+        "orientation": {
+          "type": "enum",
+          "values": [
+            "horizontal",
+            "vertical"
+          ],
+          "default": "horizontal"
+        }
+      },
+      "anatomy": {
+        "root": {
+          "element": "div",
+          "role": "region",
+          "attributes": [
+            "aria-roledescription=\"carousel\""
+          ]
+        },
+        "viewport": {
+          "element": "div",
+          "role": "viewport"
+        },
+        "container": {
+          "element": "div",
+          "role": "slide_container",
+          "attributes": [
+            "aria-live=\"polite\""
+          ]
+        },
+        "slide": {
+          "element": "div",
+          "role": "slide",
+          "repeatable": true,
+          "attributes": [
+            "role=\"group\"",
+            "aria-roledescription=\"slide\""
+          ]
+        },
+        "prev_button": {
+          "element": "button",
+          "attributes": [
+            "aria-label=\"Previous slide\""
+          ]
+        },
+        "next_button": {
+          "element": "button",
+          "attributes": [
+            "aria-label=\"Next slide\""
+          ]
+        },
+        "indicators": {
+          "element": "div",
+          "role": "indicators",
+          "optional": true
+        }
+      },
+      "accessibility": {
+        "required_attributes": [
+          "aria-roledescription=\"carousel\"",
+          "aria-label"
+        ],
+        "keyboard": {
+          "navigate": [
+            "ArrowLeft",
+            "ArrowRight"
+          ],
+          "pause": [
+            "Space"
+          ]
+        },
+        "wcag_requirements": {
+          "autoplay_control": "must have pause button if autoplay",
+          "focus_management": "focus should follow visible slide"
+        }
+      }
+    },
+    "combobox": {
+      "type": "form_element",
+      "html_element": "div",
+      "description": "Searchable dropdown with autocomplete",
+      "props": {
+        "multiple": {
+          "type": "boolean",
+          "default": false
+        },
+        "searchable": {
+          "type": "boolean",
+          "default": true
+        },
+        "creatable": {
+          "type": "boolean",
+          "default": false,
+          "description": "Allow creating new options"
+        },
+        "placeholder": {
+          "type": "string",
+          "default": "Select..."
+        }
+      },
+      "anatomy": {
+        "root": {
+          "element": "div",
+          "role": "combobox",
+          "attributes": [
+            "role=\"combobox\"",
+            "aria-expanded",
+            "aria-haspopup=\"listbox\""
+          ]
+        },
+        "input": {
+          "element": "input",
+          "role": "searchbox",
+          "attributes": [
+            "type=\"text\"",
+            "aria-autocomplete=\"list\""
+          ]
+        },
+        "trigger": {
+          "element": "button",
+          "role": "trigger",
+          "attributes": [
+            "aria-label=\"Toggle options\""
+          ]
+        },
+        "listbox": {
+          "element": "ul",
+          "role": "listbox",
+          "attributes": [
+            "role=\"listbox\""
+          ]
+        },
+        "option": {
+          "element": "li",
+          "role": "option",
+          "repeatable": true,
+          "attributes": [
+            "role=\"option\"",
+            "aria-selected"
+          ]
+        }
+      },
+      "states": {
+        "default": {},
+        "open": {
+          "aria-expanded": "true"
+        },
+        "closed": {
+          "aria-expanded": "false"
+        },
+        "loading": {
+          "typical_changes": [
+            "spinner_visible"
+          ]
+        }
+      },
+      "accessibility": {
+        "required_attributes": [
+          "role=\"combobox\"",
+          "aria-expanded",
+          "aria-haspopup"
+        ],
+        "keyboard": {
+          "open": [
+            "ArrowDown",
+            "Enter"
+          ],
+          "close": [
+            "Escape"
+          ],
+          "navigate": [
+            "ArrowUp",
+            "ArrowDown"
+          ],
+          "select": [
+            "Enter"
+          ]
+        }
+      }
+    },
+    "command": {
+      "type": "overlay_element",
+      "html_element": "div",
+      "description": "Command palette for quick actions (Cmd+K style)",
+      "props": {
+        "placeholder": {
+          "type": "string",
+          "default": "Type a command or search..."
+        },
+        "shortcut": {
+          "type": "string",
+          "default": "Cmd+K"
+        }
+      },
+      "anatomy": {
+        "root": {
+          "element": "div",
+          "role": "dialog",
+          "attributes": [
+            "role=\"dialog\"",
+            "aria-modal=\"true\""
+          ]
+        },
+        "input": {
+          "element": "input",
+          "role": "searchbox",
+          "attributes": [
+            "type=\"text\"",
+            "aria-autocomplete=\"list\""
+          ]
+        },
+        "list": {
+          "element": "div",
+          "role": "listbox"
+        },
+        "group": {
+          "element": "div",
+          "role": "group",
+          "repeatable": true
+        },
+        "item": {
+          "element": "div",
+          "role": "option",
+          "repeatable": true
+        },
+        "empty": {
+          "element": "div",
+          "role": "empty_state"
+        }
+      },
+      "accessibility": {
+        "required_attributes": [
+          "role=\"dialog\"",
+          "aria-modal=\"true\"",
+          "aria-label"
+        ],
+        "keyboard": {
+          "open": [
+            "Cmd+K",
+            "Ctrl+K"
+          ],
+          "close": [
+            "Escape"
+          ],
+          "navigate": [
+            "ArrowUp",
+            "ArrowDown"
+          ],
+          "select": [
+            "Enter"
+          ]
+        }
+      }
+    },
+    "context_menu": {
+      "type": "overlay_element",
+      "html_element": "div",
+      "description": "Right-click context menu",
+      "props": {
+        "trigger": {
+          "type": "enum",
+          "values": [
+            "right-click",
+            "long-press"
+          ],
+          "default": "right-click"
+        }
+      },
+      "anatomy": {
+        "trigger": {
+          "element": "div",
+          "role": "trigger",
+          "attributes": [
+            "data-context-trigger"
+          ]
+        },
+        "content": {
+          "element": "div",
+          "role": "menu",
+          "attributes": [
+            "role=\"menu\""
+          ]
+        },
+        "item": {
+          "element": "div",
+          "role": "menuitem",
+          "repeatable": true,
+          "attributes": [
+            "role=\"menuitem\""
+          ]
+        },
+        "separator": {
+          "element": "div",
+          "role": "separator",
+          "attributes": [
+            "role=\"separator\""
+          ]
+        },
+        "submenu": {
+          "element": "div",
+          "role": "submenu",
+          "optional": true
+        }
+      },
+      "accessibility": {
+        "required_attributes": [
+          "role=\"menu\""
+        ],
+        "keyboard": {
+          "navigate": [
+            "ArrowUp",
+            "ArrowDown"
+          ],
+          "submenu": [
+            "ArrowRight",
+            "ArrowLeft"
+          ],
+          "select": [
+            "Enter"
+          ],
+          "close": [
+            "Escape"
+          ]
+        }
+      }
+    },
+    "data_table": {
+      "type": "layout_element",
+      "html_element": "table",
+      "description": "Advanced table with sorting, filtering, and pagination",
+      "props": {
+        "sortable": {
+          "type": "boolean",
+          "default": true
+        },
+        "filterable": {
+          "type": "boolean",
+          "default": true
+        },
+        "selectable": {
+          "type": "boolean",
+          "default": false
+        },
+        "pagination": {
+          "type": "boolean",
+          "default": true
+        }
+      },
+      "anatomy": {
+        "root": {
+          "element": "div",
+          "role": "container"
+        },
+        "toolbar": {
+          "element": "div",
+          "role": "toolbar",
+          "optional": true,
+          "children": [
+            "filter_input",
+            "column_visibility",
+            "actions"
+          ]
+        },
+        "table": {
+          "element": "table",
+          "attributes": [
+            "role=\"grid\""
+          ]
+        },
+        "thead": {
+          "element": "thead"
+        },
+        "th": {
+          "element": "th",
+          "attributes": [
+            "scope=\"col\"",
+            "aria-sort"
+          ]
+        },
+        "tbody": {
+          "element": "tbody"
+        },
+        "tr": {
+          "element": "tr",
+          "repeatable": true
+        },
+        "td": {
+          "element": "td",
+          "repeatable": true
+        },
+        "pagination": {
+          "element": "div",
+          "role": "navigation",
+          "optional": true
+        }
+      },
+      "accessibility": {
+        "required_attributes": [
+          "role=\"grid\"",
+          "aria-label"
+        ],
+        "keyboard": {
+          "navigate": [
+            "ArrowUp",
+            "ArrowDown",
+            "ArrowLeft",
+            "ArrowRight"
+          ],
+          "sort": [
+            "Enter on header"
+          ],
+          "select": [
+            "Space"
+          ]
+        },
+        "wcag_requirements": {
+          "sortable_headers": "aria-sort attribute on sortable columns"
+        }
+      }
+    },
+    "date_picker": {
+      "type": "form_element",
+      "html_element": "div",
+      "description": "Date input with calendar popup",
+      "props": {
+        "mode": {
+          "type": "enum",
+          "values": [
+            "single",
+            "range"
+          ],
+          "default": "single"
+        },
+        "format": {
+          "type": "string",
+          "default": "YYYY-MM-DD"
+        }
+      },
+      "anatomy": {
+        "root": {
+          "element": "div",
+          "role": "container"
+        },
+        "label": {
+          "element": "label"
+        },
+        "input": {
+          "element": "input",
+          "attributes": [
+            "type=\"text\"",
+            "aria-haspopup=\"dialog\""
+          ]
+        },
+        "trigger": {
+          "element": "button",
+          "attributes": [
+            "aria-label=\"Open calendar\""
+          ]
+        },
+        "popover": {
+          "element": "div",
+          "role": "dialog"
+        },
+        "calendar": {
+          "element": "div",
+          "role": "calendar"
+        }
+      },
+      "accessibility": {
+        "required_attributes": [
+          "aria-haspopup",
+          "aria-label"
+        ],
+        "keyboard": {
+          "open": [
+            "ArrowDown",
+            "Enter"
+          ],
+          "close": [
+            "Escape"
+          ]
+        }
+      }
+    },
+    "hover_card": {
+      "type": "overlay_element",
+      "html_element": "div",
+      "description": "Card that appears on hover for previews",
+      "props": {
+        "openDelay": {
+          "type": "number",
+          "default": 700,
+          "description": "Delay before opening in ms"
+        },
+        "closeDelay": {
+          "type": "number",
+          "default": 300
+        }
+      },
+      "anatomy": {
+        "trigger": {
+          "element": "a or button",
+          "role": "trigger"
+        },
+        "content": {
+          "element": "div",
+          "role": "tooltip"
+        }
+      },
+      "accessibility": {
+        "notes": "For sighted mouse users only; ensure content is accessible elsewhere"
+      }
+    },
+    "input_otp": {
+      "type": "form_element",
+      "html_element": "div",
+      "description": "One-time password input with separate boxes",
+      "props": {
+        "length": {
+          "type": "number",
+          "default": 6
+        },
+        "type": {
+          "type": "enum",
+          "values": [
+            "text",
+            "number"
+          ],
+          "default": "text"
+        }
+      },
+      "anatomy": {
+        "root": {
+          "element": "div",
+          "role": "group"
+        },
+        "input": {
+          "element": "input",
+          "repeatable": true,
+          "attributes": [
+            "maxlength=\"1\"",
+            "inputmode=\"numeric\""
+          ]
+        }
+      },
+      "accessibility": {
+        "required_attributes": [
+          "aria-label",
+          "inputmode"
+        ],
+        "keyboard": {
+          "auto_advance": "focus next input on entry",
+          "backspace": "clear and focus previous"
+        }
+      }
+    },
+    "kbd": {
+      "type": "display_element",
+      "html_element": "kbd",
+      "description": "Keyboard key indicator",
+      "props": {},
+      "anatomy": {
+        "root": {
+          "element": "kbd"
+        }
+      },
+      "styling": {
+        "typical_style": "inline, monospace font, subtle background, border"
+      }
+    },
+    "menubar": {
+      "type": "navigation_element",
+      "html_element": "div",
+      "description": "Horizontal menu bar (File, Edit, View style)",
+      "props": {},
+      "anatomy": {
+        "root": {
+          "element": "div",
+          "role": "menubar",
+          "attributes": [
+            "role=\"menubar\""
+          ]
+        },
+        "menu": {
+          "element": "div",
+          "repeatable": true,
+          "attributes": [
+            "role=\"menu\""
+          ]
+        },
+        "trigger": {
+          "element": "button",
+          "attributes": [
+            "role=\"menuitem\""
+          ]
+        },
+        "item": {
+          "element": "div",
+          "attributes": [
+            "role=\"menuitem\""
+          ]
+        }
+      },
+      "accessibility": {
+        "required_attributes": [
+          "role=\"menubar\""
+        ],
+        "keyboard": {
+          "navigate_menus": [
+            "ArrowLeft",
+            "ArrowRight"
+          ],
+          "navigate_items": [
+            "ArrowUp",
+            "ArrowDown"
+          ],
+          "select": [
+            "Enter"
+          ],
+          "close": [
+            "Escape"
+          ]
+        }
+      }
+    },
+    "resizable": {
+      "type": "layout_element",
+      "html_element": "div",
+      "description": "Resizable panel layout",
+      "props": {
+        "direction": {
+          "type": "enum",
+          "values": [
+            "horizontal",
+            "vertical"
+          ],
+          "default": "horizontal"
+        },
+        "minSize": {
+          "type": "number",
+          "description": "Minimum size in pixels"
+        },
+        "maxSize": {
+          "type": "number",
+          "description": "Maximum size in pixels"
+        }
+      },
+      "anatomy": {
+        "root": {
+          "element": "div",
+          "role": "group"
+        },
+        "panel": {
+          "element": "div",
+          "repeatable": true
+        },
+        "handle": {
+          "element": "div",
+          "role": "separator",
+          "attributes": [
+            "role=\"separator\"",
+            "aria-valuenow",
+            "tabindex=\"0\""
+          ]
+        }
+      },
+      "accessibility": {
+        "required_attributes": [
+          "role=\"separator\"",
+          "aria-valuenow",
+          "aria-valuemin",
+          "aria-valuemax"
+        ],
+        "keyboard": {
+          "resize": [
+            "ArrowLeft",
+            "ArrowRight",
+            "ArrowUp",
+            "ArrowDown",
+            "Home",
+            "End"
+          ]
+        }
+      }
+    },
+    "scroll_area": {
+      "type": "layout_element",
+      "html_element": "div",
+      "description": "Custom styled scrollable container",
+      "props": {
+        "orientation": {
+          "type": "enum",
+          "values": [
+            "vertical",
+            "horizontal",
+            "both"
+          ],
+          "default": "vertical"
+        }
+      },
+      "anatomy": {
+        "root": {
+          "element": "div",
+          "role": "container"
+        },
+        "viewport": {
+          "element": "div",
+          "role": "scrollable_area"
+        },
+        "scrollbar": {
+          "element": "div",
+          "role": "scrollbar",
+          "attributes": [
+            "role=\"scrollbar\"",
+            "aria-orientation"
+          ]
+        },
+        "thumb": {
+          "element": "div",
+          "role": "scrollbar_thumb"
+        }
+      },
+      "accessibility": {
+        "required_attributes": [
+          "tabindex=\"0\""
+        ],
+        "notes": "Maintain native scroll behavior for assistive tech"
+      }
+    },
+    "sheet": {
+      "type": "overlay_element",
+      "html_element": "div",
+      "description": "Modal sheet sliding from edge (like drawer but for forms)",
+      "props": {
+        "side": {
+          "type": "enum",
+          "values": [
+            "top",
+            "right",
+            "bottom",
+            "left"
+          ],
+          "default": "right"
+        }
+      },
+      "anatomy": {
+        "overlay": {
+          "element": "div",
+          "role": "backdrop"
+        },
+        "content": {
+          "element": "div",
+          "role": "dialog",
+          "attributes": [
+            "role=\"dialog\"",
+            "aria-modal=\"true\""
+          ]
+        },
+        "header": {
+          "element": "div"
+        },
+        "title": {
+          "element": "h2"
+        },
+        "description": {
+          "element": "p"
+        },
+        "body": {
+          "element": "div"
+        },
+        "footer": {
+          "element": "div"
+        }
+      },
+      "accessibility": {
+        "required_attributes": [
+          "role=\"dialog\"",
+          "aria-modal=\"true\"",
+          "aria-labelledby"
+        ],
+        "keyboard": {
+          "close": [
+            "Escape"
+          ],
+          "focus_trap": true
+        }
+      }
+    },
+    "sidebar": {
+      "type": "navigation_element",
+      "html_element": "aside",
+      "description": "Collapsible side navigation",
+      "props": {
+        "collapsible": {
+          "type": "boolean",
+          "default": true
+        },
+        "defaultCollapsed": {
+          "type": "boolean",
+          "default": false
+        },
+        "side": {
+          "type": "enum",
+          "values": [
+            "left",
+            "right"
+          ],
+          "default": "left"
+        }
+      },
+      "anatomy": {
+        "root": {
+          "element": "aside",
+          "attributes": [
+            "role=\"complementary\""
+          ]
+        },
+        "header": {
+          "element": "div",
+          "optional": true
+        },
+        "content": {
+          "element": "nav",
+          "attributes": [
+            "role=\"navigation\""
+          ]
+        },
+        "footer": {
+          "element": "div",
+          "optional": true
+        },
+        "toggle": {
+          "element": "button",
+          "attributes": [
+            "aria-label=\"Toggle sidebar\"",
+            "aria-expanded"
+          ]
+        }
+      },
+      "accessibility": {
+        "required_attributes": [
+          "role=\"complementary\"",
+          "aria-label"
+        ],
+        "keyboard": {
+          "toggle": [
+            "Cmd+B",
+            "Ctrl+B"
+          ]
+        }
+      }
+    },
+    "spinner": {
+      "type": "display_element",
+      "html_element": "div",
+      "description": "Loading indicator spinner",
+      "props": {
+        "size": {
+          "type": "enum",
+          "values": [
+            "sm",
+            "md",
+            "lg"
+          ],
+          "default": "md"
+        }
+      },
+      "anatomy": {
+        "root": {
+          "element": "div or svg",
+          "attributes": [
+            "role=\"status\"",
+            "aria-label=\"Loading\""
+          ]
+        }
+      },
+      "accessibility": {
+        "required_attributes": [
+          "role=\"status\"",
+          "aria-label"
+        ],
+        "notes": "Use aria-live if content will update"
+      }
+    },
+    "sonner": {
+      "type": "overlay_element",
+      "html_element": "div",
+      "description": "Advanced toast notification system",
+      "props": {
+        "position": {
+          "type": "enum",
+          "values": [
+            "top-left",
+            "top-center",
+            "top-right",
+            "bottom-left",
+            "bottom-center",
+            "bottom-right"
+          ],
+          "default": "bottom-right"
+        },
+        "duration": {
+          "type": "number",
+          "default": 5000
+        }
+      },
+      "anatomy": {
+        "container": {
+          "element": "div",
+          "role": "region",
+          "attributes": [
+            "aria-live=\"polite\"",
+            "aria-label=\"Notifications\""
+          ]
+        },
+        "toast": {
+          "element": "div",
+          "repeatable": true,
+          "attributes": [
+            "role=\"status\""
+          ]
+        },
+        "title": {
+          "element": "div"
+        },
+        "description": {
+          "element": "div"
+        },
+        "action": {
+          "element": "button",
+          "optional": true
+        },
+        "close": {
+          "element": "button",
+          "optional": true
+        }
+      },
+      "accessibility": {
+        "required_attributes": [
+          "role=\"status\"",
+          "aria-live=\"polite\""
+        ],
+        "notes": "Use aria-live=\"assertive\" for urgent messages only"
+      }
+    },
+    "toggle_group": {
+      "type": "form_element",
+      "html_element": "div",
+      "description": "Group of toggle buttons (single or multiple selection)",
+      "props": {
+        "type": {
+          "type": "enum",
+          "values": [
+            "single",
+            "multiple"
+          ],
+          "default": "single"
+        }
+      },
+      "anatomy": {
+        "root": {
+          "element": "div",
+          "role": "group",
+          "attributes": [
+            "role=\"group\""
+          ]
+        },
+        "item": {
+          "element": "button",
+          "repeatable": true,
+          "attributes": [
+            "aria-pressed"
+          ]
+        }
+      },
+      "accessibility": {
+        "required_attributes": [
+          "role=\"group\"",
+          "aria-label"
+        ],
+        "keyboard": {
+          "navigate": [
+            "ArrowLeft",
+            "ArrowRight"
+          ],
+          "toggle": [
+            "Enter",
+            "Space"
+          ]
+        }
+      }
+    }
+  },
+  "page_patterns": {
+    "login_page": {
+      "type": "authentication_page",
+      "description": "Standard login page pattern",
+      "required_components": [
+        "form",
+        "input[type=email or text]",
+        "input[type=password]",
+        "button[type=submit]"
+      ],
+      "optional_components": [
+        "link[forgot_password]",
+        "link[sign_up]",
+        "checkbox[remember_me]"
+      ],
+      "layout_guidelines": {
+        "form_width": "narrow (320-400px)",
+        "vertical_spacing": "consistent",
+        "submit_button": "full_width"
+      }
+    },
+    "dashboard_page": {
+      "type": "overview_page",
+      "description": "Dashboard overview page pattern",
+      "required_components": [
+        "navigation",
+        "header",
+        "main_content_area"
+      ],
+      "optional_components": [
+        "sidebar",
+        "card[multiple]",
+        "data_visualization"
+      ],
+      "layout_guidelines": {
+        "grid": "responsive (12-column)",
+        "card_spacing": "consistent gap",
+        "responsive_breakpoints": [
+          "mobile: <640px",
+          "tablet: 640-1024px",
+          "desktop: >1024px"
+        ]
+      }
+    },
+    "form_page": {
+      "type": "data_entry_page",
+      "description": "Multi-field data entry form",
+      "required_components": [
+        "form",
+        "input[multiple]",
+        "button[submit]"
+      ],
+      "optional_components": [
+        "select",
+        "checkbox",
+        "radio",
+        "alert[validation]"
+      ],
+      "layout_guidelines": {
+        "form_width": "medium (500-700px)",
+        "field_spacing": "consistent vertical rhythm",
+        "button_group": "right-aligned or full-width"
+      }
+    }
+  },
+  "ux_laws": {
+    "description": "Complete Laws of UX - 30 principles organized by category. Source: lawsofux.com by Jon Yablonski",
+    "heuristics": {
+      "description": "Mental shortcuts and rules of thumb for decision-making",
+      "aesthetic_usability_effect": {
+        "name": "Aesthetic-Usability Effect",
+        "statement": "Users often perceive aesthetically pleasing design as design that's more usable",
+        "implications": [
+          "Beautiful design creates positive emotional response",
+          "Users are more tolerant of minor usability issues in attractive interfaces",
+          "Aesthetics can mask usability problems - always test functionality"
+        ],
+        "application": [
+          "Invest in visual design for first impressions",
+          "Use consistent visual language",
+          "Don't sacrifice usability for aesthetics"
+        ]
+      },
+      "doherty_threshold": {
+        "name": "Doherty Threshold",
+        "statement": "Productivity soars when a computer and its users interact at a pace (<400ms) that ensures that neither has to wait on the other",
+        "implications": [
+          "Response times under 400ms maintain user flow",
+          "Delays break concentration and reduce productivity",
+          "Perceived performance is as important as actual performance"
+        ],
+        "application": [
+          "Optimize for sub-400ms response times",
+          "Use loading indicators for unavoidable delays",
+          "Implement optimistic UI updates",
+          "Consider skeleton screens for content loading"
+        ]
+      },
+      "fitts_law": {
+        "name": "Fitts's Law",
+        "statement": "The time to acquire a target is a function of the distance to and size of the target",
+        "formula": "T = a + b * log2(D/W + 1) where D=distance, W=width",
+        "implications": [
+          "Large targets are easier to click/tap",
+          "Closer targets are faster to reach",
+          "Edge and corner positions are easier (infinite width)"
+        ],
+        "application": [
+          "Make important buttons larger (min 44x44px touch targets)",
+          "Place frequently used actions near edges/corners",
+          "Reduce distance between related actions",
+          "Consider thumb zones on mobile devices"
+        ]
+      },
+      "hicks_law": {
+        "name": "Hick's Law",
+        "statement": "The time it takes to make a decision increases with the number and complexity of choices",
+        "formula": "RT = a + b * log2(n) where n=number of choices",
+        "implications": [
+          "More options = longer decision time",
+          "Complex choices overwhelm users",
+          "Decision fatigue reduces quality of choices"
+        ],
+        "application": [
+          "Limit menu options (5-7 max per group)",
+          "Use progressive disclosure",
+          "Highlight recommended options",
+          "Break complex tasks into smaller steps"
+        ]
+      },
+      "jakobs_law": {
+        "name": "Jakob's Law",
+        "statement": "Users spend most of their time on other sites. This means users prefer your site to work the same way as all the other sites they already know",
+        "implications": [
+          "Users bring expectations from other experiences",
+          "Familiar patterns reduce learning curve",
+          "Innovation should build on conventions, not replace them"
+        ],
+        "application": [
+          "Follow established UI conventions",
+          "Place navigation where users expect it",
+          "Use standard icons and terminology",
+          "Test with users from your target demographic"
+        ]
+      },
+      "millers_law": {
+        "name": "Miller's Law",
+        "statement": "The average person can only keep 7 (plus or minus 2) items in their working memory",
+        "implications": [
+          "Short-term memory is limited",
+          "Information overload causes errors",
+          "Chunking helps memory retention"
+        ],
+        "application": [
+          "Group related items (chunking)",
+          "Limit visible options at any time",
+          "Use visual hierarchy to organize information",
+          "Provide external memory aids (saved states, history)"
+        ]
+      },
+      "occams_razor": {
+        "name": "Occam's Razor",
+        "statement": "Among competing hypotheses that predict equally well, the one with the fewest assumptions should be selected",
+        "implications": [
+          "Simpler solutions are often better",
+          "Unnecessary complexity adds cognitive load",
+          "Every element should serve a purpose"
+        ],
+        "application": [
+          "Remove unnecessary elements",
+          "Simplify user flows",
+          "Question every feature addition",
+          "Design is complete when nothing can be removed"
+        ]
+      },
+      "pareto_principle": {
+        "name": "Pareto Principle (80/20 Rule)",
+        "statement": "For many events, roughly 80% of the effects come from 20% of the causes",
+        "implications": [
+          "A small number of features drive most usage",
+          "Focus efforts on high-impact areas",
+          "Not all problems deserve equal attention"
+        ],
+        "application": [
+          "Identify and optimize the 20% most-used features",
+          "Prioritize bug fixes by user impact",
+          "Focus testing on critical paths",
+          "Accept that perfection everywhere is inefficient"
+        ]
+      },
+      "parkinsons_law": {
+        "name": "Parkinson's Law",
+        "statement": "Any task will inflate until all of the available time is spent",
+        "implications": [
+          "Open-ended tasks take longer",
+          "Time pressure can improve focus",
+          "Artificial constraints can boost productivity"
+        ],
+        "application": [
+          "Set clear time expectations for tasks",
+          "Use progress indicators",
+          "Implement autosave to reduce anxiety",
+          "Design for quick wins and early completion"
+        ]
+      },
+      "postels_law": {
+        "name": "Postel's Law (Robustness Principle)",
+        "statement": "Be liberal in what you accept, and conservative in what you send",
+        "implications": [
+          "Accept various input formats gracefully",
+          "Output should be consistent and predictable",
+          "Error tolerance improves user experience"
+        ],
+        "application": [
+          "Accept multiple date formats in inputs",
+          "Trim whitespace automatically",
+          "Handle common typos and variations",
+          "Provide clear, consistent output formats"
+        ]
+      },
+      "teslers_law": {
+        "name": "Tesler's Law (Law of Conservation of Complexity)",
+        "statement": "For any system there is a certain amount of complexity which cannot be reduced",
+        "implications": [
+          "Complexity must exist somewhere in the system",
+          "Simplifying UI may shift complexity elsewhere",
+          "Some complexity should be absorbed by the system"
+        ],
+        "application": [
+          "Hide necessary complexity from users when possible",
+          "Automate complex decisions with smart defaults",
+          "Use progressive disclosure for advanced features",
+          "Don't oversimplify to the point of confusion"
+        ]
+      }
+    },
+    "gestalt_principles": {
+      "description": "Psychological principles of visual perception and grouping",
+      "law_of_common_region": {
+        "name": "Law of Common Region",
+        "statement": "Elements tend to be perceived into groups if they are sharing an area with a clearly defined boundary",
+        "implications": [
+          "Borders and backgrounds create visual groups",
+          "Cards naturally group content",
+          "Whitespace can separate without borders"
+        ],
+        "application": [
+          "Use cards to group related content",
+          "Apply consistent background colors to sections",
+          "Use borders to define form field groups",
+          "Leverage whitespace as a grouping mechanism"
+        ]
+      },
+      "law_of_proximity": {
+        "name": "Law of Proximity",
+        "statement": "Objects that are near, or proximate to each other, tend to be grouped together",
+        "implications": [
+          "Spacing implies relationships",
+          "Close elements appear related",
+          "Distance implies separation"
+        ],
+        "application": [
+          "Group related form fields closer together",
+          "Add more space between unrelated sections",
+          "Keep labels close to their inputs",
+          "Use consistent spacing scales"
+        ]
+      },
+      "law_of_pragnanz": {
+        "name": "Law of Prägnanz (Law of Simplicity)",
+        "statement": "People will perceive and interpret ambiguous or complex images as the simplest form possible",
+        "implications": [
+          "Users prefer simple interpretations",
+          "Complex layouts cause confusion",
+          "Simple shapes are easier to process"
+        ],
+        "application": [
+          "Use simple, recognizable shapes",
+          "Reduce visual complexity",
+          "Ensure icons are unambiguous",
+          "Test for correct interpretation"
+        ]
+      },
+      "law_of_similarity": {
+        "name": "Law of Similarity",
+        "statement": "The human eye tends to perceive similar elements as a complete picture, shape, or group, even if those elements are separated",
+        "implications": [
+          "Visual similarity implies functional similarity",
+          "Consistent styling creates patterns",
+          "Different styling indicates different function"
+        ],
+        "application": [
+          "Style all buttons consistently by type",
+          "Use color consistently (all links same color)",
+          "Differentiate distinct element types visually",
+          "Create consistent component styles"
+        ]
+      },
+      "law_of_uniform_connectedness": {
+        "name": "Law of Uniform Connectedness",
+        "statement": "Elements that are visually connected are perceived as more related than elements with no connection",
+        "implications": [
+          "Lines and connectors show relationships",
+          "Visual connection overrides proximity",
+          "Flow diagrams leverage this principle"
+        ],
+        "application": [
+          "Use lines to connect related elements",
+          "Apply consistent borders/backgrounds to groups",
+          "Use step indicators with connecting lines",
+          "Leverage visual hierarchy through connection"
+        ]
+      }
+    },
+    "cognitive_principles": {
+      "description": "Principles related to memory, attention, and cognitive processing",
+      "choice_overload": {
+        "name": "Choice Overload (Paradox of Choice)",
+        "statement": "The tendency for people to get overwhelmed when they are presented with a large number of options",
+        "implications": [
+          "Too many choices lead to decision paralysis",
+          "More options can decrease satisfaction",
+          "Curated selections improve user experience"
+        ],
+        "application": [
+          "Limit options displayed at once",
+          "Provide recommendations",
+          "Use filtering to narrow choices",
+          "Offer 'most popular' or 'recommended' options"
+        ]
+      },
+      "chunking": {
+        "name": "Chunking",
+        "statement": "A process by which individual pieces of information are broken down and then grouped together in a meaningful whole",
+        "implications": [
+          "Grouped information is easier to remember",
+          "Patterns help comprehension",
+          "Meaningful groups reduce cognitive load"
+        ],
+        "application": [
+          "Break phone numbers into groups: (555) 123-4567",
+          "Group form fields logically",
+          "Use headings to create content chunks",
+          "Paginate long content into digestible sections"
+        ]
+      },
+      "cognitive_bias": {
+        "name": "Cognitive Bias",
+        "statement": "A systematic error of thinking or rationality in judgment that influences our perception of the world and our decision-making ability",
+        "common_biases": {
+          "confirmation_bias": "Tendency to favor information that confirms existing beliefs",
+          "anchoring": "Over-reliance on first piece of information encountered",
+          "bandwagon_effect": "Tendency to do/believe things because many others do",
+          "loss_aversion": "Preference to avoid losses over acquiring equivalent gains"
+        },
+        "application": [
+          "Use social proof ethically (bandwagon)",
+          "Frame choices carefully (loss aversion)",
+          "Consider default options (anchoring)",
+          "Test with diverse user groups"
+        ]
+      },
+      "cognitive_load": {
+        "name": "Cognitive Load",
+        "statement": "The amount of mental resources needed to understand and interact with an interface",
+        "types": {
+          "intrinsic": "Inherent difficulty of the content",
+          "extraneous": "Load created by poor design",
+          "germane": "Mental effort of learning/understanding"
+        },
+        "implications": [
+          "High load reduces performance",
+          "Reduce extraneous load through good design",
+          "Limited working memory constrains processing"
+        ],
+        "application": [
+          "Simplify visual design",
+          "Remove unnecessary elements",
+          "Use progressive disclosure",
+          "Provide clear visual hierarchy"
+        ]
+      },
+      "flow": {
+        "name": "Flow",
+        "statement": "The mental state in which a person performing some activity is fully immersed in a feeling of energized focus, full involvement, and enjoyment",
+        "conditions": [
+          "Clear goals",
+          "Immediate feedback",
+          "Balance between challenge and skill"
+        ],
+        "application": [
+          "Design clear task flows",
+          "Provide immediate feedback on actions",
+          "Match difficulty to user skill level",
+          "Remove friction and interruptions"
+        ]
+      },
+      "goal_gradient_effect": {
+        "name": "Goal-Gradient Effect",
+        "statement": "The tendency to approach a goal increases with proximity to the goal",
+        "implications": [
+          "People work harder when close to completion",
+          "Progress visualization motivates",
+          "Artificial progress can boost engagement"
+        ],
+        "application": [
+          "Use progress bars for multi-step processes",
+          "Show completion percentage",
+          "Start progress bars at 10-20% (artificial advancement)",
+          "Celebrate completion milestones"
+        ]
+      },
+      "mental_model": {
+        "name": "Mental Model",
+        "statement": "A compressed model based on what we think we know about a system and how it works",
+        "implications": [
+          "Users have pre-existing expectations",
+          "Mismatches cause confusion",
+          "Models are based on prior experience"
+        ],
+        "application": [
+          "Research user mental models",
+          "Match UI to user expectations",
+          "Use familiar metaphors",
+          "Provide onboarding for new concepts"
+        ]
+      },
+      "selective_attention": {
+        "name": "Selective Attention",
+        "statement": "The process of focusing our attention only to a subset of stimuli in an environment—usually those related to our goals",
+        "implications": [
+          "Users ignore irrelevant information",
+          "Important info may be overlooked",
+          "Attention is a limited resource"
+        ],
+        "application": [
+          "Make important elements visually prominent",
+          "Reduce visual noise",
+          "Use contrast to guide attention",
+          "Consider user goals when prioritizing content"
+        ]
+      },
+      "serial_position_effect": {
+        "name": "Serial Position Effect",
+        "statement": "Users have a propensity to best remember the first and last items in a series",
+        "components": {
+          "primacy_effect": "Better recall of first items",
+          "recency_effect": "Better recall of last items"
+        },
+        "application": [
+          "Place key actions at beginning/end of lists",
+          "Put important info first and last",
+          "Use for navigation ordering",
+          "Apply to onboarding sequences"
+        ]
+      },
+      "von_restorff_effect": {
+        "name": "Von Restorff Effect (Isolation Effect)",
+        "statement": "When multiple similar objects are present, the one that differs from the rest is most likely to be remembered",
+        "implications": [
+          "Different = memorable",
+          "Visual distinction draws attention",
+          "Use sparingly for maximum impact"
+        ],
+        "application": [
+          "Highlight primary CTA differently",
+          "Use color to distinguish important items",
+          "Make errors visually distinct",
+          "Don't overuse - everything distinct = nothing distinct"
+        ]
+      },
+      "working_memory": {
+        "name": "Working Memory",
+        "statement": "A cognitive system that temporarily holds and manipulates information needed to complete tasks",
+        "characteristics": {
+          "capacity": "Limited (4-7 items)",
+          "duration": "Short (seconds to minutes)",
+          "susceptibility": "Easily disrupted by interference"
+        },
+        "application": [
+          "Minimize info users must remember",
+          "Show relevant info in context",
+          "Avoid interruptions during tasks",
+          "Use external memory aids (visible selections)"
+        ]
+      },
+      "zeigarnik_effect": {
+        "name": "Zeigarnik Effect",
+        "statement": "People remember uncompleted or interrupted tasks better than completed tasks",
+        "implications": [
+          "Incomplete tasks stay in memory",
+          "Open loops create tension",
+          "Completion provides closure"
+        ],
+        "application": [
+          "Show incomplete profile/setup progress",
+          "Use 'continue where you left off'",
+          "Create compelling incomplete states",
+          "Leverage for engagement (but don't manipulate)"
+        ]
+      },
+      "paradox_of_active_user": {
+        "name": "Paradox of the Active User",
+        "statement": "Users never read manuals but start using the software immediately",
+        "implications": [
+          "Users learn by doing, not reading",
+          "Documentation is often ignored",
+          "Interfaces must be self-explanatory"
+        ],
+        "application": [
+          "Design for immediate use without instructions",
+          "Use progressive disclosure for complexity",
+          "Provide contextual help, not upfront tutorials",
+          "Make common actions discoverable"
+        ]
+      }
+    },
+    "additional_principles": {
+      "description": "General UX principles and best practices",
+      "peak_end_rule": {
+        "name": "Peak-End Rule",
+        "statement": "People judge an experience largely based on how they felt at its peak and at its end, rather than the total sum or average of every moment",
+        "implications": [
+          "Memorable moments define experience",
+          "Endings matter more than middles",
+          "One bad moment can ruin overall perception"
+        ],
+        "application": [
+          "Design delightful peak moments",
+          "End experiences on a positive note",
+          "Fix pain points that create negative peaks",
+          "Celebrate successful task completion"
+        ]
+      }
+    }
+  },
+  "application_patterns": {
+    "calculator": {
+      "type": "interactive_app",
+      "description": "Calculator application best practices",
+      "implementation_guidelines": {
+        "state_management": {
+          "recommended": "Simple state (current, previous, operator)",
+          "avoid": "Complex token arrays or expression trees unless necessary",
+          "reason": "Simple state reduces bugs and improves maintainability"
+        },
+        "calculation_logic": {
+          "recommended": [
+            "Immediate evaluation (two operands at a time)",
+            "Or: Shunting-yard algorithm for proper precedence"
+          ],
+          "avoid": [
+            "eval() function (security risk)",
+            "String-based expression building then eval",
+            "Complex token manipulation without clear logic"
+          ],
+          "error_handling": {
+            "division_by_zero": "Display 'Error' or 'Cannot divide by zero'",
+            "invalid_operation": "Clear display or show error message",
+            "overflow": "Handle very large numbers gracefully"
+          }
+        },
+        "ui_considerations": {
+          "button_layout": "4x4 or 5x4 grid typical",
+          "display": "Right-aligned, fixed-width font",
+          "keyboard_support": "Numbers (0-9), operators (+, -, *, /), Enter (=), Escape (C)",
+          "touch_targets": "Minimum 44x44px for mobile",
+          "visual_feedback": "Hover, active states for buttons"
+        },
+        "common_pitfalls": {
+          "zero_input_bug": {
+            "description": "Using '0' as sentinel value prevents entering 0",
+            "bad_pattern": "if (current !== '0') { ... }",
+            "good_pattern": "Use boolean flag hasInput instead of checking '0'"
+          },
+          "operator_precedence": {
+            "description": "Incorrect precedence (2 + 3 * 4 should be 14, not 20)",
+            "solution": "Implement proper precedence or evaluate left-to-right with user confirmation"
+          },
+          "multiple_decimal_points": {
+            "description": "Allowing '3.14.15' as input",
+            "solution": "Track if current number already has decimal point"
+          },
+          "consecutive_operators": {
+            "description": "Handling '5 + + 3' or '5 + * 3'",
+            "solution": "Replace previous operator or show error"
+          },
+          "equals_after_equals": {
+            "description": "Pressing '=' multiple times",
+            "solution": "Repeat last operation or do nothing after first ="
+          }
+        },
+        "accessibility": {
+          "required": [
+            "Button elements (not div) for all calculator buttons",
+            "aria-label for display area",
+            "Keyboard navigation support",
+            "Focus indicators visible",
+            "Screen reader announcements for operations"
+          ]
+        }
+      },
+      "reference_implementations": {
+        "simple_approach": {
+          "description": "Two-operand immediate evaluation",
+          "complexity": "Low (~150 lines)",
+          "pros": [
+            "Easy to understand",
+            "Few bugs",
+            "Maintainable"
+          ],
+          "cons": [
+            "No operator precedence",
+            "Basic functionality only"
+          ]
+        },
+        "advanced_approach": {
+          "description": "Expression tree or Shunting-yard algorithm",
+          "complexity": "High (~300+ lines)",
+          "pros": [
+            "Proper precedence",
+            "Complex expressions",
+            "Professional feel"
+          ],
+          "cons": [
+            "More bugs possible",
+            "Harder to maintain",
+            "Overkill for basic calculator"
+          ]
+        },
+        "recommendation": "Start with simple approach unless complex expressions explicitly required"
+      }
+    },
+    "todo_app": {
+      "type": "data_management_app",
+      "description": "Todo application best practices",
+      "implementation_guidelines": {
+        "data_persistence": {
+          "recommended": "localStorage for client-side apps",
+          "data_structure": "Array of objects with {id, text, completed, createdAt}",
+          "key_naming": "Use clear keys like 'todos' or 'app-todos'"
+        },
+        "crud_operations": {
+          "create": "Add new todo with unique ID (Date.now() or UUID)",
+          "read": "Load from localStorage on page load",
+          "update": "Toggle completed status",
+          "delete": "Remove by ID"
+        },
+        "ui_considerations": {
+          "input_validation": "Don't allow empty todos",
+          "keyboard_support": "Enter to add todo, Escape to cancel edit",
+          "visual_states": "Completed todos with strikethrough",
+          "empty_state": "Show message when no todos exist"
+        },
+        "accessibility": {
+          "required": [
+            "Label for input field",
+            "Semantic list (ul/ol) for todos",
+            "Checkbox for completed status",
+            "Delete button with aria-label",
+            "Keyboard accessible"
+          ]
+        }
+      }
+    }
+  },
+  "common_pitfalls": {
+    "javascript": {
+      "eval_usage": {
+        "severity": "critical",
+        "description": "Using eval() for calculations or code execution",
+        "why_bad": "Security vulnerability (code injection), performance issues",
+        "alternatives": [
+          "Function constructor (still risky, avoid)",
+          "Proper parsing and evaluation",
+          "Math expression parser library"
+        ]
+      },
+      "string_concatenation_for_numbers": {
+        "severity": "medium",
+        "description": "Using + for string/number concatenation leading to '5' + 3 = '53'",
+        "solution": "Use Number() or parseInt() to convert strings to numbers explicitly"
+      },
+      "global_variables": {
+        "severity": "medium",
+        "description": "Polluting global namespace with calculator state",
+        "solution": "Use IIFE or module pattern to encapsulate state"
+      },
+      "missing_error_handling": {
+        "severity": "high",
+        "description": "Not handling edge cases (division by zero, overflow, invalid input)",
+        "solution": "Add explicit error checking and user-friendly error messages"
+      }
+    },
+    "css": {
+      "button_sizing": {
+        "severity": "medium",
+        "description": "Buttons too small for touch interaction",
+        "solution": "Minimum 44x44px for mobile, larger for desktop"
+      },
+      "missing_focus_states": {
+        "severity": "high",
+        "description": "No visual feedback for keyboard navigation",
+        "solution": "Define :focus styles with visible outline or ring"
+      },
+      "fixed_layouts_not_responsive": {
+        "severity": "medium",
+        "description": "Calculator breaks on small screens",
+        "solution": "Use relative units (%, em, rem) and media queries"
+      }
+    },
+    "html": {
+      "div_buttons": {
+        "severity": "high",
+        "description": "Using <div> instead of <button> for calculator buttons",
+        "why_bad": "Not keyboard accessible, no semantic meaning, breaks accessibility",
+        "solution": "Always use <button> elements for interactive controls"
+      },
+      "missing_alt_text": {
+        "severity": "medium",
+        "description": "Images without alt attributes",
+        "solution": "Provide meaningful alt text for all images"
+      },
+      "missing_labels": {
+        "severity": "high",
+        "description": "Form inputs without associated labels",
+        "solution": "Use <label for='...'> or aria-label for all inputs"
+      }
+    }
+  },
+  "development_best_practices": {
+    "code_organization": {
+      "separation_of_concerns": "Keep HTML structure, CSS styling, and JS logic separate",
+      "file_naming": "Use descriptive names (calculator.js, not script.js)",
+      "comments": "Comment complex logic, not obvious code",
+      "functions": "Keep functions small and focused (single responsibility)"
+    },
+    "testing_considerations": {
+      "manual_testing": [
+        "Test all basic operations (+, -, *, /)",
+        "Test edge cases (0, negative numbers, decimals)",
+        "Test error handling (division by zero)",
+        "Test keyboard navigation",
+        "Test on multiple browsers",
+        "Test on mobile devices"
+      ],
+      "automated_testing": [
+        "Unit tests for calculation functions",
+        "Integration tests for UI interactions",
+        "E2E tests for complete workflows"
+      ]
+    },
+    "performance": {
+      "dom_manipulation": "Minimize DOM access, batch updates when possible",
+      "event_handlers": "Use event delegation for multiple similar elements",
+      "debouncing": "Debounce rapid input events if needed"
+    },
+    "security": {
+      "input_validation": "Validate and sanitize all user input",
+      "xss_prevention": "Use textContent instead of innerHTML for user input",
+      "avoid_eval": "Never use eval() or Function() with user input"
+    }
+  },
+  "material_design_fundamentals": {
+    "description": "Google Material Design 3 system specifications",
+    "reference": "https://m3.material.io/",
+    "elevation": {
+      "description": "Z-axis depth system using shadows for hierarchy",
+      "unit": "dp (density-independent pixels)",
+      "levels": {
+        "level_0": {
+          "dp": 0,
+          "shadow": "none",
+          "usage": [
+            "surface",
+            "background"
+          ],
+          "css": "box-shadow: none;"
+        },
+        "level_1": {
+          "dp": 1,
+          "shadow": "0px 1px 3px 1px rgba(0, 0, 0, 0.15)",
+          "usage": [
+            "cards at rest",
+            "text fields"
+          ],
+          "css": "box-shadow: 0px 1px 3px 1px rgba(0, 0, 0, 0.15);"
+        },
+        "level_2": {
+          "dp": 2,
+          "shadow": "0px 2px 6px 2px rgba(0, 0, 0, 0.15)",
+          "usage": [
+            "buttons",
+            "raised cards"
+          ],
+          "css": "box-shadow: 0px 2px 6px 2px rgba(0, 0, 0, 0.15);"
+        },
+        "level_3": {
+          "dp": 3,
+          "shadow": "0px 4px 8px 3px rgba(0, 0, 0, 0.15)",
+          "usage": [
+            "FAB (Floating Action Button)",
+            "search bar"
+          ],
+          "css": "box-shadow: 0px 4px 8px 3px rgba(0, 0, 0, 0.15);"
+        },
+        "level_4": {
+          "dp": 4,
+          "shadow": "0px 6px 10px 4px rgba(0, 0, 0, 0.15)",
+          "usage": [
+            "app bar",
+            "top navigation"
+          ],
+          "css": "box-shadow: 0px 6px 10px 4px rgba(0, 0, 0, 0.15);"
+        },
+        "level_8": {
+          "dp": 8,
+          "shadow": "0px 8px 12px 6px rgba(0, 0, 0, 0.15)",
+          "usage": [
+            "button hover",
+            "card hover"
+          ],
+          "css": "box-shadow: 0px 8px 12px 6px rgba(0, 0, 0, 0.15);"
+        },
+        "level_16": {
+          "dp": 16,
+          "shadow": "0px 16px 24px 8px rgba(0, 0, 0, 0.15)",
+          "usage": [
+            "navigation drawer",
+            "side panel"
+          ],
+          "css": "box-shadow: 0px 16px 24px 8px rgba(0, 0, 0, 0.15);"
+        },
+        "level_24": {
+          "dp": 24,
+          "shadow": "0px 24px 38px 10px rgba(0, 0, 0, 0.15)",
+          "usage": [
+            "dialogs",
+            "modals",
+            "date pickers"
+          ],
+          "css": "box-shadow: 0px 24px 38px 10px rgba(0, 0, 0, 0.15);"
+        }
+      },
+      "usage_guidelines": [
+        "Higher elevation = more important or temporary",
+        "Elevation changes on interaction (e.g., hover, focus)",
+        "Consistent elevation = same hierarchy level",
+        "Never overlap elements with same elevation",
+        "Use transitions when changing elevation"
+      ],
+      "implementation_tips": {
+        "css_variable_approach": "Define elevation levels as CSS custom properties",
+        "example": "--elevation-1: 0px 1px 3px 1px rgba(0, 0, 0, 0.15);",
+        "transition": "transition: box-shadow 200ms cubic-bezier(0.4, 0.0, 0.2, 1);"
+      }
+    },
+    "spacing": {
+      "description": "8dp baseline grid system for consistent spacing",
+      "baseline_grid": 8,
+      "unit": "dp (or px in web)",
+      "scale": {
+        "none": {
+          "value": "0dp",
+          "px": "0px",
+          "usage": "No spacing"
+        },
+        "xs": {
+          "value": "4dp",
+          "px": "4px",
+          "usage": "Fine-tuning, icon padding"
+        },
+        "sm": {
+          "value": "8dp",
+          "px": "8px",
+          "usage": "Small gaps, tight spacing"
+        },
+        "md": {
+          "value": "16dp",
+          "px": "16px",
+          "usage": "Default spacing, card padding"
+        },
+        "lg": {
+          "value": "24dp",
+          "px": "24px",
+          "usage": "Section spacing, large gaps"
+        },
+        "xl": {
+          "value": "32dp",
+          "px": "32px",
+          "usage": "Large section spacing"
+        },
+        "2xl": {
+          "value": "40dp",
+          "px": "40px",
+          "usage": "Extra large spacing"
+        },
+        "3xl": {
+          "value": "48dp",
+          "px": "48px",
+          "usage": "Maximum spacing"
+        }
+      },
+      "component_spacing": {
+        "button_padding": {
+          "horizontal": "24dp",
+          "vertical": "10dp"
+        },
+        "card_padding": "16dp",
+        "list_item_height": {
+          "single_line": "56dp",
+          "two_line": "72dp",
+          "three_line": "88dp"
+        },
+        "touch_target_minimum": "48dp",
+        "icon_button_size": "48dp"
+      },
+      "usage_guidelines": [
+        "Always use multiples of 8dp for main spacing",
+        "Use 4dp only for fine-tuning within components",
+        "Maintain consistent spacing throughout app",
+        "More space = more importance",
+        "Group related elements with less space"
+      ],
+      "implementation_tips": {
+        "css_variable_approach": "Define spacing scale as CSS custom properties",
+        "example": "--spacing-md: 16px; padding: var(--spacing-md);",
+        "responsive": "Consider scaling up spacing on larger screens"
+      }
+    },
+    "shape": {
+      "description": "Corner radius system for consistent rounded corners",
+      "categories": {
+        "none": {
+          "radius": "0dp",
+          "usage": [
+            "full-screen surfaces",
+            "images in grids"
+          ],
+          "css": "border-radius: 0px;"
+        },
+        "extra_small": {
+          "radius": "4dp",
+          "usage": [
+            "text fields",
+            "chips",
+            "small buttons"
+          ],
+          "css": "border-radius: 4px;"
+        },
+        "small": {
+          "radius": "8dp",
+          "usage": [
+            "buttons",
+            "small cards",
+            "tooltips"
+          ],
+          "css": "border-radius: 8px;"
+        },
+        "medium": {
+          "radius": "12dp",
+          "usage": [
+            "cards",
+            "dialogs",
+            "menus"
+          ],
+          "css": "border-radius: 12px;"
+        },
+        "large": {
+          "radius": "16dp",
+          "usage": [
+            "bottom sheets",
+            "navigation drawers"
+          ],
+          "css": "border-radius: 16px;"
+        },
+        "extra_large": {
+          "radius": "28dp",
+          "usage": [
+            "FAB",
+            "large cards",
+            "search bars"
+          ],
+          "css": "border-radius: 28px;"
+        },
+        "full": {
+          "radius": "50%",
+          "usage": [
+            "circular buttons",
+            "avatars",
+            "pills"
+          ],
+          "css": "border-radius: 50%;"
+        }
+      },
+      "usage_guidelines": [
+        "Consistent shape = same hierarchy level",
+        "Larger components = larger radius (generally)",
+        "Interactive elements = rounded (feels friendlier)",
+        "Use 'full' for truly circular elements only",
+        "Consider accessibility: very large radius may hide content"
+      ],
+      "implementation_tips": {
+        "css_variable_approach": "Define shape categories as CSS custom properties",
+        "example": "--shape-small: 8px; border-radius: var(--shape-small);",
+        "responsive": "Consider using different radii on mobile vs desktop"
+      }
+    },
+    "motion": {
+      "description": "Animation and transition guidelines",
+      "easing_functions": {
+        "standard": {
+          "curve": "cubic-bezier(0.4, 0.0, 0.2, 1)",
+          "usage": "General transitions, most common",
+          "example": "Expanding/collapsing content, switching tabs",
+          "css": "transition-timing-function: cubic-bezier(0.4, 0.0, 0.2, 1);"
+        },
+        "deceleration": {
+          "curve": "cubic-bezier(0.0, 0.0, 0.2, 1)",
+          "usage": "Elements entering the screen",
+          "example": "Dialog appearing, menu opening",
+          "css": "transition-timing-function: cubic-bezier(0.0, 0.0, 0.2, 1);"
+        },
+        "acceleration": {
+          "curve": "cubic-bezier(0.4, 0.0, 1, 1)",
+          "usage": "Elements exiting the screen",
+          "example": "Dialog closing, menu dismissing",
+          "css": "transition-timing-function: cubic-bezier(0.4, 0.0, 1, 1);"
+        },
+        "sharp": {
+          "curve": "cubic-bezier(0.4, 0.0, 0.6, 1)",
+          "usage": "Temporary UI elements",
+          "example": "Tooltips, snackbars",
+          "css": "transition-timing-function: cubic-bezier(0.4, 0.0, 0.6, 1);"
+        }
+      },
+      "duration": {
+        "simple": {
+          "entering": "100ms",
+          "exiting": "100ms",
+          "usage": "Small UI changes",
+          "examples": [
+            "icon rotation",
+            "checkbox toggle",
+            "ripple effect"
+          ]
+        },
+        "standard": {
+          "entering": "200ms",
+          "exiting": "150ms",
+          "usage": "Medium UI changes",
+          "examples": [
+            "button hover",
+            "card elevation change"
+          ]
+        },
+        "complex": {
+          "entering": "300ms",
+          "exiting": "250ms",
+          "usage": "Large UI changes",
+          "examples": [
+            "dialog opening",
+            "screen transition",
+            "drawer sliding"
+          ]
+        },
+        "emphasized": {
+          "entering": "400ms",
+          "exiting": "200ms",
+          "usage": "Emphasized, hero transitions",
+          "examples": [
+            "page transitions",
+            "hero image expansion"
+          ]
+        }
+      },
+      "principles": [
+        "Entering durations > Exiting durations (entering takes longer)",
+        "No animation should exceed 400ms (feels sluggish)",
+        "Faster interactions = shorter durations",
+        "Use standard easing for most transitions",
+        "Motion should feel natural and purposeful"
+      ],
+      "motion_patterns": {
+        "fade_through": {
+          "description": "Current element fades out, new element fades in",
+          "usage": "Tab transitions, step navigation",
+          "implementation": {
+            "exit": "opacity 90ms linear",
+            "enter": "opacity 210ms linear 90ms"
+          }
+        },
+        "shared_axis": {
+          "description": "Elements slide along shared axis (x, y, or z)",
+          "usage": "Screen transitions, forward/back navigation",
+          "variants": {
+            "x": "Horizontal slides (carousel, pagination)",
+            "y": "Vertical slides (scroll, bottom sheet)",
+            "z": "Scale + fade (parent-child navigation)"
+          }
+        },
+        "container_transform": {
+          "description": "Container morphs between two UI elements",
+          "usage": "List item to detail view, card expansion",
+          "duration": "300ms",
+          "easing": "standard"
+        }
+      },
+      "usage_guidelines": [
+        "Use motion to show relationships between elements",
+        "Provide visual feedback for user actions",
+        "Guide attention with purposeful motion",
+        "Reduce motion for accessibility (prefers-reduced-motion)",
+        "Test animations on actual devices (performance)"
+      ],
+      "implementation_tips": {
+        "css_transitions": "transition: all 200ms cubic-bezier(0.4, 0.0, 0.2, 1);",
+        "accessibility": "@media (prefers-reduced-motion: reduce) { transition: none; }",
+        "performance": "Use transform and opacity for best performance (GPU-accelerated)"
+      }
+    },
+    "color": {
+      "description": "Material Design 3 dynamic color system",
+      "note": "This is a reference. Actual colors should be defined per project.",
+      "color_roles": {
+        "primary": {
+          "description": "Main brand color, used for primary actions",
+          "usage": [
+            "Primary buttons",
+            "Active states",
+            "Links"
+          ],
+          "contrast_requirement": "4.5:1 against background"
+        },
+        "secondary": {
+          "description": "Accent color, less prominent than primary",
+          "usage": [
+            "Secondary buttons",
+            "Less important actions"
+          ],
+          "contrast_requirement": "4.5:1 against background"
+        },
+        "tertiary": {
+          "description": "Supporting color for contrasting accents",
+          "usage": [
+            "Contrasting elements",
+            "Special highlights"
+          ],
+          "contrast_requirement": "4.5:1 against background"
+        },
+        "error": {
+          "description": "Error states and destructive actions",
+          "usage": [
+            "Error messages",
+            "Delete buttons",
+            "Validation failures"
+          ],
+          "typical_value": "#B3261E",
+          "contrast_requirement": "4.5:1 against background"
+        },
+        "surface": {
+          "description": "Background colors for components",
+          "variants": [
+            "surface (main background)",
+            "surface-variant (slightly different tint)",
+            "surface-dim (darker variant)",
+            "surface-bright (lighter variant)"
+          ]
+        },
+        "on_primary": {
+          "description": "Text/icon color on primary background",
+          "contrast_requirement": "4.5:1 against primary"
+        },
+        "on_secondary": {
+          "description": "Text/icon color on secondary background",
+          "contrast_requirement": "4.5:1 against secondary"
+        },
+        "on_surface": {
+          "description": "Text/icon color on surface background",
+          "contrast_requirement": "4.5:1 against surface"
+        },
+        "on_error": {
+          "description": "Text/icon color on error background",
+          "typical_value": "#FFFFFF",
+          "contrast_requirement": "4.5:1 against error"
+        }
+      },
+      "accessibility": {
+        "contrast_ratios": {
+          "large_text": "3.0:1 minimum (18pt+ or 14pt+ bold)",
+          "normal_text": "4.5:1 minimum",
+          "ui_components": "3.0:1 minimum (buttons, icons)"
+        },
+        "usage_guidelines": [
+          "Always test color contrast with automated tools",
+          "Provide non-color indicators (icons, text) alongside color",
+          "Consider color blindness (don't rely on red/green alone)"
+        ]
+      },
+      "implementation_tips": {
+        "css_variable_approach": "Define color roles as CSS custom properties",
+        "example": "--color-primary: #6750A4; background-color: var(--color-primary);",
+        "dark_mode": "Define separate color values for dark theme"
+      }
+    },
+    "typography": {
+      "description": "Material Design 3 type scale",
+      "note": "This is a reference. Adjust sizes based on project needs.",
+      "type_scale": {
+        "display_large": {
+          "size": "57px",
+          "line_height": "64px",
+          "weight": "400",
+          "letter_spacing": "-0.25px",
+          "usage": "Hero text, largest display"
+        },
+        "display_medium": {
+          "size": "45px",
+          "line_height": "52px",
+          "weight": "400",
+          "letter_spacing": "0px",
+          "usage": "Large display text"
+        },
+        "display_small": {
+          "size": "36px",
+          "line_height": "44px",
+          "weight": "400",
+          "letter_spacing": "0px",
+          "usage": "Smaller display text"
+        },
+        "headline_large": {
+          "size": "32px",
+          "line_height": "40px",
+          "weight": "400",
+          "letter_spacing": "0px",
+          "usage": "Page titles, major section headers"
+        },
+        "headline_medium": {
+          "size": "28px",
+          "line_height": "36px",
+          "weight": "400",
+          "letter_spacing": "0px",
+          "usage": "Section headers"
+        },
+        "headline_small": {
+          "size": "24px",
+          "line_height": "32px",
+          "weight": "400",
+          "letter_spacing": "0px",
+          "usage": "Subsection headers"
+        },
+        "title_large": {
+          "size": "22px",
+          "line_height": "28px",
+          "weight": "400",
+          "letter_spacing": "0px",
+          "usage": "Card titles, list headers"
+        },
+        "title_medium": {
+          "size": "16px",
+          "line_height": "24px",
+          "weight": "500",
+          "letter_spacing": "0.15px",
+          "usage": "Medium emphasis titles"
+        },
+        "title_small": {
+          "size": "14px",
+          "line_height": "20px",
+          "weight": "500",
+          "letter_spacing": "0.1px",
+          "usage": "Small titles, list items"
+        },
+        "body_large": {
+          "size": "16px",
+          "line_height": "24px",
+          "weight": "400",
+          "letter_spacing": "0.5px",
+          "usage": "Primary body text"
+        },
+        "body_medium": {
+          "size": "14px",
+          "line_height": "20px",
+          "weight": "400",
+          "letter_spacing": "0.25px",
+          "usage": "Secondary body text"
+        },
+        "body_small": {
+          "size": "12px",
+          "line_height": "16px",
+          "weight": "400",
+          "letter_spacing": "0.4px",
+          "usage": "Captions, helper text"
+        },
+        "label_large": {
+          "size": "14px",
+          "line_height": "20px",
+          "weight": "500",
+          "letter_spacing": "0.1px",
+          "usage": "Buttons, prominent labels"
+        },
+        "label_medium": {
+          "size": "12px",
+          "line_height": "16px",
+          "weight": "500",
+          "letter_spacing": "0.5px",
+          "usage": "Chips, badges, small buttons"
+        },
+        "label_small": {
+          "size": "11px",
+          "line_height": "16px",
+          "weight": "500",
+          "letter_spacing": "0.5px",
+          "usage": "Very small labels"
+        }
+      },
+      "usage_guidelines": [
+        "Use type scale consistently throughout app",
+        "Larger text = more emphasis",
+        "Limit number of type styles on single screen (3-5 max)",
+        "Ensure sufficient line height for readability",
+        "Consider responsive scaling on mobile"
+      ],
+      "implementation_tips": {
+        "css_variable_approach": "Define type scale as CSS custom properties",
+        "example": "--text-body-large: 16px/24px 400; font: var(--text-body-large) sans-serif;",
+        "responsive": "Use clamp() for fluid typography: font-size: clamp(14px, 2vw, 16px);"
+      }
+    }
+  },
+  "changelog": {
+    "3.3.0": {
+      "date": "2026-01-01",
+      "changes": [
+        "Added 21 new components from shadcn/ui official list",
+        "Added 28 additional UX Laws from lawsofux.com (total 30)",
+        "Organized UX Laws into categories: heuristics, gestalt, cognitive, principles"
+      ]
+    }
+  }
+}

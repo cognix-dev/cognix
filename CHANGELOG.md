@@ -5,6 +5,87 @@ All notable changes to Cognix will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.2.0] - 2026-02-04
+
+### Added
+- **Multi-Stage Code Generation** - AlphaCodium-based three-phase approach (Foundation, Application, Environment) with 2.3x accuracy improvement over single-stage generation.
+- **Complexity-Adaptive Processing** - Automatic three-tier assessment (simple/medium/complex) that adjusts prompt templates, token limits, and processing depth.
+- **Multi-File Generation** - Automatic detection and generation when multiple files are explicitly requested by the user.
+- **Zen HUD Design System** - Minimal, clean terminal UI with consistent Cognix green (#78af00) coloring, replacing basic Rich output.
+- **StepHUD Progress Indicators** - Real-time timer display and step-by-step progress during code generation (⟳ running, · pending, ✓ complete).
+- **MCP Server Integration** - Model Context Protocol support for use with Claude Desktop, Cursor, VSCode, and other MCP-compatible tools via `cognix-mcp` entry point.
+- **Linter Integration** - Auto-detection support for flake8, ruff, pylint (Python); eslint, htmlhint, stylelint (JavaScript/CSS); TypeScript compiler. Install via `pip install cognix[lint-python]`.
+- **Quality Assessment System** - Multi-layer validation including syntax checking, import dependency analysis, cross-file consistency, and semantic code evaluation.
+- **`/make` Command** - New primary command for AI-powered automatic implementation, replacing the Think→Plan→Write workflow.
+- **`/repo-init` and `/repo-stats` Commands** - Repository initialization and statistics display.
+- **`/run` Command** - Execute commands directly from within Cognix.
+- **Diff Engine and Diff Viewer** - Visual comparison of code changes before application.
+- **Impact Analyzer** - Assessment of modification effects across the codebase.
+- **Repository Analyzer** - Persistent understanding across sessions with dependency graphs and file integrity validation.
+- **Enhanced Memory System** - Long-term project knowledge retention across sessions.
+- **Semi-Automated Implementation Engine** - Staged confirmation workflow with Enter×2 to send pattern.
+- **Automatic File Backup** - Timestamped copies created before file modifications.
+- **File Detection Module** - Intelligent file type and structure recognition.
+- **Reference Parser** - Cross-file dependency extraction and resolution.
+- **Related File Finder** - Contextually connected file identification within repositories.
+- **Requirement Validator** - Implementation completeness verification against specifications.
+- **Safe Editor** - File modifications with rollback capability.
+- **Stylecode Extractor** - Consistent code style pattern analysis and maintenance.
+- **`build.py`** - Nuitka binary build automation script (check/standalone/onefile/clean modes).
+- **`.env.example`** - API key configuration template.
+
+### Changed
+- **Command Architecture Overhaul** - Replaced Think→Plan→Write workflow (`/think`, `/plan`, `/write`) with `/make`-centered generation approach.
+- **UI Completely Redesigned** - Startup display with animated COGNIX box logo, version indicator, and "Made by Individual Developer" credit line.
+- **Model Display Simplified** - From full identifier (e.g., `claude-sonnet-4-5-20250929`) to friendly name (e.g., `Sonnet 4.5`).
+- **LLM Provider Support Updated** - Now supports Anthropic Claude (Sonnet 4.5, Opus 4.5), OpenAI (GPT-5.2, GPT-5.2 Codex), and OpenRouter.
+- **Icon Updates** - Starting icon `🤖` → `⚙`, Goal icon `📄` → `📋`.
+- **Progress Bars** - Unified to Cognix green color scheme.
+- **Spinner Symbols** - Standardized to `⟳` (running), `·` (pending), `✓` (complete).
+- **Tips/Help Line** - Moved to ANSI escape code rendering for proper color display.
+- **Backup Display** - Changed from folder path to individual file listing with timestamps.
+- **`pyproject.toml`** - Updated with MCP dependency, new entry points, optional linter dependencies, and version bump to 0.2.0.
+- **README** - Rewritten with "flow engineering" tagline, unified `pipx install cognix` recommendation, and comprehensive feature documentation (English and Japanese versions).
+- **LICENSE** - Updated copyright year to 2025-2026.
+- **Python Requirement** - Changed from 3.8+ to 3.9+.
+- **Dependencies** - Removed `click` from core dependencies; added `mcp` for MCP server support.
+
+### Removed
+- **`/think` Command** - Replaced by complexity analysis within `/make`.
+- **`/plan` Command** - Replaced by automatic implementation planning within `/make`.
+- **`/write` Command** - Replaced by code generation within `/make`.
+- **`/edit` Command** - AI-assisted editing now handled through `/make` workflow.
+- **`/fix` Command** - Bug fixing now integrated into `/make` and `/review`.
+- **`/apply` Command** - Patch application now automatic within generation workflow.
+- **`/clear-workflow` Command** - Workflow state management redesigned.
+- **`/save-session` / `/resume` / `/list_sessions` / `/session_info` Commands** - Session management redesigned with automatic persistence.
+- **`/memory` Command** - Memory management now automatic.
+- **`/backup` Command** - Backup management now automatic with timestamped copies.
+- **`/workflow-status` Command** - Replaced by `/status`.
+- **`/import` / `/export` Commands** - Session import/export removed.
+
+### Fixed
+- HUD display duplication where Code Generation HUD appeared twice.
+- SyntaxWarning from invalid escape sequences in string literals.
+- `[RUNNING]` status display color corrected to cyan.
+- NameError in `[v] View details` action during code review workflow.
+- New file display truncation (50-line limit removed for full content display).
+- Double-reject issue in confirmation workflow resolved with return value-based detection.
+- Panel padding adjusted from `(1,2)` to `(0,1)` for consistent spacing.
+- Backup display empty lines corrected with proper formatting.
+- 90-second cooldown logic for logo animation removed (replaced with `COGNIX_SKIP_LOGO_ANIM=1` environment variable).
+
+## [0.1.5] - 2025-09-05
+
+### Fixed
+- Critical syntax error fix improving startup reliability.
+- Reference notation (`@file`) resilience for partial file failures.
+- Improved error messages and recovery for file reference issues.
+
+### Improved
+- Cross-model compatibility (Claude Sonnet 4 & GPT-4o verified).
+- System prompt construction optimization.
+
 ## [0.1.4] - 2025-09-04
 
 ### Improved
@@ -156,5 +237,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Installation
 ```bash
-pip install cognix-dev
+pip install cognix
 ```
+
+[0.2.0]: https://github.com/cognix-dev/cognix/compare/v0.1.5...v0.2.0
+[0.1.5]: https://github.com/cognix-dev/cognix/compare/v0.1.4...v0.1.5
+[0.1.4]: https://github.com/cognix-dev/cognix/compare/v0.1.3...v0.1.4
+[0.1.3]: https://github.com/cognix-dev/cognix/compare/v0.1.2...v0.1.3
+[0.1.2]: https://github.com/cognix-dev/cognix/compare/v0.1.1...v0.1.2
+[0.1.1]: https://github.com/cognix-dev/cognix/compare/v0.1.0...v0.1.1
+[0.1.0]: https://github.com/cognix-dev/cognix/releases/tag/v0.1.0

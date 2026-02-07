@@ -1,0 +1,1430 @@
+{
+  "version": "2.3.0",
+  "description": "Improved application patterns with flexible triggering - Extended Edition with 21 patterns (16 frontend + 5 backend)",
+  "last_updated": "2026-01-13",
+  "changelog": {
+    "2.2.0": {
+      "date": "2026-01-01",
+      "changes": [
+        "Added 13 new web app patterns: gallery, contact_form, timer, weather, quiz, notes, landing_page, login, blog, portfolio, product_page, chat, kanban",
+        "Updated trigger conditions for better detection",
+        "Added code_quality_guidelines for new patterns"
+      ]
+    },
+    "2.1.0": {
+      "date": "2025-12-22",
+      "changes": [
+        "Initial version with calculator, todo, dashboard patterns"
+      ]
+    },
+    "2.3.0": {
+      "date": "2026-01-13",
+      "changes": [
+        "Added 5 backend patterns: flask_web_app, flask_api, fastapi_backend, django_web_app, express_api",
+        "Flask patterns include critical static file path requirements"
+      ]
+    }
+  },
+  "trigger_strategy": {
+    "description": "Smart triggering based on context and keywords",
+    "priority_order": [
+      "explicit_web_keywords",
+      "goal_context_analysis",
+      "existing_file_patterns"
+    ]
+  },
+  "web_app_patterns": {
+    "calculator": {
+      "files": [
+        "html",
+        "css",
+        "js"
+      ],
+      "reason": "Calculator requires UI (HTML), styling (CSS), and logic (JS)",
+      "priority": "high",
+      "trigger_conditions": {
+        "mode": "flexible",
+        "triggers": {
+          "explicit_keywords": {
+            "enabled": true,
+            "keywords": [
+              "html calculator",
+              "web calculator",
+              "browser calculator",
+              "calculator with html",
+              "web-based calculator",
+              "calculator app"
+            ],
+            "confidence": "high"
+          },
+          "implicit_keywords": {
+            "enabled": true,
+            "keywords": [
+              "calculator"
+            ],
+            "context_requirements": [
+              "goal_mentions_web_or_app",
+              "goal_mentions_ui_or_interface",
+              "no_conflicting_keywords_like_cli_or_terminal"
+            ],
+            "confidence": "medium"
+          },
+          "context_triggers": {
+            "enabled": true,
+            "conditions": [
+              "existing_html_files",
+              "existing_css_files",
+              "goal_contains_create_build_make"
+            ],
+            "confidence": "medium"
+          }
+        },
+        "default_assumption": "web_app_if_ambiguous",
+        "explanation": "Calculator is inherently visual, so default to web app unless CLI is explicitly mentioned"
+      },
+      "prompt_enhancement": {
+        "base": "Generate THREE separate files for a web-based calculator application",
+        "files": {
+          "html": {
+            "filename": "calculator.html",
+            "purpose": "UI structure with display and buttons",
+            "requirements": [
+              "Semantic HTML5 structure",
+              "Display area for results",
+              "Number buttons (0-9)",
+              "Operator buttons (+, -, *, /)",
+              "Clear and equals buttons",
+              "Reference both CSS and JS files using <link> and <script> tags"
+            ]
+          },
+          "css": {
+            "filename": "styles.css",
+            "purpose": "Visual styling and layout",
+            "requirements": [
+              "Grid or flexbox layout for buttons",
+              "Responsive design (mobile-friendly)",
+              "Clear visual hierarchy",
+              "Hover and active states for buttons",
+              "Professional color scheme"
+            ]
+          },
+          "js": {
+            "filename": "calculator.js",
+            "purpose": "Calculation logic and state management",
+            "requirements": [
+              "Handle all basic operations (+, -, *, /)",
+              "Proper operator precedence",
+              "Error handling (division by zero)",
+              "Clear and backspace functionality",
+              "Keyboard support (optional but recommended)"
+            ],
+            "anti_patterns": [
+              "DO NOT use eval() - security risk",
+              "DO NOT create overly complex state management",
+              "DO NOT generate invalid token sequences",
+              "KEEP implementation simple (<200 lines preferred)"
+            ]
+          }
+        },
+        "quality_requirements": {
+          "simplicity": "Prioritize straightforward implementation over complex features",
+          "correctness": "Ensure basic operations work correctly",
+          "testing": "Implementation should handle edge cases (0, negative numbers, decimals)"
+        }
+      }
+    },
+    "todo": {
+      "files": [
+        "html",
+        "css",
+        "js"
+      ],
+      "reason": "Todo app requires UI, styling, and state management",
+      "priority": "high",
+      "trigger_conditions": {
+        "mode": "flexible",
+        "triggers": {
+          "explicit_keywords": {
+            "enabled": true,
+            "keywords": [
+              "html todo",
+              "web todo",
+              "todo app",
+              "task manager",
+              "web-based todo",
+              "todo list app"
+            ],
+            "confidence": "high"
+          },
+          "implicit_keywords": {
+            "enabled": true,
+            "keywords": [
+              "todo",
+              "task list",
+              "tasklist"
+            ],
+            "context_requirements": [
+              "goal_mentions_web_or_app",
+              "no_conflicting_keywords"
+            ],
+            "confidence": "medium"
+          }
+        },
+        "default_assumption": "web_app_if_ambiguous"
+      },
+      "prompt_enhancement": {
+        "base": "Generate THREE separate files for a todo list application",
+        "files": {
+          "html": {
+            "filename": "index.html",
+            "purpose": "UI with input field and task list container",
+            "requirements": [
+              "Input field for new tasks",
+              "Add button",
+              "Task list container",
+              "Individual task items with checkbox and delete button"
+            ]
+          },
+          "css": {
+            "filename": "styles.css",
+            "purpose": "Clean, minimal styling with good UX",
+            "requirements": [
+              "Modern, clean design",
+              "Visual feedback for interactions",
+              "Responsive layout"
+            ]
+          },
+          "js": {
+            "filename": "app.js",
+            "purpose": "Task management with localStorage persistence",
+            "requirements": [
+              "Add, delete, toggle complete functionality",
+              "localStorage persistence",
+              "Filter by status (optional)"
+            ]
+          }
+        },
+        "quality_requirements": {
+          "persistence": "Use localStorage to save tasks",
+          "crud_operations": "Add, delete, mark as complete",
+          "ux": "Intuitive and responsive interface"
+        }
+      }
+    },
+    "dashboard": {
+      "files": [
+        "html",
+        "css",
+        "js"
+      ],
+      "reason": "Dashboard requires UI, styling, charts/visualization",
+      "priority": "high",
+      "trigger_conditions": {
+        "mode": "flexible",
+        "triggers": {
+          "explicit_keywords": {
+            "enabled": true,
+            "keywords": [
+              "dashboard",
+              "admin panel",
+              "control panel",
+              "analytics dashboard",
+              "admin dashboard"
+            ],
+            "confidence": "high"
+          }
+        }
+      },
+      "prompt_enhancement": {
+        "base": "Generate THREE separate files for a dashboard application",
+        "files": {
+          "html": {
+            "filename": "dashboard.html",
+            "purpose": "Dashboard UI with navigation and content sections",
+            "requirements": [
+              "Header with navigation",
+              "Sidebar (optional)",
+              "Main content area with cards/widgets",
+              "Responsive grid layout"
+            ]
+          },
+          "css": {
+            "filename": "dashboard.css",
+            "purpose": "Dashboard styling with professional layout",
+            "requirements": [
+              "Grid or flexbox layout",
+              "Card components",
+              "Responsive design",
+              "Professional color scheme"
+            ]
+          },
+          "js": {
+            "filename": "dashboard.js",
+            "purpose": "Data fetching and chart rendering",
+            "requirements": [
+              "Fetch data from API or mock data",
+              "Update dashboard widgets dynamically",
+              "Consider using Chart.js or similar for visualizations"
+            ]
+          }
+        },
+        "quality_requirements": {
+          "layout": "Responsive grid layout",
+          "data_visualization": "Use appropriate chart types for data",
+          "interactivity": "Smooth user interactions"
+        }
+      }
+    },
+    "gallery": {
+      "files": [
+        "html",
+        "css",
+        "js"
+      ],
+      "reason": "Image gallery requires UI grid, styling, and lightbox functionality",
+      "priority": "high",
+      "trigger_conditions": {
+        "mode": "flexible",
+        "triggers": {
+          "explicit_keywords": {
+            "enabled": true,
+            "keywords": [
+              "image gallery",
+              "photo gallery",
+              "gallery app",
+              "picture gallery",
+              "portfolio gallery"
+            ],
+            "confidence": "high"
+          },
+          "implicit_keywords": {
+            "enabled": true,
+            "keywords": [
+              "gallery"
+            ],
+            "context_requirements": [
+              "goal_mentions_images_or_photos"
+            ],
+            "confidence": "medium"
+          }
+        },
+        "default_assumption": "web_app_if_ambiguous"
+      },
+      "prompt_enhancement": {
+        "base": "Generate THREE separate files for an image gallery application",
+        "files": {
+          "html": {
+            "filename": "gallery.html",
+            "purpose": "Gallery grid layout with images",
+            "requirements": [
+              "Responsive image grid",
+              "Thumbnail images",
+              "Lightbox modal for full-size view"
+            ]
+          },
+          "css": {
+            "filename": "styles.css",
+            "purpose": "Gallery styling with grid and lightbox",
+            "requirements": [
+              "CSS Grid for image layout",
+              "Hover effects on thumbnails",
+              "Modal/lightbox styling",
+              "Responsive breakpoints"
+            ]
+          },
+          "js": {
+            "filename": "gallery.js",
+            "purpose": "Lightbox functionality and navigation",
+            "requirements": [
+              "Open lightbox on image click",
+              "Navigate between images",
+              "Close on escape or click outside",
+              "Keyboard navigation (arrow keys)"
+            ]
+          }
+        }
+      }
+    },
+    "contact_form": {
+      "files": [
+        "html",
+        "css",
+        "js"
+      ],
+      "reason": "Contact form requires UI, styling, and validation",
+      "priority": "high",
+      "trigger_conditions": {
+        "mode": "flexible",
+        "triggers": {
+          "explicit_keywords": {
+            "enabled": true,
+            "keywords": [
+              "contact form",
+              "feedback form",
+              "contact page",
+              "contact us form",
+              "inquiry form"
+            ],
+            "confidence": "high"
+          }
+        }
+      },
+      "prompt_enhancement": {
+        "base": "Generate THREE separate files for a contact form",
+        "files": {
+          "html": {
+            "filename": "contact.html",
+            "purpose": "Form structure with input fields",
+            "requirements": [
+              "Name, email, message fields",
+              "Submit button",
+              "Proper labels and accessibility",
+              "Form validation attributes"
+            ]
+          },
+          "css": {
+            "filename": "styles.css",
+            "purpose": "Form styling",
+            "requirements": [
+              "Clean, professional form design",
+              "Error state styling",
+              "Success message styling",
+              "Responsive layout"
+            ]
+          },
+          "js": {
+            "filename": "contact.js",
+            "purpose": "Form validation and submission",
+            "requirements": [
+              "Client-side validation",
+              "Email format validation",
+              "Error message display",
+              "Success feedback"
+            ]
+          }
+        }
+      }
+    },
+    "timer": {
+      "files": [
+        "html",
+        "css",
+        "js"
+      ],
+      "reason": "Timer/Pomodoro app requires display, styling, and time logic",
+      "priority": "medium",
+      "trigger_conditions": {
+        "mode": "flexible",
+        "triggers": {
+          "explicit_keywords": {
+            "enabled": true,
+            "keywords": [
+              "timer app",
+              "pomodoro timer",
+              "countdown timer",
+              "stopwatch",
+              "time tracker"
+            ],
+            "confidence": "high"
+          },
+          "implicit_keywords": {
+            "enabled": true,
+            "keywords": [
+              "timer",
+              "pomodoro",
+              "countdown"
+            ],
+            "confidence": "medium"
+          }
+        }
+      },
+      "prompt_enhancement": {
+        "base": "Generate THREE separate files for a timer application",
+        "files": {
+          "html": {
+            "filename": "timer.html",
+            "purpose": "Timer display and controls",
+            "requirements": [
+              "Time display (MM:SS)",
+              "Start, pause, reset buttons",
+              "Optional: preset time buttons"
+            ]
+          },
+          "css": {
+            "filename": "styles.css",
+            "purpose": "Timer styling",
+            "requirements": [
+              "Large, readable time display",
+              "Clear button styling",
+              "Visual feedback for active state"
+            ]
+          },
+          "js": {
+            "filename": "timer.js",
+            "purpose": "Timer logic",
+            "requirements": [
+              "setInterval for countdown",
+              "Start, pause, reset functionality",
+              "Audio notification when complete"
+            ]
+          }
+        }
+      }
+    },
+    "weather": {
+      "files": [
+        "html",
+        "css",
+        "js"
+      ],
+      "reason": "Weather app requires UI, styling, and API integration",
+      "priority": "medium",
+      "trigger_conditions": {
+        "mode": "flexible",
+        "triggers": {
+          "explicit_keywords": {
+            "enabled": true,
+            "keywords": [
+              "weather app",
+              "weather widget",
+              "weather forecast",
+              "weather display"
+            ],
+            "confidence": "high"
+          }
+        }
+      },
+      "prompt_enhancement": {
+        "base": "Generate THREE separate files for a weather application",
+        "files": {
+          "html": {
+            "filename": "weather.html",
+            "purpose": "Weather display layout",
+            "requirements": [
+              "Search input for location",
+              "Current weather display",
+              "Temperature, conditions, icon"
+            ]
+          },
+          "css": {
+            "filename": "styles.css",
+            "purpose": "Weather app styling",
+            "requirements": [
+              "Clean, modern design",
+              "Weather icon styling",
+              "Responsive layout"
+            ]
+          },
+          "js": {
+            "filename": "weather.js",
+            "purpose": "API calls and data display",
+            "requirements": [
+              "Fetch from weather API",
+              "Parse and display data",
+              "Error handling for API failures"
+            ]
+          }
+        },
+        "notes": "Consider using OpenWeatherMap API or similar free weather API"
+      }
+    },
+    "quiz": {
+      "files": [
+        "html",
+        "css",
+        "js"
+      ],
+      "reason": "Quiz app requires UI, styling, and game logic",
+      "priority": "medium",
+      "trigger_conditions": {
+        "mode": "flexible",
+        "triggers": {
+          "explicit_keywords": {
+            "enabled": true,
+            "keywords": [
+              "quiz app",
+              "trivia game",
+              "quiz game",
+              "questionnaire"
+            ],
+            "confidence": "high"
+          }
+        }
+      },
+      "prompt_enhancement": {
+        "base": "Generate THREE separate files for a quiz application",
+        "files": {
+          "html": {
+            "filename": "quiz.html",
+            "purpose": "Quiz layout with question display",
+            "requirements": [
+              "Question display area",
+              "Answer options (buttons or radio)",
+              "Score display",
+              "Progress indicator"
+            ]
+          },
+          "css": {
+            "filename": "styles.css",
+            "purpose": "Quiz styling",
+            "requirements": [
+              "Clean question display",
+              "Answer button styling",
+              "Correct/incorrect feedback styling"
+            ]
+          },
+          "js": {
+            "filename": "quiz.js",
+            "purpose": "Quiz logic and scoring",
+            "requirements": [
+              "Question data structure",
+              "Answer checking",
+              "Score tracking",
+              "Results display"
+            ]
+          }
+        }
+      }
+    },
+    "notes": {
+      "files": [
+        "html",
+        "css",
+        "js"
+      ],
+      "reason": "Notes app requires UI, styling, and storage",
+      "priority": "medium",
+      "trigger_conditions": {
+        "mode": "flexible",
+        "triggers": {
+          "explicit_keywords": {
+            "enabled": true,
+            "keywords": [
+              "notes app",
+              "note taking",
+              "memo app",
+              "notepad app"
+            ],
+            "confidence": "high"
+          }
+        }
+      },
+      "prompt_enhancement": {
+        "base": "Generate THREE separate files for a notes application",
+        "files": {
+          "html": {
+            "filename": "notes.html",
+            "purpose": "Notes UI with editor",
+            "requirements": [
+              "Note list sidebar",
+              "Note editor area",
+              "Add/delete note buttons"
+            ]
+          },
+          "css": {
+            "filename": "styles.css",
+            "purpose": "Notes app styling",
+            "requirements": [
+              "Two-column layout",
+              "Clean editor styling",
+              "Note list styling"
+            ]
+          },
+          "js": {
+            "filename": "notes.js",
+            "purpose": "Note management with storage",
+            "requirements": [
+              "CRUD operations",
+              "localStorage persistence",
+              "Search/filter (optional)"
+            ]
+          }
+        }
+      }
+    },
+    "landing_page": {
+      "files": [
+        "html",
+        "css",
+        "js"
+      ],
+      "reason": "Landing page requires UI sections, styling, and interactions",
+      "priority": "high",
+      "trigger_conditions": {
+        "mode": "flexible",
+        "triggers": {
+          "explicit_keywords": {
+            "enabled": true,
+            "keywords": [
+              "landing page",
+              "marketing page",
+              "product page",
+              "home page",
+              "promotional page"
+            ],
+            "confidence": "high"
+          }
+        }
+      },
+      "prompt_enhancement": {
+        "base": "Generate THREE separate files for a landing page",
+        "files": {
+          "html": {
+            "filename": "index.html",
+            "purpose": "Landing page sections",
+            "requirements": [
+              "Hero section with CTA",
+              "Features section",
+              "Testimonials (optional)",
+              "Footer with links"
+            ]
+          },
+          "css": {
+            "filename": "styles.css",
+            "purpose": "Landing page styling",
+            "requirements": [
+              "Hero section styling",
+              "Responsive layout",
+              "Professional typography",
+              "Call-to-action button styling"
+            ]
+          },
+          "js": {
+            "filename": "main.js",
+            "purpose": "Interactions and animations",
+            "requirements": [
+              "Smooth scroll navigation",
+              "Mobile menu toggle",
+              "Optional: scroll animations"
+            ]
+          }
+        }
+      }
+    },
+    "login": {
+      "files": [
+        "html",
+        "css",
+        "js"
+      ],
+      "reason": "Login/auth page requires form UI, styling, and validation",
+      "priority": "high",
+      "trigger_conditions": {
+        "mode": "flexible",
+        "triggers": {
+          "explicit_keywords": {
+            "enabled": true,
+            "keywords": [
+              "login page",
+              "login form",
+              "sign in page",
+              "authentication page",
+              "register page",
+              "signup form"
+            ],
+            "confidence": "high"
+          },
+          "implicit_keywords": {
+            "enabled": true,
+            "keywords": [
+              "login",
+              "signin",
+              "signup",
+              "register",
+              "auth"
+            ],
+            "confidence": "medium"
+          }
+        }
+      },
+      "prompt_enhancement": {
+        "base": "Generate THREE separate files for a login/registration page",
+        "files": {
+          "html": {
+            "filename": "login.html",
+            "purpose": "Login form structure",
+            "requirements": [
+              "Email/username input",
+              "Password input with toggle visibility",
+              "Remember me checkbox",
+              "Submit button",
+              "Link to register/forgot password"
+            ]
+          },
+          "css": {
+            "filename": "styles.css",
+            "purpose": "Login page styling",
+            "requirements": [
+              "Centered form layout",
+              "Professional, clean design",
+              "Error state styling",
+              "Password visibility toggle"
+            ]
+          },
+          "js": {
+            "filename": "login.js",
+            "purpose": "Form validation",
+            "requirements": [
+              "Email validation",
+              "Password strength indicator",
+              "Password visibility toggle",
+              "Form submission handling"
+            ]
+          }
+        }
+      }
+    },
+    "blog": {
+      "files": [
+        "html",
+        "css",
+        "js"
+      ],
+      "reason": "Blog page requires article layout, styling, and navigation",
+      "priority": "medium",
+      "trigger_conditions": {
+        "mode": "flexible",
+        "triggers": {
+          "explicit_keywords": {
+            "enabled": true,
+            "keywords": [
+              "blog page",
+              "blog template",
+              "article page",
+              "news page"
+            ],
+            "confidence": "high"
+          }
+        }
+      },
+      "prompt_enhancement": {
+        "base": "Generate THREE separate files for a blog page",
+        "files": {
+          "html": {
+            "filename": "blog.html",
+            "purpose": "Blog layout with posts",
+            "requirements": [
+              "Blog post list/grid",
+              "Post cards with title, excerpt, date",
+              "Sidebar with categories/tags",
+              "Pagination"
+            ]
+          },
+          "css": {
+            "filename": "styles.css",
+            "purpose": "Blog styling",
+            "requirements": [
+              "Readable typography",
+              "Post card styling",
+              "Responsive grid"
+            ]
+          },
+          "js": {
+            "filename": "blog.js",
+            "purpose": "Blog interactivity",
+            "requirements": [
+              "Load more posts",
+              "Category filtering",
+              "Search functionality"
+            ]
+          }
+        }
+      }
+    },
+    "portfolio": {
+      "files": [
+        "html",
+        "css",
+        "js"
+      ],
+      "reason": "Portfolio requires project showcase, styling, and interactions",
+      "priority": "medium",
+      "trigger_conditions": {
+        "mode": "flexible",
+        "triggers": {
+          "explicit_keywords": {
+            "enabled": true,
+            "keywords": [
+              "portfolio page",
+              "portfolio website",
+              "personal website",
+              "project showcase"
+            ],
+            "confidence": "high"
+          }
+        }
+      },
+      "prompt_enhancement": {
+        "base": "Generate THREE separate files for a portfolio page",
+        "files": {
+          "html": {
+            "filename": "index.html",
+            "purpose": "Portfolio sections",
+            "requirements": [
+              "Hero with introduction",
+              "About section",
+              "Projects grid",
+              "Contact section"
+            ]
+          },
+          "css": {
+            "filename": "styles.css",
+            "purpose": "Portfolio styling",
+            "requirements": [
+              "Modern, professional design",
+              "Project card styling",
+              "Responsive layout"
+            ]
+          },
+          "js": {
+            "filename": "portfolio.js",
+            "purpose": "Portfolio interactivity",
+            "requirements": [
+              "Smooth scroll",
+              "Project filtering",
+              "Lightbox for project details"
+            ]
+          }
+        }
+      }
+    },
+    "product_page": {
+      "files": [
+        "html",
+        "css",
+        "js"
+      ],
+      "reason": "E-commerce product page requires gallery, details, and cart",
+      "priority": "medium",
+      "trigger_conditions": {
+        "mode": "flexible",
+        "triggers": {
+          "explicit_keywords": {
+            "enabled": true,
+            "keywords": [
+              "product page",
+              "shop page",
+              "e-commerce page",
+              "store page",
+              "product detail"
+            ],
+            "confidence": "high"
+          }
+        }
+      },
+      "prompt_enhancement": {
+        "base": "Generate THREE separate files for an e-commerce product page",
+        "files": {
+          "html": {
+            "filename": "product.html",
+            "purpose": "Product page layout",
+            "requirements": [
+              "Product image gallery",
+              "Product title, price, description",
+              "Size/color selectors",
+              "Add to cart button"
+            ]
+          },
+          "css": {
+            "filename": "styles.css",
+            "purpose": "Product page styling",
+            "requirements": [
+              "Two-column layout (images + details)",
+              "Image gallery styling",
+              "Button and selector styling"
+            ]
+          },
+          "js": {
+            "filename": "product.js",
+            "purpose": "Product interactivity",
+            "requirements": [
+              "Image gallery navigation",
+              "Variant selection",
+              "Add to cart functionality"
+            ]
+          }
+        }
+      }
+    },
+    "chat": {
+      "files": [
+        "html",
+        "css",
+        "js"
+      ],
+      "reason": "Chat interface requires message display, styling, and real-time updates",
+      "priority": "medium",
+      "trigger_conditions": {
+        "mode": "flexible",
+        "triggers": {
+          "explicit_keywords": {
+            "enabled": true,
+            "keywords": [
+              "chat app",
+              "chat interface",
+              "messenger app",
+              "chat widget",
+              "messaging app"
+            ],
+            "confidence": "high"
+          }
+        }
+      },
+      "prompt_enhancement": {
+        "base": "Generate THREE separate files for a chat interface",
+        "files": {
+          "html": {
+            "filename": "chat.html",
+            "purpose": "Chat layout",
+            "requirements": [
+              "Message list container",
+              "Individual message bubbles",
+              "Input field and send button",
+              "User avatars (optional)"
+            ]
+          },
+          "css": {
+            "filename": "styles.css",
+            "purpose": "Chat styling",
+            "requirements": [
+              "Message bubble styling (sent vs received)",
+              "Scrollable message area",
+              "Input area at bottom"
+            ]
+          },
+          "js": {
+            "filename": "chat.js",
+            "purpose": "Chat functionality",
+            "requirements": [
+              "Send message",
+              "Display messages",
+              "Auto-scroll to bottom",
+              "Timestamp display"
+            ]
+          }
+        }
+      }
+    },
+    "kanban": {
+      "files": [
+        "html",
+        "css",
+        "js"
+      ],
+      "reason": "Kanban board requires columns, drag-drop, and state management",
+      "priority": "medium",
+      "trigger_conditions": {
+        "mode": "flexible",
+        "triggers": {
+          "explicit_keywords": {
+            "enabled": true,
+            "keywords": [
+              "kanban board",
+              "task board",
+              "trello clone",
+              "project board",
+              "drag drop board"
+            ],
+            "confidence": "high"
+          }
+        }
+      },
+      "prompt_enhancement": {
+        "base": "Generate THREE separate files for a kanban board",
+        "files": {
+          "html": {
+            "filename": "kanban.html",
+            "purpose": "Kanban board layout",
+            "requirements": [
+              "Multiple columns (To Do, In Progress, Done)",
+              "Task cards within columns",
+              "Add task button per column"
+            ]
+          },
+          "css": {
+            "filename": "styles.css",
+            "purpose": "Kanban styling",
+            "requirements": [
+              "Horizontal column layout",
+              "Draggable card styling",
+              "Column headers",
+              "Drag feedback styling"
+            ]
+          },
+          "js": {
+            "filename": "kanban.js",
+            "purpose": "Drag-drop and state management",
+            "requirements": [
+              "Drag and drop between columns",
+              "Add/delete tasks",
+              "LocalStorage persistence"
+            ]
+          }
+        }
+      }
+    },
+    "flask_web_app": {
+      "files": [
+        "py",
+        "html",
+        "css",
+        "js"
+      ],
+      "reason": "Flask web app requires backend (Python/Flask), templates (HTML), styling (CSS), and frontend logic (JS)",
+      "priority": "high",
+      "trigger_conditions": {
+        "mode": "flexible",
+        "triggers": {
+          "explicit_keywords": {
+            "enabled": true,
+            "keywords": [
+              "flask app",
+              "flask web app",
+              "flask application",
+              "flask website",
+              "flask with html",
+              "python web app with flask"
+            ],
+            "confidence": "high"
+          },
+          "implicit_keywords": {
+            "enabled": true,
+            "keywords": [
+              "flask"
+            ],
+            "context_requirements": [
+              "goal_mentions_web_or_app",
+              "goal_mentions_ui_or_interface"
+            ],
+            "confidence": "medium"
+          }
+        },
+        "default_assumption": "web_app_with_backend",
+        "explanation": "Flask implies Python backend with web frontend"
+      },
+      "prompt_enhancement": {
+        "base": "Generate a Flask web application with proper static file handling",
+        "files": {
+          "py": {
+            "filename": "app.py",
+            "purpose": "Flask application with routes and static file serving",
+            "requirements": [
+              "Flask application instance",
+              "Route for serving index.html from static folder",
+              "Proper use of send_from_directory",
+              "Debug mode configuration"
+            ]
+          },
+          "html": {
+            "filename": "static/index.html",
+            "purpose": "Main HTML page",
+            "requirements": [
+              "ALWAYS use /static/ prefix for CSS/JS references",
+              "href=\"/static/css/styles.css\" NOT href=\"css/styles.css\"",
+              "src=\"/static/js/app.js\" NOT src=\"js/app.js\"",
+              "Semantic HTML5 structure"
+            ],
+            "anti_patterns": [
+              "NEVER use relative paths like css/styles.css",
+              "NEVER use relative paths like js/app.js"
+            ]
+          },
+          "css": {
+            "filename": "static/css/styles.css",
+            "purpose": "Styling",
+            "requirements": [
+              "Modern CSS with flexbox/grid",
+              "Responsive design"
+            ]
+          },
+          "js": {
+            "filename": "static/js/app.js",
+            "purpose": "Frontend logic",
+            "requirements": [
+              "Vanilla JavaScript or framework",
+              "Event handlers"
+            ]
+          }
+        },
+        "quality_requirements": {
+          "static_paths": "CRITICAL: HTML must use /static/ prefix for all asset references",
+          "structure": "Follow Flask conventions: app.py at root, static/ folder for assets"
+        }
+      }
+    },
+    "flask_api": {
+      "files": [
+        "py"
+      ],
+      "reason": "Flask REST API requires only Python backend code",
+      "priority": "high",
+      "trigger_conditions": {
+        "mode": "flexible",
+        "triggers": {
+          "explicit_keywords": {
+            "enabled": true,
+            "keywords": [
+              "flask api",
+              "flask rest api",
+              "flask backend",
+              "flask restful",
+              "flask json api"
+            ],
+            "confidence": "high"
+          },
+          "implicit_keywords": {
+            "enabled": true,
+            "keywords": [
+              "api with flask",
+              "rest with flask"
+            ],
+            "context_requirements": [],
+            "confidence": "medium"
+          }
+        },
+        "default_assumption": "api_only",
+        "explanation": "Flask API is backend-only, no frontend files needed"
+      },
+      "prompt_enhancement": {
+        "base": "Generate a Flask REST API application",
+        "files": {
+          "py": {
+            "filename": "app.py",
+            "purpose": "Flask REST API with JSON endpoints",
+            "requirements": [
+              "Flask application instance",
+              "JSON API routes with proper HTTP methods",
+              "Error handling with appropriate status codes",
+              "CORS support if needed"
+            ]
+          }
+        },
+        "quality_requirements": {
+          "restful": "Follow REST conventions for HTTP methods and status codes",
+          "json": "Return JSON responses with proper content-type"
+        }
+      }
+    },
+    "fastapi_backend": {
+      "files": [
+        "py"
+      ],
+      "reason": "FastAPI backend requires Python code with async support",
+      "priority": "high",
+      "trigger_conditions": {
+        "mode": "flexible",
+        "triggers": {
+          "explicit_keywords": {
+            "enabled": true,
+            "keywords": [
+              "fastapi",
+              "fastapi app",
+              "fastapi api",
+              "fastapi backend",
+              "fast api"
+            ],
+            "confidence": "high"
+          }
+        },
+        "default_assumption": "api_only",
+        "explanation": "FastAPI is typically used for API backends"
+      },
+      "prompt_enhancement": {
+        "base": "Generate a FastAPI application with proper async support",
+        "files": {
+          "py": {
+            "filename": "main.py",
+            "purpose": "FastAPI application with async routes",
+            "requirements": [
+              "FastAPI application instance",
+              "Async route handlers where appropriate",
+              "Pydantic models for request/response validation",
+              "Proper HTTP status codes"
+            ]
+          }
+        },
+        "quality_requirements": {
+          "typing": "Use type hints and Pydantic models",
+          "async": "Use async/await for I/O operations"
+        }
+      }
+    },
+    "django_web_app": {
+      "files": [
+        "py",
+        "html",
+        "css",
+        "js"
+      ],
+      "reason": "Django web app requires Python backend, templates, and static files",
+      "priority": "medium",
+      "trigger_conditions": {
+        "mode": "flexible",
+        "triggers": {
+          "explicit_keywords": {
+            "enabled": true,
+            "keywords": [
+              "django app",
+              "django web app",
+              "django application",
+              "django website",
+              "django project"
+            ],
+            "confidence": "high"
+          }
+        },
+        "default_assumption": "web_app_with_backend",
+        "explanation": "Django implies full-stack web application"
+      },
+      "prompt_enhancement": {
+        "base": "Generate a Django web application",
+        "files": {
+          "py": {
+            "filename": "views.py",
+            "purpose": "Django views",
+            "requirements": [
+              "Class-based or function-based views",
+              "Proper template rendering"
+            ]
+          },
+          "html": {
+            "filename": "templates/index.html",
+            "purpose": "Django template",
+            "requirements": [
+              "Use {% load static %} for static files",
+              "Use {% static 'path' %} for asset references"
+            ]
+          }
+        },
+        "quality_requirements": {
+          "static_files": "Use Django's {% static %} template tag for all assets"
+        }
+      }
+    },
+    "express_api": {
+      "files": [
+        "js"
+      ],
+      "reason": "Express.js API requires JavaScript/Node.js backend",
+      "priority": "medium",
+      "trigger_conditions": {
+        "mode": "flexible",
+        "triggers": {
+          "explicit_keywords": {
+            "enabled": true,
+            "keywords": [
+              "express api",
+              "express.js api",
+              "express backend",
+              "node api",
+              "nodejs api",
+              "express rest api"
+            ],
+            "confidence": "high"
+          }
+        },
+        "default_assumption": "api_only",
+        "explanation": "Express.js API is backend-only"
+      },
+      "prompt_enhancement": {
+        "base": "Generate an Express.js REST API",
+        "files": {
+          "js": {
+            "filename": "server.js",
+            "purpose": "Express.js server with API routes",
+            "requirements": [
+              "Express application instance",
+              "RESTful route handlers",
+              "Middleware for JSON parsing",
+              "Error handling middleware"
+            ]
+          }
+        },
+        "quality_requirements": {
+          "restful": "Follow REST conventions",
+          "middleware": "Use appropriate Express middleware"
+        }
+      }
+    }
+  },
+  "code_quality_guidelines": {
+    "calculator": {
+      "complexity_target": "simple",
+      "max_lines": 200,
+      "implementation_style": "straightforward_over_clever",
+      "common_bugs_to_avoid": [
+        "Token array manipulation errors",
+        "State management inconsistencies",
+        "Error handling gaps (division by zero, invalid input)",
+        "Using string '0' as sentinel value (prevents entering 0)"
+      ],
+      "recommended_patterns": [
+        "Simple evaluation (two operands at a time) OR",
+        "Shunting-yard algorithm for expression parsing",
+        "Clear separation of UI and logic",
+        "Explicit error state management (not string-based)"
+      ]
+    },
+    "todo": {
+      "complexity_target": "simple",
+      "max_lines": 150,
+      "common_bugs_to_avoid": [
+        "Missing localStorage null check",
+        "Event delegation issues",
+        "ID collision on task creation"
+      ],
+      "recommended_patterns": [
+        "Use unique IDs (Date.now() or UUID)",
+        "Event delegation for dynamic elements",
+        "Single source of truth pattern"
+      ]
+    },
+    "gallery": {
+      "complexity_target": "medium",
+      "max_lines": 200,
+      "common_bugs_to_avoid": [
+        "Image loading without lazy load",
+        "Lightbox not closing on escape",
+        "Memory leaks from event listeners"
+      ],
+      "recommended_patterns": [
+        "Lazy loading images",
+        "Event cleanup on modal close",
+        "Keyboard navigation support"
+      ]
+    },
+    "login": {
+      "complexity_target": "simple",
+      "max_lines": 150,
+      "common_bugs_to_avoid": [
+        "Password visible by default",
+        "Form submitting without validation",
+        "No feedback on validation errors"
+      ],
+      "recommended_patterns": [
+        "Password visibility toggle",
+        "Real-time validation feedback",
+        "Accessible error messages"
+      ]
+    },
+    "kanban": {
+      "complexity_target": "medium",
+      "max_lines": 300,
+      "common_bugs_to_avoid": [
+        "Drag preview not following cursor",
+        "Drop zone not highlighting",
+        "State not persisting"
+      ],
+      "recommended_patterns": [
+        "HTML5 drag and drop API",
+        "Visual feedback during drag",
+        "Immediate localStorage sync"
+      ]
+    }
+  },
+  "notes": {
+    "philosophy": "Default to web app for visual applications (calculator, todo, etc.) unless CLI is explicitly mentioned. Users expect visual interfaces for these common apps.",
+    "quality_over_features": "Prioritize correctness and simplicity over advanced features. A working simple calculator is better than a buggy advanced one.",
+    "file_references": "All HTML files MUST reference their corresponding CSS and JS files. This is enforced by default_file_reference_rules.md"
+  }
+}
