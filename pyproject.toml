@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "cognix"
-version = "0.2.0"
+version = "0.2.1"
 description = "AI-powered CLI development assistant"
 readme = "README.md"
 license = "Apache-2.0"
@@ -19,7 +19,6 @@ dependencies = [
     # Core AI providers
     "openai>=1.0.0",
     "anthropic>=0.5.0",
-    
     # Core utilities
     "pydantic>=1.10.0",  # indirect dependency via anthropic SDK
     "rich>=13.0.0",
@@ -27,17 +26,13 @@ dependencies = [
     "python-dotenv>=1.0.0",
     "toml>=0.10.2",
     "typing-extensions>=4.7.0",
-    
     # Testing (included for quality assurance)
     "pytest>=7.0.0",
-    
     # MCP support
     "mcp>=1.0.0",
-    
     # LINTING - Included by default for perfect first experience
     "ruff>=0.1.0",
 ]
-
 keywords = [
     "ai",
     "cli",
@@ -46,7 +41,6 @@ keywords = [
     "developer-tools",
     "autonomous-coding",
 ]
-
 classifiers = [
     "Development Status :: 4 - Beta",
     "Environment :: Console",
@@ -80,11 +74,12 @@ include-package-data = true
 
 [tool.setuptools.package-data]
 "cognix" = [
-    "*.txt", 
-    "*.md", 
+    "*.txt",
+    "*.md",
     "*.json",
-    # デフォルト設定テンプレート（初回実行時にユーザーディレクトリにコピー）
+    "data/.env.example",
     "data/templates/*.template",
+    "data/templates/*.md",
     "data/templates/**/*.template",
 ]
 
@@ -94,12 +89,11 @@ lint-python = [
     "ruff>=0.1.0",
     "pylint>=3.0.0",
 ]
-
 lint-all = [
     "cognix[lint-python]",
 ]
 
-# Linter設定
+# Linter settings
 [tool.flake8]
 max-line-length = 120
 ignore = ["E203", "W503"]

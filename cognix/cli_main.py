@@ -46,6 +46,10 @@ class CognixCLI(cmd.Cmd):
         """
         super().__init__()
         self.config = config
+        
+        # ===== APIキーに基づくモデル自動切り替え =====
+        self.config.validate_config()
+        
         self.auto_mode = auto_mode
         self._multiline_buffer = []
         self._empty_line_count = 0
@@ -478,12 +482,18 @@ class CognixCLI(cmd.Cmd):
             # 画面クリア後にエラーを表示することで、ユーザーに問題を通知する
             if self.init_error:
                 from rich.panel import Panel
-                err_console.print(Panel(
-                    f"[bold red]Startup Initialization Failed[/bold red]\n\n{self.init_error}",
-                    title="System Error",
-                    border_style="red"
-                ))
-                err_console.print("[yellow]Some features may be unavailable.[/yellow]\n")
+                # APIキー未設定エラーの場合はインタラクティブセットアップを実行
+                if "No LLM providers available" in self.init_error:
+                    self._run_api_key_setup()
+                    return
+                else:
+                    # その他のエラーはTraceback含めて表示
+                    err_console.print(Panel(
+                        f"[bold red]Startup Initialization Failed[/bold red]\n\n{self.init_error}",
+                        title="System Error",
+                        border_style="red"
+                    ))
+                    err_console.print("[yellow]Some features may be unavailable.[/yellow]\n")
 
             # 初回実行チェック
             if self.is_first_run:
@@ -544,6 +554,117 @@ class CognixCLI(cmd.Cmd):
                 if hasattr(self.session_manager, 'autosave'):
                     self.session_manager.autosave()
             except: pass
+    
+    def _run_api_key_setup(self):
+        """インタラクティブなAPIキーセットアップを実行"""
+        from pathlib import Path
+        
+        # GRAYのみローカル定義（theme_zen.pyに存在しないため）
+        GRAY = "\033[90m"
+        
+        rule_line = "─" * 50
+        
+        print()
+        print(f"{GREEN}Welcome to Cognix!{RESET}")
+        print(f"{GREEN}{rule_line}{RESET}")
+        print()
+        print(f"{GREEN}API Key Setup{RESET}")
+        print()
+        print(f"{GREEN}Choose your AI provider:{RESET}")
+        print("  [1] Anthropic (Claude) - Recommended")
+        print("  [2] OpenAI (GPT)")
+        print("  [3] Anthropic (Claude) & OpenAI (GPT)")
+        print("  [4] OpenRouter (Multiple models)")
+        print()
+        
+        # プロバイダー選択
+        try:
+            choice = input("Enter choice (1/2/3/4): ").strip()
+        except (KeyboardInterrupt, EOFError):
+            print("\n\nSetup cancelled.")
+            return
+        
+        if choice == "1":
+            provider = "anthropic"
+            key_names = ["ANTHROPIC_API_KEY"]
+            key_urls = ["https://console.anthropic.com/"]
+        elif choice == "2":
+            provider = "openai"
+            key_names = ["OPENAI_API_KEY"]
+            key_urls = ["https://platform.openai.com/api-keys"]
+        elif choice == "3":
+            provider = "both"
+            key_names = ["ANTHROPIC_API_KEY", "OPENAI_API_KEY"]
+            key_urls = ["https://console.anthropic.com/", "https://platform.openai.com/api-keys"]
+        elif choice == "4":
+            provider = "openrouter"
+            key_names = ["OPENAI_API_KEY"]
+            key_urls = ["https://openrouter.ai/keys"]
+        else:
+            print(f"\n{GRAY}Invalid choice. Setup cancelled.{RESET}")
+            return
+        
+        # APIキー入力
+        api_keys = {}
+        for i, key_name in enumerate(key_names):
+            print()
+            print(f"{GRAY}Get your API key at:{RESET} {key_urls[i]}")
+            print()
+            
+            try:
+                api_key = input(f"Enter your {key_name}: ").strip()
+            except (KeyboardInterrupt, EOFError):
+                print("\n\nSetup cancelled.")
+                return
+            
+            if not api_key:
+                print(f"\n{GRAY}No API key entered. Setup cancelled.{RESET}")
+                return
+            
+            api_keys[key_name] = api_key
+        
+        # .envファイル作成
+        env_path = Path.cwd() / ".env"
+        
+        try:
+            env_content = "# Cognix Configuration\nCOGNIX_PROJECT=true\n\n"
+            
+            if provider == "openrouter":
+                env_content += f"# OpenRouter\n{key_names[0]}={api_keys[key_names[0]]}\nOPENAI_BASE_URL=https://openrouter.ai/api/v1\n"
+            elif provider == "both":
+                env_content += f"# Anthropic\nANTHROPIC_API_KEY={api_keys['ANTHROPIC_API_KEY']}\n\n"
+                env_content += f"# OpenAI\nOPENAI_API_KEY={api_keys['OPENAI_API_KEY']}\n"
+            else:
+                env_content += f"# {provider.capitalize()}\n{key_names[0]}={api_keys[key_names[0]]}\n"
+            
+            env_path.write_text(env_content, encoding="utf-8")
+            
+            print()
+            print(f"{GREEN}✓ .env created successfully{RESET}")
+            
+            # sample_spec_tetris.mdをカレントディレクトリにコピー（サイレント）
+            try:
+                import shutil
+                package_dir = Path(__file__).parent
+                sample_spec_src = package_dir / "data" / "templates" / "sample_spec_tetris.md"
+                sample_spec_dst = Path.cwd() / "sample_spec_tetris.md"
+                
+                if sample_spec_src.exists() and not sample_spec_dst.exists():
+                    shutil.copy2(sample_spec_src, sample_spec_dst)
+            except Exception:
+                pass  # サンプルファイルのコピー失敗は無視
+            
+            print()
+            print(f"Run {GREEN}cognix{RESET} to start.")
+            print()
+            
+        except Exception as e:
+            print(f"\n{GRAY}Error creating .env file: {e}{RESET}")
+            print(f"\n{GRAY}Please create .env manually:{RESET}")
+            for key_name, api_key in api_keys.items():
+                print(f"  {key_name}={api_key}")
+            if provider == "openrouter":
+                print("  OPENAI_BASE_URL=https://openrouter.ai/api/v1")
     
     # ... (default, handle_slash_command, _handle_multiline_input, _reset_multiline_state, emptyline, do_exit, do_quit, cmd_make 等はそのまま) ...
     def default(self, line):

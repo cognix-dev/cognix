@@ -167,7 +167,7 @@ class OpenAIProvider(LLMProvider):
         params = {}
         
         # Token parameter
-        if self.model.startswith("gpt-5.1") or self.model.startswith("o1"):
+        if self.model.startswith("gpt-5") or self.model.startswith("o1"):
             params["max_completion_tokens"] = max_tokens
             # GPT-5 only supports temperature = 1
             if temperature != 1.0:
@@ -208,27 +208,73 @@ class OpenAIProvider(LLMProvider):
         temperature: float,
         max_tokens: int
     ) -> LLMResponse:
-        """Generate response using Chat Completions API"""
+        """Generate response using Chat Completions API
+        
+        GPT-5系でfinish_reason=lengthの場合にcontentがNoneになる問題を回避するため、
+        streaming modeで応答を収集する。
+        """
+        import logging
+        logger = logging.getLogger(__name__)
+        
         # Base parameters
         params = {
             "model": self.model,
             "messages": messages,
+            "stream": True,  # Use streaming to avoid empty content issue
+            "stream_options": {"include_usage": True}  # Get usage stats at the end
         }
         
         # Add model-specific parameters
         params.update(self._get_params_for_model(max_tokens, temperature))
         
-        response = self.client.chat.completions.create(**params)
+        # Collect streamed content
+        content_chunks = []
+        finish_reason = None
+        usage = None
+        
+        stream = self.client.chat.completions.create(**params)
+        
+        for chunk in stream:
+            # Collect content
+            if chunk.choices and chunk.choices[0].delta.content is not None:
+                content_chunks.append(chunk.choices[0].delta.content)
+            
+            # Get finish_reason from final chunk
+            if chunk.choices and chunk.choices[0].finish_reason:
+                finish_reason = chunk.choices[0].finish_reason
+            
+            # Get usage from final chunk (when stream_options.include_usage=True)
+            if hasattr(chunk, 'usage') and chunk.usage is not None:
+                usage = chunk.usage
+        
+        content = "".join(content_chunks)
+        
+        # Log warning if content is empty despite streaming
+        if not content:
+            logger.warning(
+                f"[LLM] Streaming returned empty content. "
+                f"finish_reason={finish_reason}, model={self.model}"
+            )
+        
+        # Fallback usage if not available
+        if usage is None:
+            usage_dict = {
+                "prompt_tokens": 0,
+                "completion_tokens": len(content) // 4,  # Rough estimate
+                "total_tokens": len(content) // 4
+            }
+        else:
+            usage_dict = {
+                "prompt_tokens": usage.prompt_tokens,
+                "completion_tokens": usage.completion_tokens,
+                "total_tokens": usage.total_tokens
+            }
         
         return LLMResponse(
-            content=response.choices[0].message.content,
+            content=content,
             model=self.model,
-            usage={
-                "prompt_tokens": response.usage.prompt_tokens,
-                "completion_tokens": response.usage.completion_tokens,
-                "total_tokens": response.usage.total_tokens
-            },
-            finish_reason=response.choices[0].finish_reason,
+            usage=usage_dict,
+            finish_reason=finish_reason or "unknown",
             timestamp=time.time()
         )
     

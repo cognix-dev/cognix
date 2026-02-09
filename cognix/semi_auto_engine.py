@@ -9113,14 +9113,15 @@ MANDATORY SVELTE REQUIREMENTS:
                         tail = response.content[-200:] if len(response.content) > 200 else response.content
                         logger.debug(f"[LLM] output_tail (last 200 chars): {repr(tail)}")
                     
-                    # ⭐ 続き生成: finish_reason == 'max_tokens' の場合、続きを自動生成
+                    # ⭐ 続き生成: finish_reason == 'max_tokens' or 'length' の場合、続きを自動生成
                     # 参考: Azure OpenAI/一般的なLLMツールの実装パターン
+                    # 注: OpenAI APIは'length'、Anthropic APIは'max_tokens'を返す
                     accumulated_content = response.content if hasattr(response, 'content') else ""
                     continuation_count = 0
                     max_continuations = 5  # 無限ループ防止
                     
                     while (hasattr(response, 'finish_reason') and 
-                           response.finish_reason == 'max_tokens' and 
+                           response.finish_reason in ('max_tokens', 'length') and 
                            continuation_count < max_continuations):
                         continuation_count += 1
                         logger.debug(f"[LLM] Continuation {continuation_count}/{max_continuations}: finish_reason was max_tokens, requesting continuation...")
@@ -9167,13 +9168,15 @@ IMPORTANT:
                         
                         # コンテンツを累積
                         if hasattr(continuation_response, 'content') and continuation_response.content:
-                            # ⭐ 修正: continuation出力の先頭にあるコードブロックマーカーを除去
-                            # LLMが続きを生成する際に新しい```マーカーを付けてしまう問題を修正
+                            # ⭐ 修正: continuation出力の先頭にあるファイルヘッダーとコードブロックマーカーを除去
+                            # LLMが続きを生成する際に新しい「## File: xxx」や```マーカーを付けてしまう問題を修正
+                            # これを残すと_extract_code_blocksが2つのセクションとして解釈し、
+                            # 後者が前者を上書きしてHTMLの前半が失われる
                             cont_content = continuation_response.content
-                            # パターン1: 先頭の ```言語名\n を除去
-                            cont_content = re.sub(r'^```\w*\r?\n?', '', cont_content)
-                            # パターン2: 末尾が ``` で途切れている場合も考慮（次のcontinuationで問題になる）
-                            # これは累積側で処理するため、ここでは先頭のみ処理
+                            # パターン1: 先頭の「## File: xxx」ヘッダー + コードブロックマーカーを除去
+                            cont_content = re.sub(r'^(?:##\s*File:\s*[^\n]*\r?\n)?```\w*\r?\n?', '', cont_content)
+                            # パターン2: 先頭が「## File: xxx」のみ（```なし）の場合も除去
+                            cont_content = re.sub(r'^##\s*File:\s*[^\n]*\r?\n', '', cont_content)
                             accumulated_content += cont_content
                             logger.debug(f"[LLM] Continuation {continuation_count}: Added {len(cont_content)} chars, total: {len(accumulated_content)}")
                         
@@ -9385,24 +9388,57 @@ IMPORTANT:
         # ========================================
         if not cleaned_files:
             # デフォルトファイル名の生成
-            goal_lower = goal.lower()
-            
-            if "python" in goal_lower or "py " in goal_lower:
-                primary_file = "main.py"
-            elif "javascript" in goal_lower or "js " in goal_lower:
-                primary_file = "script.js"
-            elif "html" in goal_lower:
-                primary_file = "index.html"
-            elif "react" in goal_lower:
-                primary_file = "App.jsx"
-            elif "css" in goal_lower:
-                primary_file = "style.css"
-            elif "typescript" in goal_lower or "ts " in goal_lower:
-                primary_file = "main.ts"
-            else:
-                primary_file = "code.txt"
-            
+            # 🆕 修正: response_textの実際のコンテンツからファイル種別を優先判定する。
+            # 問題: LLMが「## File: neon_tetris.html」形式でHTMLを返したが
+            # _extract_code_blocksが抽出に失敗した場合（finish_reason: length等）、
+            # goalに「javascript」が含まれているとscript.jsと誤判定され、
+            # auto-completion後もscript.jsがgenerated_codeに残り続ける。
             code_content = response_text.strip()
+            
+            # Step 1: response_textから「## File: xxx」ヘッダーを抽出してファイル名を取得
+            file_header_match = re.match(r'^##\s*File:\s*(\S+)', code_content)
+            if file_header_match:
+                primary_file = file_header_match.group(1)
+                logger.debug(f"[Code Extraction] Detected file header in response: {primary_file}")
+                # ヘッダー行とコードブロックマーカーを除去
+                lines = code_content.split('\n')
+                clean_start = 0
+                for i, line in enumerate(lines):
+                    stripped = line.strip()
+                    if stripped.startswith('## File:') or stripped.startswith('```'):
+                        clean_start = i + 1
+                    else:
+                        break
+                code_content = '\n'.join(lines[clean_start:])
+                # 末尾の```も除去
+                if code_content.rstrip().endswith('```'):
+                    code_content = code_content.rstrip()[:-3].rstrip()
+            else:
+                # Step 2: コンテンツの実際の内容からファイル種別を判定
+                content_lower = code_content[:2000].lower()
+                
+                if '<!doctype html' in content_lower or '<html' in content_lower:
+                    primary_file = "index.html"
+                    logger.debug("[Code Extraction] Content-based detection: HTML document")
+                else:
+                    # Step 3: goalキーワードによるフォールバック（従来ロジック）
+                    goal_lower = goal.lower()
+                    
+                    if "python" in goal_lower or "py " in goal_lower:
+                        primary_file = "main.py"
+                    elif "javascript" in goal_lower or "js " in goal_lower:
+                        primary_file = "script.js"
+                    elif "html" in goal_lower:
+                        primary_file = "index.html"
+                    elif "react" in goal_lower:
+                        primary_file = "App.jsx"
+                    elif "css" in goal_lower:
+                        primary_file = "style.css"
+                    elif "typescript" in goal_lower or "ts " in goal_lower:
+                        primary_file = "main.ts"
+                    else:
+                        primary_file = "code.txt"
+            
             return {primary_file: code_content}
         
 
@@ -10574,7 +10610,16 @@ Return ONLY the fixed code in this format:
         from collections import defaultdict
         errors_by_file = defaultdict(list)
         for err in sorted_errors:
+            # 🆕 存在しないファイルへのエラーを除外（tscが未生成ファイルを参照する問題対策）
+            if err['file'] not in generated_files:
+                logger.debug(f"[LLM Fix] Skipping error for non-existent file: {err['file']}")
+                continue
             errors_by_file[err['file']].append(err)
+        
+        # エラーが全て除外された場合は修正不要
+        if not errors_by_file:
+            logger.debug("[LLM Fix] All errors refer to non-existent files, skipping fix")
+            return None
         
         limited_errors = []
         for filename, file_errors in errors_by_file.items():
@@ -10638,6 +10683,11 @@ Return ONLY the fixed code in this format:
         
         prompt = f"""Fix the following linter errors in the code.
 
+    ⚠️ CRITICAL CONSTRAINTS:
+    - Do NOT create any new files. Only modify the existing files listed below.
+    - If an error refers to a non-existent file, IGNORE that error entirely.
+    - You must ONLY output files that already exist in "CURRENT CODE" section.
+
     REPOSITORY CONTEXT (available functions and classes):
     {repository_map if repository_map else 'No repository context available'}
 
@@ -10656,7 +10706,8 @@ Return ONLY the fixed code in this format:
     3. Do NOT change any other code
     4. Preserve all existing functionality
     5. Keep the code in its original language (JavaScript, Python, etc.)
-    6. Return the fixed files using this format:
+    6. Do NOT create new files - only fix files that exist in CURRENT CODE above
+    7. Return the fixed files using this format:
 
     ## File: filename
     ```
@@ -10704,6 +10755,60 @@ Return ONLY the fixed code in this format:
             fixed_files = self._extract_code_blocks(response_text)
             
             if fixed_files:
+                # 🆕 新規ファイル除外: 元のファイルセットにないファイルは捨てる
+                original_filenames = set(generated_files.keys())
+                
+                # ファイル名正規化マッピング（LLMが微妙に異なるファイル名を返す対策）
+                # 例: "./neon_tetris.html" → "neon_tetris.html"
+                normalized_originals = {}
+                for orig in original_filenames:
+                    # 正規化キー: 先頭の./ を除去 + 小文字化
+                    norm_key = orig
+                    while norm_key.startswith('./'):
+                        norm_key = norm_key[2:]
+                    norm_key = norm_key.lower()
+                    normalized_originals[norm_key] = orig
+                    # basename単体もマッピング（パス不一致対策）
+                    base_key = os.path.basename(orig).lower()
+                    if base_key not in normalized_originals:
+                        normalized_originals[base_key] = orig
+                
+                filtered_files = {}
+                for k, v in fixed_files.items():
+                    if k in original_filenames:
+                        # 完全一致
+                        filtered_files[k] = v
+                    else:
+                        # 正規化一致を試行
+                        norm_k = k
+                        while norm_k.startswith('./'):
+                            norm_k = norm_k[2:]
+                        norm_k = norm_k.lower()
+                        base_k = os.path.basename(k).lower()
+                        
+                        matched_original = None
+                        if norm_k in normalized_originals:
+                            matched_original = normalized_originals[norm_k]
+                        elif base_k in normalized_originals:
+                            matched_original = normalized_originals[base_k]
+                        
+                        if matched_original:
+                            # 正規化一致: 元のファイル名をキーとして使用
+                            filtered_files[matched_original] = v
+                            logger.debug(f"[LLM Fix] Normalized filename: '{k}' -> '{matched_original}'")
+                        else:
+                            logger.debug(f"[LLM Fix] Removed unexpected new file: '{k}'")
+                
+                if len(filtered_files) < len(fixed_files):
+                    removed_count = len(fixed_files) - len(filtered_files)
+                    logger.debug(f"[LLM Fix] Filtered out {removed_count} unexpected file(s)")
+                
+                fixed_files = filtered_files
+                
+                if not fixed_files:
+                    logger.debug("[LLM Fix] No valid fixes after filtering out new files")
+                    return None
+                
                 # 元のファイルとマージ (修正されなかったファイルも含める)
                 result = generated_files.copy()
                 result.update(fixed_files)
@@ -19956,6 +20061,11 @@ Return ONLY the {file_type} code, no explanations.
         JavaScriptのアニメーションループパターンを検証
         gameLoop等のメソッドがrequestAnimationFrame経由で正しく呼ばれているかチェック
         
+        検出パターン:
+          1. animation loop関数が引数なしで直接呼び出されている
+          2. requestAnimationFrameのcallback内でDate.now()とtimestamp引数が混在している
+             （時間基準不一致バグ: DOMHighResTimeStamp vs Unix epoch ms）
+        
         Args:
             generated_files: 生成されたファイル {filepath: content}
         
@@ -19967,20 +20077,28 @@ Return ONLY the {file_type} code, no explanations.
         issues = []
         
         # アニメーションループ関連のメソッド名パターン
-        LOOP_METHOD_NAMES = ['gameLoop', 'animationLoop', 'renderLoop', 'mainLoop', 'update', 'animate']
+        LOOP_METHOD_NAMES = ['gameLoop', 'animationLoop', 'renderLoop', 'mainLoop', 'update', 'animate', 'loop', 'frame', 'tick']
         
         for filepath, content in generated_files.items():
-            if not filepath.endswith(('.js', '.jsx', '.ts', '.tsx')):
+            # .htmlファイルの場合、<script>タグ内のJSを抽出
+            if filepath.endswith('.html'):
+                script_blocks = re.findall(r'<script[^>]*>(.*?)</script>', content, re.DOTALL)
+                if not script_blocks:
+                    continue
+                js_content = '\n'.join(script_blocks)
+            elif filepath.endswith(('.js', '.jsx', '.ts', '.tsx')):
+                js_content = content
+            else:
                 continue
             
             # CRLF対応
-            content = content.replace('\r\n', '\n')
-            lines = content.split('\n')
+            js_content = js_content.replace('\r\n', '\n')
+            lines = js_content.split('\n')
             
             for method_name in LOOP_METHOD_NAMES:
-                # メソッド定義を検出: gameLoop(timestamp) or gameLoop(currentTime) 等
-                method_def_pattern = rf'{method_name}\s*\(\s*(\w+)\s*\)\s*{{'
-                method_def_match = re.search(method_def_pattern, content)
+                # メソッド定義を検出: gameLoop(timestamp) or function gameLoop(currentTime) 等
+                method_def_pattern = rf'(?:function\s+)?{method_name}\s*\(\s*(\w+)\s*\)\s*{{'
+                method_def_match = re.search(method_def_pattern, js_content)
                 
                 if not method_def_match:
                     continue
@@ -19994,27 +20112,25 @@ Return ONLY the {file_type} code, no explanations.
                 if not is_time_param:
                     continue
                 
-                # メソッドの最初の呼び出しを検出
-                # 問題パターン: this.gameLoop() - 引数なし
-                bad_call_pattern = rf'this\.{method_name}\s*\(\s*\)'
+                # requestAnimationFrameで呼ばれているか確認
+                raf_call_pattern = rf'requestAnimationFrame\s*\([^)]*{method_name}'
+                is_raf_callback = re.search(raf_call_pattern, js_content) is not None
                 
-                # 良いパターン: requestAnimationFrame((t) => this.gameLoop(t))
+                if not is_raf_callback:
+                    continue
+                
+                # ===== 検出1: 引数なしの直接呼び出し =====
+                bad_call_pattern = rf'this\.{method_name}\s*\(\s*\)'
                 good_call_pattern = rf'requestAnimationFrame\s*\([^)]*{method_name}'
                 
                 for line_no, line in enumerate(lines, 1):
-                    # コメント行はスキップ
                     stripped = line.strip()
                     if stripped.startswith('//') or stripped.startswith('/*'):
                         continue
-                    
-                    # requestAnimationFrame内での呼び出しは正常
                     if re.search(good_call_pattern, line):
                         continue
-                    
-                    # 引数なしの直接呼び出しを検出
                     bad_match = re.search(bad_call_pattern, line)
                     if bad_match:
-                        # この行がrequestAnimationFrame内でないことを確認
                         if 'requestAnimationFrame' not in line:
                             issues.append({
                                 'type': 'animation_loop_bad_call',
@@ -20026,6 +20142,79 @@ Return ONLY the {file_type} code, no explanations.
                                 'details': f"'{method_name}()' called without argument. Should use: requestAnimationFrame((t) => this.{method_name}(t))"
                             })
                             logger.debug(f"[G-22] {filepath}:{line_no} - Animation loop '{method_name}' called without timestamp argument")
+                
+                # ===== 検出2: 時間基準不一致（Date.now() vs rAF timestamp） =====
+                # requestAnimationFrameのcallback引数(DOMHighResTimeStamp)を受け取る関数内で
+                # タイムスタンプと比較される変数がDate.now()で代入されている場合を検出
+                
+                # 関数本体を抽出（ブレース対応）
+                func_start = method_def_match.start()
+                brace_count = 0
+                func_body_start = js_content.index('{', func_start)
+                func_body_end = func_body_start
+                for ci in range(func_body_start, len(js_content)):
+                    if js_content[ci] == '{':
+                        brace_count += 1
+                    elif js_content[ci] == '}':
+                        brace_count -= 1
+                        if brace_count == 0:
+                            func_body_end = ci + 1
+                            break
+                
+                func_body = js_content[func_body_start:func_body_end]
+                
+                # Step A: タイムスタンプ引数のエイリアスを特定
+                # 例: const now = timestamp; → nowはtimestampのエイリアス
+                aliases = {param_name}
+                alias_pattern = rf'(?:const|let|var)\s+(\w+)\s*=\s*(?:{"|".join(re.escape(a) for a in aliases)})\b'
+                for alias_match in re.finditer(alias_pattern, func_body):
+                    aliases.add(alias_match.group(1))
+                
+                # Step B: エイリアスと差分比較される変数を特定
+                # 例: now - lastDropTime → lastDropTimeが比較対象
+                comparison_vars = set()
+                for alias in aliases:
+                    for m in re.finditer(rf'{re.escape(alias)}\s*-\s*(\w+)', func_body):
+                        var = m.group(1)
+                        if var not in aliases and not var.isdigit():
+                            comparison_vars.add(var)
+                    for m in re.finditer(rf'(\w+)\s*-\s*{re.escape(alias)}', func_body):
+                        var = m.group(1)
+                        if var not in aliases and not var.isdigit():
+                            comparison_vars.add(var)
+                
+                # Step C: これらの変数がファイル全体でDate.now()で代入されているか検出
+                for var in comparison_vars:
+                    date_now_assigns = list(re.finditer(
+                        rf'{re.escape(var)}\s*=\s*Date\.now\(\)',
+                        js_content
+                    ))
+                    if date_now_assigns:
+                        for dna in date_now_assigns:
+                            dna_line = js_content[:dna.start()].count('\n') + 1
+                            dna_code = js_content.split('\n')[dna_line - 1].strip()
+                            # コメント行はスキップ
+                            if dna_code.startswith('//') or dna_code.startswith('/*'):
+                                continue
+                            issues.append({
+                                'type': 'timestamp_origin_mismatch',
+                                'file': filepath,
+                                'line': dna_line,
+                                'method_name': method_name,
+                                'param_name': param_name,
+                                'var_name': var,
+                                'code': dna_code,
+                                'details': (
+                                    f"'{var}' is assigned Date.now() (Unix epoch ms) but compared with "
+                                    f"rAF timestamp (DOMHighResTimeStamp) in '{method_name}({param_name})'. "
+                                    f"Replace Date.now() with performance.now(), or use timestamp "
+                                    f"parameter consistently."
+                                )
+                            })
+                            logger.debug(
+                                f"[G-22] {filepath}:{dna_line} - Time origin mismatch: "
+                                f"'{var} = Date.now()' but compared with rAF timestamp in {method_name}()"
+                            )
         
         if issues:
             logger.debug(f"[G-22] Found {len(issues)} JavaScript animation loop issues")
@@ -20041,6 +20230,10 @@ Return ONLY the {file_type} code, no explanations.
     ) -> Dict[str, str]:
         """
         JavaScriptアニメーションループの問題を自動修正
+        
+        修正パターン:
+          1. animation_loop_bad_call: this.gameLoop() → requestAnimationFrame((t) => this.gameLoop(t))
+          2. timestamp_origin_mismatch: Date.now() → performance.now() (rAF callback内)
         """
         if not issues:
             return generated_files
@@ -20056,16 +20249,36 @@ Return ONLY the {file_type} code, no explanations.
             method_name = issue['method_name']
             param_name = issue['param_name']
             
-            # 問題パターンを正しいパターンに置換
-            # this.gameLoop(); → requestAnimationFrame((t) => this.gameLoop(t));
-            bad_pattern = rf'(\s*)this\.{method_name}\s*\(\s*\)\s*;'
-            good_replacement = rf'\1requestAnimationFrame((t) => this.{method_name}(t));'
+            if issue['type'] == 'animation_loop_bad_call':
+                # 問題パターンを正しいパターンに置換
+                # this.gameLoop(); → requestAnimationFrame((t) => this.gameLoop(t));
+                bad_pattern = rf'(\s*)this\.{method_name}\s*\(\s*\)\s*;'
+                good_replacement = rf'\1requestAnimationFrame((t) => this.{method_name}(t));'
+                
+                new_content = re.sub(bad_pattern, good_replacement, content)
+                
+                if new_content != content:
+                    generated_files[filepath] = new_content
+                    logger.debug(f"[G-22] ✅ Fixed animation loop call in {filepath}")
             
-            new_content = re.sub(bad_pattern, good_replacement, content)
-            
-            if new_content != content:
-                generated_files[filepath] = new_content
-                logger.debug(f"[G-22] ✅ Fixed animation loop call in {filepath}")
+            elif issue['type'] == 'timestamp_origin_mismatch':
+                # rAFタイムスタンプと比較される変数へのDate.now()代入をperformance.now()に置換
+                var_name = issue.get('var_name', '')
+                if not var_name:
+                    continue
+                
+                # 該当変数へのDate.now()代入を置換
+                pattern = rf'({re.escape(var_name)}\s*=\s*)Date\.now\(\)'
+                replacement = rf'\1performance.now()'
+                new_content = re.sub(pattern, replacement, content)
+                
+                if new_content != content:
+                    generated_files[filepath] = new_content
+                    content = new_content  # 次のissue処理用に更新
+                    count = content.count('performance.now()') - content.count('performance.now()')
+                    logger.debug(f"[G-22] ✅ Fixed '{var_name} = Date.now()' → '{var_name} = performance.now()' in {filepath}")
+        
+        return generated_files
         
         return generated_files
 
@@ -22465,7 +22678,7 @@ Return ONLY the JSON array, no other text."""
         """
         unified diffから変更範囲を抽出
         
-        DESIGN CHANGE v2.0が出力するunified diff形式を解析し、
+        DESIGN CHANGE v2.1が出力するunified diff形式を解析し、
         変更された行範囲のリストを返す。
         
         Args:
@@ -23650,21 +23863,56 @@ Return ONLY the JSON array, no other text."""
                 )
                 
                 # ============================================================
-                # DESIGN CHANGE v2.0: Abort戻り値の処理
+                # DESIGN CHANGE v2.1: Abort戻り値の処理
                 # ============================================================
                 if fixed_content and isinstance(fixed_content, str):
                     if fixed_content.startswith("HARD_ABORT:") or fixed_content.startswith("ESCALATE:"):
                         abort_reason = fixed_content.split(":", 1)[1] if ":" in fixed_content else "Unknown"
-                        logger.debug(f"[DESIGN CHANGE v2.0] {filepath}: {fixed_content.split(':')[0]} - {abort_reason}")
+                        logger.debug(f"[DESIGN CHANGE v2.1] {filepath}: {fixed_content.split(':')[0]} - {abort_reason}")
                         # HARD_ABORT/ESCALATEの場合は修正をスキップ
                         if rejected_files is not None:
                             rejected_files.add(filepath)
                         continue
                     elif fixed_content.startswith("SOFT_ABORT:"):
                         abort_reason = fixed_content.split(":", 1)[1] if ":" in fixed_content else "Unknown"
-                        logger.debug(f"[DESIGN CHANGE v2.0] {filepath}: SOFT_ABORT (no usable code) - {abort_reason}")
-                        # SOFT_ABORTでコードがない場合はスキップ
-                        continue
+                        logger.debug(f"[DESIGN CHANGE v2.1] {filepath}: SOFT_ABORT - {abort_reason}")
+                        
+                        # ============================================================
+                        # 🆕 v2.1: SOFT_ABORT後の残存問題を再評価
+                        # 残った問題がMINIMAL_CHANGEで対応可能なら降格して再試行
+                        # ============================================================
+                        if file_issues:
+                            re_review_decision, re_review_reason = self._review_before_fix(
+                                filepath=filepath,
+                                content=all_files[filepath],  # 元のコンテンツ
+                                issues=file_issues,
+                                all_files=all_files,
+                                goal=goal
+                            )
+                            
+                            if re_review_decision == "MINIMAL_CHANGE":
+                                logger.debug(f"[DESIGN CHANGE v2.1] {filepath}: Demoting to MINIMAL_CHANGE after SOFT_ABORT - {re_review_reason}")
+                                fixed_content = self._fix_with_invariants(
+                                    filepath=filepath,
+                                    content=all_files[filepath],
+                                    issues=file_issues,
+                                    goal=goal,
+                                    dependency_context=dep_context
+                                )
+                                # MINIMAL_CHANGEの結果を検証
+                                if fixed_content and isinstance(fixed_content, str) and fixed_content.startswith("ESCALATE:"):
+                                    # ESCALATEした場合、既にDESIGN CHANGEで失敗しているのでスキップ
+                                    logger.debug(f"[DESIGN CHANGE v2.1] {filepath}: MINIMAL_CHANGE escalated, but DESIGN_CHANGE already failed, skipping")
+                                    continue
+                                elif not fixed_content:
+                                    logger.debug(f"[DESIGN CHANGE v2.1] {filepath}: MINIMAL_CHANGE returned no content, skipping")
+                                    continue
+                                # 有効な修正があれば後続の処理へ流す（continueしない）
+                            else:
+                                logger.debug(f"[DESIGN CHANGE v2.1] {filepath}: Re-review still requires DESIGN_CHANGE ({re_review_reason}), skipping")
+                                continue
+                        else:
+                            continue
             else:
                 fixed_content = self._fix_with_invariants(
                     filepath=filepath,
@@ -23689,12 +23937,12 @@ Return ONLY the JSON array, no other text."""
                         dependency_context=dep_context
                     )
                     
-                    # DESIGN CHANGE v2.0: 再試行後のAbort処理
+                    # DESIGN CHANGE v2.1: 再試行後のAbort処理
                     if fixed_content and isinstance(fixed_content, str):
                         if fixed_content.startswith("HARD_ABORT:") or fixed_content.startswith("ESCALATE:") or fixed_content.startswith("SOFT_ABORT:"):
                             abort_type = fixed_content.split(":")[0]
                             abort_reason = fixed_content.split(":", 1)[1] if ":" in fixed_content else "Unknown"
-                            logger.debug(f"[DESIGN CHANGE v2.0] {filepath}: {abort_type} after escalation - {abort_reason}")
+                            logger.debug(f"[DESIGN CHANGE v2.1] {filepath}: {abort_type} after escalation - {abort_reason}")
                             if rejected_files is not None:
                                 rejected_files.add(filepath)
                             continue
@@ -24593,12 +24841,12 @@ Fix the issues below. Output ONLY a unified diff.
 Your fix is SUCCESSFUL if:
 ✓ Each issue is fixed with the MINIMUM possible change
 ✓ You output ONLY a diff (not the full file)
-✓ Your diff is 20 lines or less
+✓ Your diff is 30 lines or less
 
 Your fix is a FAILURE if:
 ✗ You changed anything not required by the issues
 ✗ You output more than the diff
-✗ Your diff exceeds 20 lines
+✗ Your diff exceeds 30 lines
 
 A SMALL fix is BETTER than a COMPREHENSIVE fix.
 
@@ -24637,13 +24885,13 @@ We want RIGHT.
 <diff>
 ```diff
 [Your unified diff here - ONLY the changed parts]
-[Maximum 20 lines]
+[Maximum 30 lines]
 ```
 </diff>
 
-If fix requires more than 20 diff lines, output instead:
+If fix requires more than 30 diff lines, output instead:
 <abort>
-SCOPE_EXCEEDED: Fix requires [N] lines, limit is 20.
+SCOPE_EXCEEDED: Fix requires [N] lines, limit is 30.
 Issues that CAN be fixed within limit: [list or "none"]
 </abort>
 
@@ -24654,10 +24902,10 @@ File: {filepath} ({content_lines} lines)
 ```"""
 
         try:
-            # v2.0: 差分出力なのでトークン数を削減
+            # v2.1: 差分出力なのでトークン数を削減
             max_tokens = 4000
             
-            logger.debug(f"[DESIGN CHANGE v2.0] Sending request for {filepath}")
+            logger.debug(f"[DESIGN CHANGE v2.1] Sending request for {filepath}")
             
             response = self.llm_manager.generate_response(
                 prompt=prompt,
@@ -24668,14 +24916,14 @@ File: {filepath} ({content_lines} lines)
             response_text = response.content if hasattr(response, 'content') else str(response)
             
             # ============================================================
-            # レスポンスパース（v2.0仕様 - 差分形式）
+            # レスポンスパース（v2.1仕様 - 差分形式）
             # ============================================================
             
             # 1. Abort検出（SCOPE_EXCEEDED）
             if '<abort>' in response_text.lower() or 'SCOPE_EXCEEDED' in response_text:
                 abort_reason_match = re.search(r'SCOPE_EXCEEDED[:\s]*(.+?)(?:\n|$)', response_text)
                 abort_reason = abort_reason_match.group(1).strip() if abort_reason_match else "Scope exceeded"
-                logger.debug(f"[DESIGN CHANGE v2.0] {filepath}: ABORT - {abort_reason}")
+                logger.debug(f"[DESIGN CHANGE v2.1] {filepath}: ABORT - {abort_reason}")
                 return f"SOFT_ABORT:{abort_reason}"
             
             # 2. 差分抽出
@@ -24688,10 +24936,10 @@ File: {filepath} ({content_lines} lines)
                 diff_content = diff_match.group(1).strip()
                 diff_lines = diff_content.split('\n')
                 
-                # 差分行数チェック（20行制限）
-                if len(diff_lines) > 25:  # 少し余裕を持たせる
-                    logger.debug(f"[DESIGN CHANGE v2.0] {filepath}: Diff too large ({len(diff_lines)} lines)")
-                    return f"SOFT_ABORT:Diff exceeded limit ({len(diff_lines)} lines)"
+                # 差分行数チェック（30行指示、50行受け入れ - バッファ付き制限 v2.1）
+                if len(diff_lines) > 50:
+                    logger.debug(f"[DESIGN CHANGE v2.1] {filepath}: Diff too large ({len(diff_lines)} lines, limit=50)")
+                    return f"SOFT_ABORT:Diff exceeded limit ({len(diff_lines)} lines, limit=50)"
                 
                 # 差分を元のコードに適用（SIC検証付き）
                 try:
@@ -24728,18 +24976,18 @@ File: {filepath} ({content_lines} lines)
                             logger.debug(f"[SIC] {filepath}: Rolling back diff, using fallback")
                             # diffを却下してフォールバックへ
                         else:
-                            logger.debug(f"[DESIGN CHANGE v2.0] {filepath}: Applied diff ({len(diff_lines)} lines) - SIC passed")
+                            logger.debug(f"[DESIGN CHANGE v2.1] {filepath}: Applied diff ({len(diff_lines)} lines) - SIC passed")
                             return fixed_content
                     else:
-                        logger.debug(f"[DESIGN CHANGE v2.0] {filepath}: Diff application failed or no change")
+                        logger.debug(f"[DESIGN CHANGE v2.1] {filepath}: Diff application failed or no change")
                 except Exception as e:
-                    logger.debug(f"[DESIGN CHANGE v2.0] {filepath}: Diff parse error: {e}")
+                    logger.debug(f"[DESIGN CHANGE v2.1] {filepath}: Diff parse error: {e}")
             
             # 3. フォールバック: 従来の完全コード抽出
             fixed_files = self._parse_llm_response(response_text)
             
             if fixed_files:
-                logger.debug(f"[DESIGN CHANGE v2.0] {filepath}: Fallback - extracted {len(fixed_files)} file(s)")
+                logger.debug(f"[DESIGN CHANGE v2.1] {filepath}: Fallback - extracted {len(fixed_files)} file(s)")
                 normalized_filepath = filepath.replace('\\', '/')
                 for fpath, code in fixed_files.items():
                     normalized_fpath = fpath.replace('\\', '/')
@@ -24750,11 +24998,11 @@ File: {filepath} ({content_lines} lines)
                 if len(fixed_files) == 1:
                     return list(fixed_files.values())[0]
             
-            logger.debug(f"[DESIGN CHANGE v2.0] {filepath}: No valid output extracted")
+            logger.debug(f"[DESIGN CHANGE v2.1] {filepath}: No valid output extracted")
             return None
             
         except Exception as e:
-            logger.debug(f"[DESIGN CHANGE v2.0] Error for {filepath}: {e}")
+            logger.debug(f"[DESIGN CHANGE v2.1] Error for {filepath}: {e}")
             return None
     
     def _apply_unified_diff(self, original: str, diff: str) -> Optional[str]:

@@ -37,8 +37,14 @@ class RepositoryAnalyzer:
         'node_modules', '.git', '__pycache__', '.venv', 'venv', '.env',
         'dist', 'build', '.next', '.cache', 'coverage', '.pytest_cache',
         '.tox', '.mypy_cache', '.DS_Store', 'Thumbs.db', '.idea', '.vscode',
-        '.gradle', 'target', 'bin', 'obj', '.nuget', '.cognix'
+        '.gradle', 'target', 'bin', 'obj', '.nuget', '.cognix',
+        # Python package directories (safe to always exclude)
+        'site-packages', 'lib64', '.eggs', 'eggs', '__pypackages__',
     }
+    
+    # Directories to exclude only when inside a Python virtual environment
+    # (detected by pyvenv.cfg in parent directory)
+    VENV_SUBDIRS = {'Lib', 'lib', 'Scripts', 'scripts', 'Include', 'include'}
     
     # Files to ignore
     IGNORE_FILES = {
@@ -154,7 +160,18 @@ class RepositoryAnalyzer:
             return False
         
         def should_skip_dir(dir_path: Path) -> bool:
-            return dir_path.name in self.IGNORE_DIRS
+            # 標準の除外リスト
+            if dir_path.name in self.IGNORE_DIRS:
+                return True
+            
+            # Python仮想環境の検出: pyvenv.cfg が同階層に存在する場合
+            # そのディレクトリ配下の Lib, Scripts, Include を除外
+            if dir_path.name in self.VENV_SUBDIRS:
+                parent = dir_path.parent
+                if (parent / 'pyvenv.cfg').exists():
+                    return True
+            
+            return False
         
         try:
             # Use iterative approach to avoid deep recursion

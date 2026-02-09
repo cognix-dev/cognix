@@ -515,7 +515,7 @@ class UtilitiesModule(CLIModuleBase):
                 from cognix import __version__
                 version = __version__
             except:
-                version = "0.2.0"
+                version = "0.2.1"
                 
             # Box-style logo
             logo = f"""{CYAN}Cognix v{version}{RESET} // Augmented AI Development Partner for CLI{RESET}
@@ -539,7 +539,7 @@ Full-Pipeline Development | Seamless Terminal Experience
             
         except Exception as e:
             # Fallback to simple logo if anything goes wrong
-            return """Cognix v0.2.0 // Augmented AI Development Partner for CLI
+            return """Cognix v0.2.1 // Augmented AI Development Partner for CLI
 
 ┌───┬───┬───┬───┬───┬───┐
 │ C │ O │ G │ N │ I │ X │
