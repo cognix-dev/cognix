@@ -20,7 +20,7 @@ from datetime import datetime
 
 
 class SimpleTestRunner:
-    """Simple test runner for v0.1.4 - UNCHANGED from bug-free version"""
+    """Simple test runner"""
     
     def find_test_files(self, target_file: str) -> List[str]:
         """Find test files for the target file"""

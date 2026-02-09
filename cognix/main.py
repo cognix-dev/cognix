@@ -75,7 +75,7 @@ Interactive mode:
     parser.add_argument(
         "--version",
         action="version",
-        version="Cognix 0.2.0"
+        version="Cognix 0.2.1"
     )
 
     parser.add_argument(

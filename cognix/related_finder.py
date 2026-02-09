@@ -1,5 +1,5 @@
 """
-Related File Finder for Cognix v0.1.4
+Related File Finder for Cognix
 Basic file relationship detection through imports, tests, and naming patterns
 """
 
@@ -10,7 +10,7 @@ from typing import List, Set
 
 
 class BasicRelatedFinder:
-    """Basic file relationship finder for v0.1.4"""
+    """Basic file relationship finder"""
     
     def __init__(self, context_manager):
         """Initialize with FileContext"""

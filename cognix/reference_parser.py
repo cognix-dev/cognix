@@ -1,5 +1,5 @@
 """
-Reference Parser for Cognix v0.1.4 - Debug Version
+Reference Parser for Cognix
 Handles @filename and #function reference notation parsing
 """
 

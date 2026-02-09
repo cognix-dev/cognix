@@ -5,6 +5,33 @@ All notable changes to Cognix will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.2.1] - 2026-02-09
+
+### Added
+- **Interactive API Key Setup Wizard** - Automatic setup flow when API keys are missing
+  - Provider selection menu (Anthropic, OpenAI, both, or OpenRouter)
+  - Guided API key entry with provider URLs
+  - Automatic `.env` file generation in current directory
+  - Silent copy of `sample_spec_tetris.md` for quick start reference
+- **Enhanced API Key Validation** - Improved error detection and user guidance
+  - Automatic model switching based on available API keys
+  - OpenRouter configuration validation
+  - Detailed error messages with setup instructions
+
+### Changed
+- **Startup Experience** - Streamlined first-time user flow
+  - No manual `.env` creation required for new users
+  - Clear provider selection with URL guidance
+  - Immediate restart prompt after configuration
+- **Error Messages** - More user-friendly API key error handling
+  - "No LLM providers available" now triggers interactive setup
+  - Other errors display with comprehensive troubleshooting info
+
+### Fixed
+- Improved handling of missing API key scenarios
+- Better OpenRouter configuration detection
+- Enhanced validation for malformed API keys
+
 ## [0.2.0] - 2026-02-04
 
 ### Added
@@ -31,7 +58,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Requirement Validator** - Implementation completeness verification against specifications.
 - **Safe Editor** - File modifications with rollback capability.
 - **Stylecode Extractor** - Consistent code style pattern analysis and maintenance.
-- **`build.py`** - Nuitka binary build automation script (check/standalone/onefile/clean modes).
 - **`.env.example`** - API key configuration template.
 
 ### Changed
@@ -240,6 +266,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 pip install cognix
 ```
 
+[0.2.1]: https://github.com/cognix-dev/cognix/compare/v0.2.0...v0.2.1
 [0.2.0]: https://github.com/cognix-dev/cognix/compare/v0.1.5...v0.2.0
 [0.1.5]: https://github.com/cognix-dev/cognix/compare/v0.1.4...v0.1.5
 [0.1.4]: https://github.com/cognix-dev/cognix/compare/v0.1.3...v0.1.4

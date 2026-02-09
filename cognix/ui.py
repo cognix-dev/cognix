@@ -485,9 +485,9 @@ def show_startup_animation(config=None):
     起動ロゴアニメを表示（Zenがあれば version を渡す / 無ければ静的）
     """
     try:
-        version = getattr(config, "version", None) or "0.2.0"
+        version = getattr(config, "version", None) or "0.2.1"
     except Exception:
-        version = "0.2.0"
+        version = "0.2.1"
 
     if '_zen_logo_once' in globals() and _zen_logo_once:
         try:

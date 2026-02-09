@@ -42,3 +42,6 @@ Thumbs.db
 # Cognix specific
 .cognix/
 sessions/
+# Temporary build files
+cognix/code.zip
+docs.zip

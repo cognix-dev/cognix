@@ -31,7 +31,7 @@ class Config:
     """Configuration manager"""
 
     DEFAULT_CONFIG = {
-        "version": "0.2.0",
+        "version": "0.2.1",
         "model": "claude-sonnet-4-5-20250929",
         "temperature": 0.7,
         "max_tokens": 4000,
@@ -955,7 +955,7 @@ class Config:
         
         for model_id, model_config in all_models.items():
             provider = model_config.get("provider")
-            if provider in available_providers:
+            if provider and provider.lower() in available_providers:
                 available_models.append(model_id)
         
         return available_models
