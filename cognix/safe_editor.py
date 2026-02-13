@@ -143,11 +143,11 @@ class SafeEditor:
         self.repository_manager = repository_manager
         
         # バックアップディレクトリの設定
-        self.backup_dir = Path.cwd() / ".cognix" / "backups"
+        self.backup_dir = Path.home() / ".cognix" / "backups"
         self.backup_manager = BackupManager(self.backup_dir)
         
         # 編集履歴の管理
-        self.history_file = Path.cwd() / ".cognix" / "edit_history.json"
+        self.history_file = Path.home() / ".cognix" / "edit_history.json"
         self.edit_history: List[EditContext] = self._load_edit_history()
         
         # 安全性設定の読み込み
@@ -794,7 +794,7 @@ class SafeEditor:
 
     def _load_safety_config(self) -> Dict[str, Any]:
         """安全性設定を読み込み"""
-        config_file = Path.cwd() / ".cognix" / "safety_config.json"
+        config_file = Path.home() / ".cognix" / "safety_config.json"
         
         default_config = {
             "max_impact_score": 0.8,

@@ -10,12 +10,11 @@ from typing import Dict, Any, Optional, List, Tuple
 from dataclasses import dataclass, asdict
 
 try:
-    from dotenv import load_dotenv, find_dotenv
+    from dotenv import load_dotenv
     DOTENV_AVAILABLE = True
 except ImportError:
     DOTENV_AVAILABLE = False
     load_dotenv = None
-    find_dotenv = None
 
 
 @dataclass
@@ -31,7 +30,7 @@ class Config:
     """Configuration manager"""
 
     DEFAULT_CONFIG = {
-        "version": "0.2.1",
+        "version": "0.2.2",
         "model": "claude-sonnet-4-5-20250929",
         "temperature": 0.7,
         "max_tokens": 4000,
@@ -89,12 +88,22 @@ class Config:
                 "max_tokens": 4000,
                 "context_window": 200000
             },
+            "claude-opus-4-6": {
+                "name": "claude-opus-4-6",
+                "provider": "Anthropic",
+                "display_name": "Opus 4.6",
+                "aliases": ["claude-opus-4.6", "opus-4.6", "opus4.6", "opus"],
+                "priority": 2,
+                "temperature": 0.7,
+                "max_tokens": 4000,
+                "context_window": 200000
+            },
             "claude-opus-4-5-20251101": {
                 "name": "claude-opus-4-5-20251101",
                 "provider": "Anthropic",
                 "display_name": "Opus 4.5",
-                "aliases": ["claude-opus-4.5", "opus-4.5", "opus4.5", "opus"],
-                "priority": 2,
+                "aliases": ["claude-opus-4.5", "opus-4.5", "opus4.5"],
+                "priority": 3,
                 "temperature": 0.7,
                 "max_tokens": 4000,
                 "context_window": 200000
@@ -104,20 +113,20 @@ class Config:
                 "provider": "OpenAI",
                 "display_name": "GPT-5.2",
                 "aliases": ["gpt5.2"],
-                "priority": 3,
+                "priority": 4,
                 "temperature": 0.7,
                 "max_tokens": 4000,
-                "context_window": 200000
+                "context_window": 400000
             },
             "gpt-5.2-codex": {
                 "name": "gpt-5.2-codex",
                 "provider": "OpenAI",
                 "display_name": "GPT-5.2 Codex",
                 "aliases": ["codex", "gpt-5.2-code"],
-                "priority": 4,
+                "priority": 5,
                 "temperature": 0.7,
                 "max_tokens": 4000,
-                "context_window": 200000
+                "context_window": 400000
             }
         },
         "system_prompts": {
@@ -272,121 +281,72 @@ class Config:
             os.getenv('COGNIX_VERBOSE') == 'true'
         )
 
-    def _is_cognix_env_file(self, env_path: Path) -> bool:
-        """Cognix用の.envファイルかどうか判定"""
-        if not env_path.exists():
-            return False
-        
-        # .envファイルにCOGNIX_PROJECT=trueがあるかチェック
-        try:
-            with open(env_path, 'r', encoding='utf-8') as f:
-                for line in f:
-                    line = line.strip()
-                    if line == 'COGNIX_PROJECT=true':
-                        return True
-            return False
-        except Exception:
-            return False
-
     def _load_dotenv(self):
-        """Load environment variables from .env file with priority handling"""
+        """Load environment variables from ~/.cognix/.env"""
         if not DOTENV_AVAILABLE:
             return
         
-        env_files_loaded = []
+        env_path = Path.home() / ".cognix" / ".env"
         
-        # Method 1: Use find_dotenv to automatically discover .env files
-        try:
-            dotenv_path = find_dotenv(usecwd=True)
-            if dotenv_path and self._is_cognix_env_file(Path(dotenv_path)):
-                load_dotenv(dotenv_path)
-                env_files_loaded.append(dotenv_path)
-                return
-        except Exception:
-            pass  # fallback to manual search
-        
-        # Method 2: Manual search in specific locations (fallback)
-        if not env_files_loaded:
-            env_paths = [
-                # 1. Cognixパッケージのルートディレクトリ (最優先)
-                Path(__file__).parent.parent / ".env",
-                # 2. ユーザーのCognix設定フォルダ
-                Path.home() / ".cognix" / ".env",
-                # 3. 現在のプロジェクト作業ディレクトリ (最後)
-                Path.cwd() / ".env",
-            ]
-            
-            for env_path in env_paths:
-                if self._is_cognix_env_file(env_path):
-                    load_dotenv(env_path)
-                    return
-        
-        print("Warning: No valid Cognix .env file found")
+        if env_path.exists():
+            load_dotenv(env_path)
+            return
         
         # Debug information (only in debug mode)
         if self._is_debug_mode():
-            print("Debug: No valid Cognix .env files found")
-            print(f"Debug: Searched paths: {[str(Path.cwd() / '.env'), str(Path.home() / '.cognix' / '.env')]}")
+            print(f"Debug: No .env file found at {env_path}")
         
     def _ensure_default_config_files(self):
         """
         初回実行時にデフォルト設定ファイルをユーザーディレクトリに配置
         
-        テンプレートファイルを ~/.cognix/ にコピーして、
+        パッケージ同梱のデフォルトファイルを ~/.cognix/ にコピーして、
         完璧な初回体験を提供します。
         
         配置されるファイル:
-        - ~/.cognix/knowledge/ui-knowledge.json
-        - ~/.cognix/knowledge/app_patterns.json
-        - ~/.cognix/rules/default_file_reference_rules.md
+        - ~/.cognix/ui-knowledge.json
+        - ~/.cognix/app_patterns.json
+        - ~/.cognix/default_file_reference_rules.md
         """
         import shutil
         
         user_cognix_dir = Path.home() / ".cognix"
         
-        # パッケージ内のテンプレートディレクトリを探す
-        # 優先順位:
-        # 1. インストール済みパッケージ: site-packages/cognix/data/templates/
-        # 2. 開発環境: プロジェクトルート/cognix/data/templates/
-        template_dir = None
+        # パッケージ内のデフォルトファイルディレクトリを探す
+        data_dir = None
         
-        # 1. パッケージインストール先を探す
         try:
             package_dir = Path(__file__).parent  # cognix/ ディレクトリ
-            template_candidates = [
-                package_dir / "data" / "templates",           # 通常のインストール
-                package_dir.parent / "cognix" / "data" / "templates",  # 開発環境
+            data_candidates = [
+                package_dir / "data",           # 通常のインストール
+                package_dir.parent / "cognix" / "data",  # 開発環境
             ]
             
-            for candidate in template_candidates:
+            for candidate in data_candidates:
                 if candidate.exists():
-                    template_dir = candidate
+                    data_dir = candidate
                     break
         except Exception:
             pass
         
-        # テンプレートディレクトリが見つからない場合は処理をスキップ
-        if not template_dir or not template_dir.exists():
+        # デフォルトファイルディレクトリが見つからない場合は処理をスキップ
+        if not data_dir or not data_dir.exists():
             return
         
-        # 必要なディレクトリを作成
-        (user_cognix_dir / "knowledge").mkdir(parents=True, exist_ok=True)
-        (user_cognix_dir / "rules").mkdir(parents=True, exist_ok=True)
-        
         # コピーするファイルのマッピング
-        # {テンプレートファイル名: 配置先パス}
+        # {ソースファイル名: 配置先パス}
         files_to_copy = {
-            "ui-knowledge.json.template": user_cognix_dir / "knowledge" / "ui-knowledge.json",
-            "knowledge/app_patterns.json.template": user_cognix_dir / "knowledge" / "app_patterns.json",
-            "rules/default_file_reference_rules.md.template": user_cognix_dir / "rules" / "default_file_reference_rules.md",
+            "ui-knowledge.json": user_cognix_dir / "ui-knowledge.json",
+            "app_patterns.json": user_cognix_dir / "app_patterns.json",
+            "default_file_reference_rules.md": user_cognix_dir / "default_file_reference_rules.md",
         }
         
         # ファイルをコピー（存在しない場合のみ）
         copied_count = 0
         for src_rel, dst in files_to_copy.items():
-            src = template_dir / src_rel
+            src = data_dir / src_rel
             
-            # テンプレートファイルが存在し、配置先がまだ存在しない場合のみコピー
+            # ソースファイルが存在し、配置先がまだ存在しない場合のみコピー
             if src.exists() and not dst.exists():
                 try:
                     shutil.copy2(src, dst)

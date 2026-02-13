@@ -2,7 +2,7 @@
 
 フローエンジニアリングによる自律型コード生成。
 
-[![Version](https://img.shields.io/badge/version-0.2.1-blue.svg)](https://github.com/cognix-dev/cognix)
+[![Version](https://img.shields.io/badge/version-0.2.2-blue.svg)](https://github.com/cognix-dev/cognix)
 [![License](https://img.shields.io/badge/license-Apache_2.0-green.svg)](LICENSE)
 [![Python](https://img.shields.io/badge/python-3.9+-blue.svg)](https://python.org)
 
@@ -23,7 +23,7 @@ Cognixを初めて起動すると、対話式ウィザードがAPIキーの設�
 
 - AIプロバイダーを選択（Anthropic、OpenAI、またはOpenRouter）
 - APIキーを入力
-- ウィザードが自動的に `.env` ファイルを作成
+- ウィザードが自動的に `~/.cognix/.env` ファイルを作成
 
 ### 3. コード生成
 
@@ -55,7 +55,7 @@ CLI内で `/help` と入力すると、すべてのコマンドが表示され�
 
 ### 手動設定
 
-プロジェクトディレクトリに作成されている `.env` ファイルを修正:
+`~/.cognix/.env` ファイルを編集（Windowsの場合: `C:\Users\<ユーザー名>\.cognix\.env`）:
 
 **Anthropic Claude（デフォルト）:**
 ```bash
@@ -63,7 +63,7 @@ ANTHROPIC_API_KEY=sk-ant-your_key_here
 ```
 キーの取得: https://console.anthropic.com/
 
-サポートモデル: Sonnet 4.5（デフォルト）、Opus 4.5
+サポートモデル: Sonnet 4.5（デフォルト）、Opus 4.6、Opus 4.5
 
 **OpenAI:**
 ```bash
@@ -112,15 +112,18 @@ Cognixは `~/.cognix/` にデータを保存します:
 
 ```
 ~/.cognix/
-├── config.json            # 設定
-├── memory.json            # 会話・プロジェクトメモリ
-├── repository_data.json   # リポジトリ解析キャッシュ
-├── ui-knowledge.json      # UIコンポーネント知識
-├── sessions/              # 保存された作業セッション
-├── knowledge/             # アプリパターン定義
-├── rules/                 # ファイル参照ルール
-├── backups/               # 自動バックアップ
-└── impact_analysis/       # コード影響分析結果
+├── .env                            # APIキー・認証情報
+├── config.json                     # 設定
+├── memory.json                     # 会話・プロジェクトメモリ
+├── repository_data.json            # リポジトリ解析キャッシュ
+├── ui-knowledge.json               # UIコンポーネント知識
+├── app_patterns.json               # アプリパターン定義
+├── default_file_reference_rules.md # ファイル参照ルール
+├── sessions/                       # 保存された作業セッション
+├── backups/                        # 自動バックアップ
+├── logs/                           # デバッグログ
+├── temp/                           # 一時ファイル
+└── impact_analysis/                # コード影響分析結果
 ```
 
 **プライバシー:** テレメトリなし。API呼び出しは設定されたLLMプロバイダーのみに送信されます。

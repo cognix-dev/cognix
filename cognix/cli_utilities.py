@@ -515,7 +515,7 @@ class UtilitiesModule(CLIModuleBase):
                 from cognix import __version__
                 version = __version__
             except:
-                version = "0.2.1"
+                version = "0.2.2"
                 
             # Box-style logo
             logo = f"""{CYAN}Cognix v{version}{RESET} // Augmented AI Development Partner for CLI{RESET}
@@ -539,7 +539,7 @@ Full-Pipeline Development | Seamless Terminal Experience
             
         except Exception as e:
             # Fallback to simple logo if anything goes wrong
-            return """Cognix v0.2.1 // Augmented AI Development Partner for CLI
+            return """Cognix v0.2.2 // Augmented AI Development Partner for CLI
 
 ┌───┬───┬───┬───┬───┬───┐
 │ C │ O │ G │ N │ I │ X │
@@ -573,9 +573,9 @@ Made by Individual Developer | MIT License"""
         err_console.print("   • OpenAI: https://platform.openai.com/api-keys")
         err_console.print("   • Anthropic: https://console.anthropic.com/")
         err_console.print()
-        err_console.print("2. Create a .env file in this directory:")
+        err_console.print("2. Create a .env file:")
         
-        env_path = Path.cwd() / ".env"
+        env_path = Path.home() / ".cognix" / ".env"
         err_console.print(f"   File location: {env_path}")
         err_console.print()
         err_console.print("3. Add your API key to the .env file:")
@@ -597,7 +597,9 @@ Made by Individual Developer | MIT License"""
     
     def _create_env_template(self):
         """Create .env template file"""
-        env_path = Path.cwd() / ".env"
+        cognix_dir = Path.home() / ".cognix"
+        cognix_dir.mkdir(parents=True, exist_ok=True)
+        env_path = cognix_dir / ".env"
         
         if env_path.exists():
             err_console.print(f"✅ .env file already exists at {env_path}")

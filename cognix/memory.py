@@ -31,26 +31,11 @@ class MemoryEntry:
 class Memory:
     """Memory management system"""
 
-    def _find_project_root(self) -> str:
-        """ãƒ—ãƒ­ã‚¸ã‚§ã‚¯ãƒˆãƒ«ãƒ¼ãƒˆã‚’æ¤œå‡º"""
-        current = Path.cwd()
-        
-        # ãƒ—ãƒ­ã‚¸ã‚§ã‚¯ãƒˆæŒ‡æ¨™ã¨ãªã‚‹ãƒ•ã‚¡ã‚¤ãƒ«/ãƒ‡ã‚£ãƒ¬ã‚¯ãƒˆãƒª
-        indicators = ['.git', 'setup.py', 'requirements.txt', 'pyproject.toml', '.cognix']
-        
-        for parent in [current] + list(current.parents):
-            if any((parent / indicator).exists() for indicator in indicators):
-                return str(parent)
-        
-        # è¦‹ã¤ã‹ã‚‰ãªã„å ´åˆã¯ç¾åœ¨ã®ãƒ‡ã‚£ãƒ¬ã‚¯ãƒˆãƒª
-        return str(current)
-
     def __init__(self, memory_dir: str = None):
         """Initialize memory system"""
         if memory_dir is None:
-            # ãƒ—ãƒ­ã‚¸ã‚§ã‚¯ãƒˆãƒ«ãƒ¼ãƒˆã‚’æ¤œå‡º
-            project_root = self._find_project_root()
-            memory_dir = str(Path(project_root) / ".cognix")
+            # グローバル設定ディレクトリ (~/.cognix/)
+            memory_dir = str(Path.home() / ".cognix")
         
         self.memory_dir = Path(memory_dir)
         self.memory_dir.mkdir(parents=True, exist_ok=True)

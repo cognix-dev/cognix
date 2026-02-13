@@ -556,34 +556,48 @@ class CognixCLI(cmd.Cmd):
             except: pass
     
     def _run_api_key_setup(self):
-        """インタラクティブなAPIキーセットアップを実行"""
+        """インタラクティブなAPIキーセットアップを実行（Cyber Zen デザイン）"""
         from pathlib import Path
-        
-        # GRAYのみローカル定義（theme_zen.pyに存在しないため）
-        GRAY = "\033[90m"
-        
-        rule_line = "─" * 50
-        
+
+        # ── Cyber Zen カラー定義 ──
+        CG    = "\033[32m"               # ANSI standard green (.venvと同色)
+        DIM   = "\033[90m"               # Gray (dim)
+        CYAN  = "\033[38;2;95;179;179m"  # Muted cyan (#5fb3b3) for URLs
+        WHITE = "\033[97m"               # Bright white
+        RS    = "\033[0m"                # Reset
+
+        # ── デザイン要素 ──
+        grad_top = f"{CG}\u2593\u2592\u2591{RS}"       # ▓▒░
+        grad_btm = f"{CG}\u2591\u2592\u2593{RS}"       # ░▒▓
+        sep      = CG + "\u2550" * 40 + RS               # ════...
+        marker   = f"{DIM}::{RS}"                        # ::
+        arrow    = f"{CG}\u203a{RS}"                     # ›
+
+        # ── ヘッダー ──
         print()
-        print(f"{GREEN}Welcome to Cognix!{RESET}")
-        print(f"{GREEN}{rule_line}{RESET}")
+        print(f"  {grad_top}  {CG}C O G N I X{RS}  {grad_btm}")
+        print(f"  {sep}")
         print()
-        print(f"{GREEN}API Key Setup{RESET}")
+
+        # ── セクション: API Key Setup ──
+        print(f"  {marker} {CG}API Key Setup{RS} {marker}")
         print()
-        print(f"{GREEN}Choose your AI provider:{RESET}")
-        print("  [1] Anthropic (Claude) - Recommended")
-        print("  [2] OpenAI (GPT)")
-        print("  [3] Anthropic (Claude) & OpenAI (GPT)")
-        print("  [4] OpenRouter (Multiple models)")
+
+        # ── プロバイダー選択メニュー ──
+        print(f"  {DIM}Choose your AI provider:{RS}")
+        print(f"    {arrow} {WHITE}[1] Anthropic (Claude){RS} {DIM}\u2014 Recommended{RS}")
+        print(f"    {arrow} {WHITE}[2] OpenAI (GPT){RS}")
+        print(f"    {arrow} {WHITE}[3] Anthropic & OpenAI{RS}")
+        print(f"    {arrow} {WHITE}[4] OpenRouter (Multiple models){RS}")
         print()
-        
-        # プロバイダー選択
+
+        # ── プロバイダー選択入力 ──
         try:
-            choice = input("Enter choice (1/2/3/4): ").strip()
+            choice = input(f"  {DIM}Enter choice (1/2/3/4):{RS} ").strip()
         except (KeyboardInterrupt, EOFError):
-            print("\n\nSetup cancelled.")
+            print(f"\n\n  {DIM}Setup cancelled.{RS}")
             return
-        
+
         if choice == "1":
             provider = "anthropic"
             key_names = ["ANTHROPIC_API_KEY"]
@@ -601,34 +615,36 @@ class CognixCLI(cmd.Cmd):
             key_names = ["OPENAI_API_KEY"]
             key_urls = ["https://openrouter.ai/keys"]
         else:
-            print(f"\n{GRAY}Invalid choice. Setup cancelled.{RESET}")
+            print(f"\n  {DIM}Invalid choice. Setup cancelled.{RS}")
             return
-        
-        # APIキー入力
+
+        # ── APIキー入力 ──
         api_keys = {}
         for i, key_name in enumerate(key_names):
             print()
-            print(f"{GRAY}Get your API key at:{RESET} {key_urls[i]}")
+            print(f"  {DIM}Get your API key at:{RS} {CYAN}{key_urls[i]}{RS}")
             print()
-            
+
             try:
-                api_key = input(f"Enter your {key_name}: ").strip()
+                api_key = input(f"  {DIM}Enter your {key_name}:{RS} ").strip()
             except (KeyboardInterrupt, EOFError):
-                print("\n\nSetup cancelled.")
+                print(f"\n\n  {DIM}Setup cancelled.{RS}")
                 return
-            
+
             if not api_key:
-                print(f"\n{GRAY}No API key entered. Setup cancelled.{RESET}")
+                print(f"\n  {DIM}No API key entered. Setup cancelled.{RS}")
                 return
-            
+
             api_keys[key_name] = api_key
-        
-        # .envファイル作成
-        env_path = Path.cwd() / ".env"
-        
+
+        # ── .envファイル作成 (~/.cognix/.env) ──
+        cognix_dir = Path.home() / ".cognix"
+        cognix_dir.mkdir(parents=True, exist_ok=True)
+        env_path = cognix_dir / ".env"
+
         try:
-            env_content = "# Cognix Configuration\nCOGNIX_PROJECT=true\n\n"
-            
+            env_content = "# Cognix Configuration\n\n"
+
             if provider == "openrouter":
                 env_content += f"# OpenRouter\n{key_names[0]}={api_keys[key_names[0]]}\nOPENAI_BASE_URL=https://openrouter.ai/api/v1\n"
             elif provider == "both":
@@ -636,35 +652,42 @@ class CognixCLI(cmd.Cmd):
                 env_content += f"# OpenAI\nOPENAI_API_KEY={api_keys['OPENAI_API_KEY']}\n"
             else:
                 env_content += f"# {provider.capitalize()}\n{key_names[0]}={api_keys[key_names[0]]}\n"
-            
+
             env_path.write_text(env_content, encoding="utf-8")
-            
-            print()
-            print(f"{GREEN}✓ .env created successfully{RESET}")
-            
+
+            # 初回起動完了マーカーを作成（次回起動時に_show_setup_guideが出ないようにする）
+            self._mark_first_run_complete()
+
             # sample_spec_tetris.mdをカレントディレクトリにコピー（サイレント）
             try:
                 import shutil
                 package_dir = Path(__file__).parent
-                sample_spec_src = package_dir / "data" / "templates" / "sample_spec_tetris.md"
+                sample_spec_src = package_dir / "data" / "sample_spec_tetris.md"
                 sample_spec_dst = Path.cwd() / "sample_spec_tetris.md"
-                
+
                 if sample_spec_src.exists() and not sample_spec_dst.exists():
                     shutil.copy2(sample_spec_src, sample_spec_dst)
             except Exception:
                 pass  # サンプルファイルのコピー失敗は無視
-            
+
+            # ── 成功表示 ──
             print()
-            print(f"Run {GREEN}cognix{RESET} to start.")
+            print(f"  {sep}")
             print()
-            
+            print(f"  {CG}\u2713{RS} {DIM}.env created at{RS} {CG}{env_path}{RS}")
+            print()
+            print(f"  {grad_top}  {DIM}Cognix is ready to launch{RS}  {grad_btm}")
+            print()
+            print(f"  {DIM}Run{RS} {CG}cognix{RS} {DIM}to start.{RS}")
+            print()
+
         except Exception as e:
-            print(f"\n{GRAY}Error creating .env file: {e}{RESET}")
-            print(f"\n{GRAY}Please create .env manually:{RESET}")
+            print(f"\n  {DIM}Error creating .env file: {e}{RS}")
+            print(f"\n  {DIM}Please create .env manually at: {env_path}{RS}")
             for key_name, api_key in api_keys.items():
-                print(f"  {key_name}={api_key}")
+                print(f"    {key_name}={api_key}")
             if provider == "openrouter":
-                print("  OPENAI_BASE_URL=https://openrouter.ai/api/v1")
+                print(f"    OPENAI_BASE_URL=https://openrouter.ai/api/v1")
     
     # ... (default, handle_slash_command, _handle_multiline_input, _reset_multiline_state, emptyline, do_exit, do_quit, cmd_make 等はそのまま) ...
     def default(self, line):

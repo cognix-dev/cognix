@@ -314,27 +314,12 @@ class AppPatternDetector(BaseDetector):
         """
         app_patterns.json を読み込み
         
-        優先順位:
-        1. ~/.cognix/knowledge/app_patterns.json
-        2. ~/.cognix/app_patterns.json
-        3. プログラム本体の隣（フォールバック）
+        配置先: ~/.cognix/app_patterns.json
         """
         user_cognix_dir = Path.home() / '.cognix'
         
-        # 優先順位1
-        patterns_path = user_cognix_dir / 'knowledge' / 'app_patterns.json'
-        
-        # 優先順位2
-        if not patterns_path.exists():
-            patterns_path = user_cognix_dir / 'app_patterns.json'
-        
-        # 優先順位3
-        if not patterns_path.exists():
-            patterns_path = Path(__file__).parent / 'knowledge' / 'app_patterns.json'
-        
-        # 優先順位4
-        if not patterns_path.exists():
-            patterns_path = Path(__file__).parent / 'app_patterns.json'
+        # ~/.cognix/app_patterns.json
+        patterns_path = user_cognix_dir / 'app_patterns.json'
         
         if patterns_path.exists():
             try:
