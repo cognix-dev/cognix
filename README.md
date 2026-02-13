@@ -2,7 +2,7 @@
 
 Autonomous code generation powered by flow engineering.
 
-[![Version](https://img.shields.io/badge/version-0.2.1-blue.svg)](https://github.com/cognix-dev/cognix)
+[![Version](https://img.shields.io/badge/version-0.2.2-blue.svg)](https://github.com/cognix-dev/cognix)
 [![License](https://img.shields.io/badge/license-Apache_2.0-green.svg)](LICENSE)
 [![Python](https://img.shields.io/badge/python-3.9+-blue.svg)](https://python.org)
 
@@ -23,7 +23,7 @@ When you run Cognix for the first time, an interactive wizard will help you set 
 
 - Choose your AI provider (Anthropic, OpenAI, or OpenRouter)
 - Enter your API key
-- The wizard creates a `.env` file automatically
+- The wizard creates a `~/.cognix/.env` file automatically
 
 ### 3. Generate code
 
@@ -55,7 +55,7 @@ Just run `cognix` and follow the interactive wizard.
 
 ### Manual setup
 
-Create a `.env` file in your project directory:
+Edit the `~/.cognix/.env` file (Windows: `C:\Users\<username>\.cognix\.env`):
 
 **Anthropic Claude (default):**
 ```bash
@@ -63,7 +63,7 @@ ANTHROPIC_API_KEY=sk-ant-your_key_here
 ```
 Get your key at: https://console.anthropic.com/
 
-Supported models: Sonnet 4.5 (default), Opus 4.5
+Supported models: Sonnet 4.5 (default), Opus 4.6, Opus 4.5
 
 **OpenAI:**
 ```bash
@@ -112,15 +112,18 @@ Cognix stores data in `~/.cognix/`:
 
 ```
 ~/.cognix/
-├── config.json            # Your settings
-├── memory.json            # Conversation & project memory
-├── repository_data.json   # Repository analysis cache
-├── ui-knowledge.json      # UI component knowledge
-├── sessions/              # Saved work sessions
-├── knowledge/             # App pattern definitions
-├── rules/                 # File reference rules
-├── backups/               # Automatic backups
-└── impact_analysis/       # Code impact analysis results
+├── .env                            # API keys & credentials
+├── config.json                     # Your settings
+├── memory.json                     # Conversation & project memory
+├── repository_data.json            # Repository analysis cache
+├── ui-knowledge.json               # UI component knowledge
+├── app_patterns.json               # App pattern definitions
+├── default_file_reference_rules.md # File reference rules
+├── sessions/                       # Saved work sessions
+├── backups/                        # Automatic backups
+├── logs/                           # Debug logs
+├── temp/                           # Temporary files
+└── impact_analysis/                # Code impact analysis results
 ```
 
 **Privacy:** No telemetry. API calls only go to your configured LLM provider.

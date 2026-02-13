@@ -3065,7 +3065,7 @@ class FileReferenceRuleParser:
         
         優先順位:
         1. プロジェクト固有ルール (<project>/.cognix/file_reference_rules.md)
-        2. デフォルトルール (~/.cognix/rules/default_file_reference_rules.md)
+        2. デフォルトルール (~/.cognix/default_file_reference_rules.md)
         
         Args:
             project_root: プロジェクトのルートディレクトリ（Noneの場合は現在のディレクトリ）
@@ -3075,13 +3075,8 @@ class FileReferenceRuleParser:
         """
         rules = []
         
-        # デフォルトルール - 優先順位付きで複数パスを試す
-        # 優先順位1: ~/.cognix/rules/default_file_reference_rules.md
-        default_rules_path = Path.home() / '.cognix' / 'rules' / 'default_file_reference_rules.md'
-        
-        # 優先順位2: ~/.cognix/default_file_reference_rules.md
-        if not default_rules_path.exists():
-            default_rules_path = Path.home() / '.cognix' / 'default_file_reference_rules.md'
+        # デフォルトルール (~/.cognix/default_file_reference_rules.md)
+        default_rules_path = Path.home() / '.cognix' / 'default_file_reference_rules.md'
         
         if default_rules_path.exists():
             try:
@@ -3402,12 +3397,8 @@ class AppPatternDetector:
     def _load_patterns(self):
         """app_patterns.jsonを読み込む"""
         try:
-            # 優先順位1: ~/.cognix/app_patterns.json
+            # ~/.cognix/app_patterns.json
             patterns_path = Path.home() / '.cognix' / 'app_patterns.json'
-            
-            # 優先順位2: ~/.cognix/patterns/app_patterns.json
-            if not patterns_path.exists():
-                patterns_path = Path.home() / '.cognix' / 'patterns' / 'app_patterns.json'
             
             if patterns_path.exists():
                 with open(patterns_path, 'r', encoding='utf-8') as f:
@@ -3617,12 +3608,12 @@ class SemiAutoEngine:
         self.workspace_path.mkdir(parents=True, exist_ok=True)
         
         # Create backup directory
-        self.backup_dir = self.workspace_path / ".cognix_backups"
-        self.backup_dir.mkdir(exist_ok=True)
+        self.backup_dir = Path.home() / ".cognix" / "backups"
+        self.backup_dir.mkdir(parents=True, exist_ok=True)
         
         # Create temp directory for staging
-        self.temp_dir = self.workspace_path / ".cognix_temp"
-        self.temp_dir.mkdir(exist_ok=True)
+        self.temp_dir = Path.home() / ".cognix" / "temp"
+        self.temp_dir.mkdir(parents=True, exist_ok=True)
 
     def _assess_goal_complexity(self, goal: str) -> str:
         """
@@ -11777,28 +11768,17 @@ IMPORTANT RULES:
         LLMのコンテキストとして使用できる文字列形式で返します。
         
         優先順位:
-        1. ~/.cognix/knowledge/ui-knowledge.json (ユーザー設定)
-        2. ~/.cognix/ui-knowledge.json (ユーザー設定・簡易版)
-        3. .cognix/ui-knowledge.json (プロジェクト内)
+        1. ~/.cognix/ui-knowledge.json (ユーザー設定)
         
         Returns:
             str: UI knowledge JSON文字列
                  - ファイルが存在しない場合: 空文字列
                  - 読み込みエラー時: 空文字列
         """
-        # 優先順位付きでパスを試す
         user_cognix_dir = Path.home() / '.cognix'
         
-        # 優先順位1: ~/.cognix/knowledge/ui-knowledge.json
-        ui_knowledge_file = user_cognix_dir / 'knowledge' / 'ui-knowledge.json'
-        
-        # 優先順位2: ~/.cognix/ui-knowledge.json
-        if not ui_knowledge_file.exists():
-            ui_knowledge_file = user_cognix_dir / 'ui-knowledge.json'
-        
-        # 優先順位3: .cognix/ui-knowledge.json (プロジェクト内)
-        if not ui_knowledge_file.exists():
-            ui_knowledge_file = Path(".cognix/ui-knowledge.json")
+        # ~/.cognix/ui-knowledge.json
+        ui_knowledge_file = user_cognix_dir / 'ui-knowledge.json'
         
         # ファイルが存在しない場合は空文字列を返す
         if not ui_knowledge_file.exists():

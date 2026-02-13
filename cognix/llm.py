@@ -729,7 +729,7 @@ class LLMManager:
         print("\n" + "⚠️  API KEY REQUIRED")
         print("="*50)
         
-        env_path = Path.cwd() / ".env"
+        env_path = Path.home() / ".cognix" / ".env"
         env_exists = env_path.exists()
         
         if env_exists:
@@ -747,8 +747,7 @@ class LLMManager:
             print("   ANTHROPIC_API_KEY=sk-ant-your_key_here")
             print("   OPENAI_API_KEY=sk-your_key_here")
             print()
-            print("Or create it now with:")
-            print(f"   echo 'ANTHROPIC_API_KEY=your_key' > {env_path}")
+            print("Or run 'cognix' to use the interactive setup wizard.")
         
         print()
         print("🔗 Get API keys:")

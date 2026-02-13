@@ -54,8 +54,8 @@ _LOG_FILE = None
 
 if os.getenv('COGNIX_DEBUG', '').lower() in ('1', 'true', 'yes'):
     # ログファイルのパスを決定
-    _LOG_DIR = Path.cwd() / ".cognix"
-    _LOG_DIR.mkdir(exist_ok=True)
+    _LOG_DIR = Path.home() / ".cognix" / "logs"
+    _LOG_DIR.mkdir(parents=True, exist_ok=True)
     _LOG_FILE = _LOG_DIR / "cognix_debug.log"
 
     # ファイルハンドラーを作成（UTF-8エンコーディング指定）

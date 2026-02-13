@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "cognix"
-version = "0.2.1"
+version = "0.2.2"
 description = "AI-powered CLI development assistant"
 readme = "README.md"
 license = "Apache-2.0"
@@ -77,10 +77,7 @@ include-package-data = true
     "*.txt",
     "*.md",
     "*.json",
-    "data/.env.example",
-    "data/templates/*.template",
-    "data/templates/*.md",
-    "data/templates/**/*.template",
+    "data/*",
 ]
 
 [project.optional-dependencies]
