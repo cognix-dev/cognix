@@ -702,7 +702,13 @@ class LLMManager:
                 print("Debug: No Anthropic API key found")
         
         if not self.providers:
-            self._show_immediate_setup_help()
+            # 初回起動時はrun()内のCyber Zen APIキーセットアップUIに任せるため、
+            # ここではヘルプ表示せず例外のみ投げる
+            from pathlib import Path
+            first_run_marker = Path.home() / ".cognix" / ".first_run_complete"
+            if first_run_marker.exists():
+                # 2回目以降: ヘルプ表示してから例外
+                self._show_immediate_setup_help()
             raise Exception("No LLM providers available. Please set API keys for OpenAI or Anthropic.")
     
     def _detect_available_models(self):

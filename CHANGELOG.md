@@ -5,6 +5,21 @@ All notable changes to Cognix will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.2.3] - 2026-02-14
+
+### Added
+- **Non-Interactive Mode** - CLI flags for automated/scripted execution
+  - `--make "PROMPT"` - Execute `/make` directly without entering REPL
+  - `--make-file FILE` - Read prompt from file (avoids shell escaping issues)
+  - Auto-apply generated code without user confirmation
+  - Exit codes: 0 (success), 1 (error)
+  - Mutual exclusion check for `--make` and `--make-file`
+  - Empty prompt and missing file validation
+
+### Fixed
+- **First-Run Flash Error** - Eliminated `⚠️ API KEY REQUIRED` message that briefly flashed before the Cyber Zen setup screen on first launch when no API keys were configured
+- Version number updated to 0.2.3 across all files
+
 ## [0.2.2] - 2026-02-13
 
 ### Added
@@ -281,6 +296,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 pip install cognix
 ```
 
+[0.2.3]: https://github.com/cognix-dev/cognix/compare/v0.2.2...v0.2.3
 [0.2.2]: https://github.com/cognix-dev/cognix/compare/v0.2.1...v0.2.2
 [0.2.1]: https://github.com/cognix-dev/cognix/compare/v0.2.0...v0.2.1
 [0.2.0]: https://github.com/cognix-dev/cognix/compare/v0.1.5...v0.2.0
