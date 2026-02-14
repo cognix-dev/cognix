@@ -485,9 +485,10 @@ def show_startup_animation(config=None):
     起動ロゴアニメを表示（Zenがあれば version を渡す / 無ければ静的）
     """
     try:
-        version = getattr(config, "version", None) or "0.2.2"
+        from cognix import __version__
+        version = __version__
     except Exception:
-        version = "0.2.2"
+        version = "unknown"
 
     if '_zen_logo_once' in globals() and _zen_logo_once:
         try:

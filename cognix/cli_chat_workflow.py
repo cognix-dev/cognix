@@ -845,7 +845,13 @@ IMPORTANT COGNIX SESSION CONTEXT:
                     else:
                         console.print(Text.from_ansi(f"  [{CYAN}t{RESET}] Try again"))
                 
-                choice = input("\nYour choice: ").strip().lower()
+                # 非対話モード: auto_mode=True なら自動Apply
+                _auto = getattr(getattr(self, '_cli_instance', None), 'auto_mode', False)
+                if _auto:
+                    err_console.print(f"\n[auto] Auto-applying (non-interactive mode)...")
+                    choice = "a"
+                else:
+                    choice = input("\nYour choice: ").strip().lower()
                 
                 if choice == "r":
                     err_console.print(Text.from_ansi(f"{MAGENTA}✕ Implementation rejected by user{RESET}"))
