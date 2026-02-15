@@ -2,7 +2,7 @@
 
 Autonomous code generation powered by flow engineering.
 
-[![Version](https://img.shields.io/badge/version-0.2.3-blue.svg)](https://github.com/cognix-dev/cognix)
+[![Version](https://img.shields.io/badge/version-0.2.4-blue.svg)](https://github.com/cognix-dev/cognix)
 [![License](https://img.shields.io/badge/license-Apache_2.0-green.svg)](LICENSE)
 [![Python](https://img.shields.io/badge/python-3.9+-blue.svg)](https://python.org)
 

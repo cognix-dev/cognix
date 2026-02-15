@@ -160,11 +160,12 @@ Non-interactive mode:
         # Initialize CLI
         cli = CognixCLI(config=config, auto_mode=auto_mode)
         
-        # Show setup guide if first run
+        # 初回起動: 画面クリア後に新ウィザードでセットアップ
         if cli.is_first_run:
-            cli._show_setup_guide()
-            cli._mark_first_run_complete()
-            err_console.print("\nNote: Please restart after setting up your API key.")
+            import os
+            if os.name == 'nt': os.system('cls')
+            else: os.system('clear')
+            cli._run_api_key_setup()
             return
         
         # Start interactive mode
@@ -237,7 +238,8 @@ def _run_make_non_interactive(args):
         cli = CognixCLI(config=config, auto_mode=True)
         
         if cli.is_first_run:
-            err_console.print("[red]Error: First run detected. Please run 'cognix' interactively first to complete setup.[/red]")
+            err_console.print("[red]Error: Initial setup required. Please run 'cognix' first to configure your API key.[/red]")
+            err_console.print("[yellow]  → Run: cognix[/yellow]")
             sys.exit(1)
         
         # cmd_make を直接呼び出し

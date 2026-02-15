@@ -5,6 +5,17 @@ All notable changes to Cognix will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.2.4] - 2026-02-15
+
+### Fixed
+- **Setup Wizard Regression** - Replaced legacy first-run setup wizard with the Cyber Zen interactive wizard (`_run_api_key_setup`) across all entry points
+  - `main.py`: Interactive mode now launches the Cyber Zen wizard on first run (was showing legacy text-based guide)
+  - `main.py`: Non-interactive mode (`--make`) now shows improved error message with `→ Run: cognix` guidance
+  - `cli_main.py`: `_show_setup_guide()` wrapper now delegates to `_run_api_key_setup()` (backward compatible)
+  - `cli_main.py`: `run()` method's first-run check now uses `_run_api_key_setup()` directly
+- **Dead Code Removal** - Physically removed legacy `_show_setup_guide()` and `_create_env_template()` from `cli_utilities.py` (66 lines removed)
+- Version number updated to 0.2.4 across all files
+
 ## [0.2.3] - 2026-02-14
 
 ### Added
@@ -296,6 +307,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 pip install cognix
 ```
 
+[0.2.4]: https://github.com/cognix-dev/cognix/compare/v0.2.3...v0.2.4
 [0.2.3]: https://github.com/cognix-dev/cognix/compare/v0.2.2...v0.2.3
 [0.2.2]: https://github.com/cognix-dev/cognix/compare/v0.2.1...v0.2.2
 [0.2.1]: https://github.com/cognix-dev/cognix/compare/v0.2.0...v0.2.1

@@ -462,13 +462,8 @@ class CognixCLI(cmd.Cmd):
             first_run_marker.touch()
     
     def _show_setup_guide(self):
-        if getattr(self, 'utilities', None) and hasattr(self.utilities, '_show_setup_guide'):
-            self.utilities._show_setup_guide()
-        else:
-            err_console.print("\n" + "="*60)
-            err_console.print("   Welcome to Cognix - Setup Guide")
-            err_console.print("="*60)
-            # ... (簡易表示)
+        """初回セットアップ（後方互換のため名前を維持、中身は新ウィザードに委譲）"""
+        self._run_api_key_setup()
     
     def run(self):
         """CLIメインループの実行"""
@@ -495,13 +490,9 @@ class CognixCLI(cmd.Cmd):
                     ))
                     err_console.print("[yellow]Some features may be unavailable.[/yellow]\n")
 
-            # 初回実行チェック
+            # 初回実行チェック → 新ウィザードでセットアップ
             if self.is_first_run:
-                if self.utilities is not None:
-                    self.utilities._show_setup_guide()
-                    self.utilities._mark_first_run_complete()
-                else:
-                    err_console.print("\nFirst run detected (utilities unavailable).")
+                self._run_api_key_setup()
                 return
             
             # 起動アニメーション
