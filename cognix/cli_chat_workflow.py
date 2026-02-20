@@ -713,9 +713,32 @@ IMPORTANT COGNIX SESSION CONTEXT:
                         # 同じか増えた場合はシンプルに表示
                         console.print(Text.from_ansi(f"ⓘ Code review : {final} issue(s) remaining"))
                 
+                # 🆕 Test行（Lint→Review→Test→ファイル数 の順序）
+                if result.zen_summary:
+                    test_info = result.zen_summary.get("test", {})
+                    if not test_info.get("skipped") and test_info.get("total", 0) > 0:
+                        t_passed = test_info.get("passed", 0)
+                        t_failed_initial = test_info.get("failed_initial", 0)
+                        t_failed_final = test_info.get("failed_final", 0)
+                        
+                        if t_failed_final == 0:
+                            if t_failed_initial > 0:
+                                console.print(Text.from_ansi(
+                                    f"ⓘ Test check  : {t_passed} passed, {t_failed_initial} failed → {GREEN}✓ auto-fixed{RESET}"
+                                ))
+                            else:
+                                console.print(Text.from_ansi(
+                                    f"ⓘ Test check  : {GREEN}✓ {t_passed} passed{RESET}"
+                                ))
+                        else:
+                            console.print(Text.from_ansi(
+                                f"ⓘ Test check  : {t_passed} passed, {t_failed_final} failed"
+                            ))
+                
                 # ファイル数表示
                 file_word = "file" if file_count == 1 else "files"
                 console.print(Text.from_ansi(f"{GREEN}✓ Generated {file_count} {file_word}{RESET}"))
+                
                 console.print()  # 空行
                 
             # Zen HUD: Recommendations 1行・最大3件
@@ -915,7 +938,8 @@ IMPORTANT COGNIX SESSION CONTEXT:
                         error=result.error,
                         impact_analysis=result.impact_analysis,
                         lint_result=current_lint_result,
-                        zen_summary=new_zen_summary  # ⭐ Zen HUD対応
+                        zen_summary=new_zen_summary,  # ⭐ Zen HUD対応
+                        test_result=new_zen_summary.get("test") if new_zen_summary else None  # 🆕 テスト結果引き継ぎ
                     )
                     
                     # ⭐ Try again後のZen HUDサマリー表示
@@ -949,6 +973,28 @@ IMPORTANT COGNIX SESSION CONTEXT:
                         else:
                             # 同じか増えた場合はシンプルに表示
                             console.print(Text.from_ansi(f"ⓘ Code review : {final} issue(s) remaining"))
+                        
+                        # 🆕 Test行（retry後）（Lint→Review→Test→ファイル数 の順序）
+                        if new_zen_summary:
+                            test_info = new_zen_summary.get("test", {})
+                            if not test_info.get("skipped") and test_info.get("total", 0) > 0:
+                                t_passed = test_info.get("passed", 0)
+                                t_failed_initial = test_info.get("failed_initial", 0)
+                                t_failed_final = test_info.get("failed_final", 0)
+                                
+                                if t_failed_final == 0:
+                                    if t_failed_initial > 0:
+                                        console.print(Text.from_ansi(
+                                            f"ⓘ Test check  : {t_passed} passed, {t_failed_initial} failed → {GREEN}✓ auto-fixed{RESET}"
+                                        ))
+                                    else:
+                                        console.print(Text.from_ansi(
+                                            f"ⓘ Test check  : {GREEN}✓ {t_passed} passed{RESET}"
+                                        ))
+                                else:
+                                    console.print(Text.from_ansi(
+                                        f"ⓘ Test check  : {t_passed} passed, {t_failed_final} failed"
+                                    ))
                         
                         # ファイル数表示
                         if result.quality_scores:

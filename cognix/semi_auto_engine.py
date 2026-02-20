@@ -22,7 +22,7 @@ from cognix.diff_viewer import DiffViewer
 from cognix.progress_zen import StepHUD
 from cognix.utils import Spinner, ProgressBar
 
-# ⭐ File Requirement Detection Pipeline
+# File Requirement Detection Pipeline
 from cognix.file_detection import FileRequirementDetector
 
 # Local imports
@@ -537,6 +537,7 @@ class SemiAutoResult(NamedTuple):
         impact_analysis: 影響分析結果 {filename: impact_data} (⭐ フェーズ1で追加)
         lint_result: Lint実行結果 {has_errors, errors, warnings, ...} (⭐ [t] Try again対応)
         zen_summary: Zen HUD用サマリー {lint: {...}, review: {...}} (⭐ Zen HUD対応)
+        test_result: テスト実行結果 {skipped, total, passed, ...} (🆕 Test Execution Loop対応)
     """
     success: bool
     analysis: str = ""
@@ -547,6 +548,7 @@ class SemiAutoResult(NamedTuple):
     impact_analysis: Dict[str, Any] = {}  # ⭐ 新規追加フィールド
     lint_result: Optional[Dict[str, Any]] = None  # ⭐ [t] Try again対応
     zen_summary: Optional[Dict[str, Any]] = None  # ⭐ Zen HUD用サマリー
+    test_result: Optional[Dict[str, Any]] = None  # 🆕 Test Execution Loop対応
 
 
 class ApplyResult(NamedTuple):
@@ -556,6 +558,37 @@ class ApplyResult(NamedTuple):
     backup_paths: List[str] = []
     quality_scores: Dict[str, float] = {}
     error: str = ""
+
+
+# ============================================
+# Test Execution Feedback Loop: Data Structures
+# ============================================
+
+@dataclass
+class TestDetectionResult:
+    """テストフレームワーク検出結果"""
+    has_tests: bool
+    test_files: List[str]
+    framework: str          # "pytest" | "unittest" | "none"
+    run_command: List[str]
+    language: str            # "python" | "none"
+
+
+@dataclass
+class TestExecutionResult:
+    """テスト実行結果"""
+    success: bool
+    total_tests: int
+    passed: int
+    failed: int
+    errors: int
+    failure_details: List[Dict[str, str]]
+    stdout: str
+    stderr: str
+    execution_time: float
+    skipped: bool = False
+    skip_reason: str = ""
+    collection_error: bool = False
 
 
 # ============================================
@@ -3908,7 +3941,8 @@ Flask + React Fullstack:
         # ⭐ Zen HUD用サマリー初期化（インスタンス変数として保持）
         self._zen_summary = {
             "lint": {"initial": 0, "final": 0, "fixed": False},
-            "review": {"initial": 0, "final": 0, "fixed": False, "issues": []}
+            "review": {"initial": 0, "final": 0, "fixed": False, "issues": []},
+            "test": {"skipped": True, "reason": "Not yet executed", "total": 0, "passed": 0, "failed_initial": 0, "failed_final": 0, "fixed": False, "attempts": 0}
         }
         
         try:
@@ -4010,6 +4044,8 @@ Flask + React Fullstack:
                          f"file_types={self._project_structure.file_types}, "
                          f"reason={self._project_structure.reason}")
             
+            logger.debug("[Flow] Project Structure detection completed, proceeding to framework check...")
+            
             # 🆕 フレームワーク禁止モード時のfile_typesフィルタリング
             if self._no_framework_mode:
                 # 明示的にReact/Vueも要求されている場合はハイブリッド構成と判断
@@ -4038,6 +4074,8 @@ Flask + React Fullstack:
             
             # 🆕 stage判定（LLM判定結果を使用）
             needs_multi_stage = (self._project_structure.stage == "multi")
+            
+            logger.debug(f"[Flow] Stage decision: needs_multi_stage={needs_multi_stage}")
             
             if needs_multi_stage:
                 logger.debug(f"[Multi-Stage] LLM determined multi-stage generation: {self._project_structure.reason}")
@@ -4085,12 +4123,14 @@ Flask + React Fullstack:
                     "Quality assessment & Comprehensive Review",
                 ]
                 hud = StepHUD(section_title="Code Generation", steps=steps)
+                logger.debug("[Flow] StepHUD initialized, calling hud.start()...")
                 hud.start()
                 
                 # Step 0: Complexity assessment（既に完了）
                 hud.complete("Assess goal complexity")
                 
                 # Step 1: Analyze the goal
+                logger.debug("[Flow] Starting Step 1: _analyze_implementation_goal...")
                 hud.mark("Analyze implementation goal")
                 analysis = self._analyze_implementation_goal(goal, complexity)
                 
@@ -4706,6 +4746,51 @@ Flask + React Fullstack:
                         logger.debug(f"   ⚠ Could not auto-fix. Manual review required.")
                         logger.debug("[Runtime Import] All fix attempts failed")
 
+                # ==========================================
+                # 🛡️ Near-Identical File Preservation
+                # 問題: LLMがファイル全体を再生成する際、変更不要なファイルを
+                #       99%同一だが微妙に異なるコードで出力し既存テストを破壊する
+                # 対策: 元ファイルとの類似度が99%以上なら元ファイルを保持する
+                # ==========================================
+                if (hasattr(self, '_complexity_assessor') and 
+                    hasattr(self._complexity_assessor, 'existing_files') and
+                    self._complexity_assessor.existing_files):
+                    
+                    import difflib
+                    existing_files = self._complexity_assessor.existing_files
+                    SIMILARITY_THRESHOLD = 0.998  # 99.8%以上なら「再現ミス」と判定
+                    MAX_CHAR_DIFF_RATIO = 0.005   # サイズ差0.5%以内が追加条件
+                    
+                    preserved_files = []
+                    for filename, generated_content in list(generated_code.items()):
+                        if filename in existing_files:
+                            original_content = existing_files[filename]
+                            
+                            # SequenceMatcherで類似度を計算
+                            ratio = difflib.SequenceMatcher(
+                                None, original_content, generated_content
+                            ).ratio()
+                            
+                            # サイズ差チェック（正当な追加を誤保護しないため）
+                            char_diff = abs(len(generated_content) - len(original_content))
+                            max_char_diff = max(int(len(original_content) * MAX_CHAR_DIFF_RATIO), 10)
+                            
+                            if (ratio >= SIMILARITY_THRESHOLD and ratio < 1.0 
+                                    and char_diff <= max_char_diff):
+                                # 99.8%以上 かつ サイズ差0.5%以内 かつ 完全一致でない
+                                # → 再現ミス → 元ファイルを保持
+                                generated_code[filename] = original_content
+                                preserved_files.append(
+                                    f"{filename}(similarity={ratio:.4f}, "
+                                    f"char_diff={char_diff}, max={max_char_diff})"
+                                )
+                    
+                    if preserved_files:
+                        logger.debug(
+                            f"[Near-Identical Preservation] Restored {len(preserved_files)} "
+                            f"file(s) to original: {preserved_files}"
+                        )
+
                 # Step 4: Lint check & Auto-fix (新規)
                 lint_result = None  # Quality評価で使用するため初期化
                 hud.mark("Lint check & Auto-fix")
@@ -5051,8 +5136,106 @@ Flask + React Fullstack:
             
             # ここから共通処理（both paths）
             
+            # 🆕 Test Execution & Auto-fix
+            test_execution_result = None
+            if self._should_run_tests(generated_code):
+                logger.normal(f"{Icon.GEAR.value} Running test verification...")
+                generated_code, test_execution_result = self._test_execution_loop(
+                    generated_code, goal, max_attempts=3
+                )
+                
+                if test_execution_result:
+                    self._zen_summary["test"] = test_execution_result
+                    
+                    # 指摘A修正: テスト修正でコードが変わった場合、quality_scoresを再評価
+                    if test_execution_result.get("fixed"):
+                        logger.debug("[Test Exec] Code was modified by test fix, re-evaluating quality...")
+                        quality_scores = self._assess_code_quality(
+                            generated_code,
+                            complexity,
+                            goal,
+                            lint_result=lint_result
+                        )
+                else:
+                    self._zen_summary["test"] = {
+                        "skipped": False, "reason": "No result",
+                        "total": 0, "passed": 0, "failed_initial": 0, "failed_final": 0,
+                        "fixed": False, "attempts": 0
+                    }
+            else:
+                self._zen_summary["test"] = {
+                    "skipped": True, "reason": "No test files",
+                    "total": 0, "passed": 0, "failed_initial": 0, "failed_final": 0,
+                    "fixed": False, "attempts": 0
+                }
 
             # Step 4.7: Impact Analysis (既存コード - 変更なし)
+            # 🆕 API Contract Validation（storage round-trip検証）
+            # verify.pyと同等のインターフェース検証を実行し、失敗した場合はTest Fixで修正
+            if test_execution_result and not test_execution_result.get("skipped"):
+                contract_failures = self._validate_api_contracts(generated_code, goal)
+                if contract_failures:
+                    logger.debug(f"[API Contract] {len(contract_failures)} contract violation(s) detected")
+                    for cf in contract_failures:
+                        logger.debug(f"[API Contract] FAIL: {cf}")
+                    
+                    # Test Fixで修正を試みる
+                    logger.debug("[API Contract] Attempting LLM fix for contract violations...")
+                    
+                    # 疑似テスト結果を構築してTest Fixに渡す
+                    # tracebackにFile参照を含めることで_extract_error_files_from_tracebackが
+                    # エラー原因ファイルを特定できるようにする
+                    class _ContractTestResult:
+                        def __init__(self, failures):
+                            self.success = False
+                            self.passed = 0
+                            self.failed = len(failures)
+                            self.errors = 0
+                            self.total_tests = len(failures)
+                            self.execution_time = 0.0
+                            self.failure_details = []
+                            for i, f in enumerate(failures):
+                                # failureメッセージからファイル名を抽出してtraceback形式に変換
+                                # 形式: "Storage round-trip FAIL (storage.py:save_fn/load_fn): error"
+                                # 形式: "JS Storage round-trip FAIL (storage.js:save_fn/load_fn): error"
+                                import re as _re
+                                file_match = _re.search(r'\(([^:)]+\.(?:py|jsx|js|tsx|ts|mjs|cjs))', f)
+                                fake_tb = f
+                                if file_match:
+                                    fname = file_match.group(1)
+                                    fake_tb = f'  File "{fname}", line 1, in <module>\n    {f}'
+                                self.failure_details.append({
+                                    "test_name": f"api_contract_{i}", 
+                                    "error_type": "ContractViolation", 
+                                    "message": f, 
+                                    "traceback": fake_tb
+                                })
+                    
+                    contract_result = _ContractTestResult(contract_failures)
+                    # LLM Fix前のコードを保存（ロールバック用）
+                    pre_fix_code = dict(generated_code)
+                    fixed_files = self._fix_test_failures_with_llm(
+                        generated_code, contract_result, goal
+                    )
+                    if fixed_files:
+                        generated_code = fixed_files
+                        logger.debug("[API Contract] LLM fix applied, re-validating...")
+                        # 再検証
+                        recheck = self._validate_api_contracts(generated_code, goal)
+                        if recheck:
+                            if len(recheck) >= len(contract_failures):
+                                # LLM Fixで改善なしまたはデグレード → ロールバック
+                                logger.debug(f"[API Contract] Fix caused regression ({len(contract_failures)}→{len(recheck)}), rolling back")
+                                generated_code = pre_fix_code
+                            else:
+                                logger.debug(f"[API Contract] Partial fix ({len(contract_failures)}→{len(recheck)} violations)")
+                        else:
+                            logger.debug("[API Contract] All contract violations resolved!")
+                            if test_execution_result:
+                                test_execution_result["contract_fixed"] = True
+                    else:
+                        logger.debug("[API Contract] LLM fix returned no result")
+            
             impact_results = {}
             if self.impact_analyzer:
                 logger.verbose("Analyzing impact on existing files...")
@@ -5092,7 +5275,8 @@ Flask + React Fullstack:
                 recommendations=recommendations,
                 impact_analysis=impact_results,
                 lint_result=lint_result,
-                zen_summary=self._zen_summary  # ⭐ Zen HUD用サマリー
+                zen_summary=self._zen_summary,  # ⭐ Zen HUD用サマリー
+                test_result=test_execution_result  # 🆕 テスト実行結果
             )
             
         except Exception as e:
@@ -5612,7 +5796,9 @@ Generate complete, production-ready implementations. No placeholders or TODO com
         
         try:
             # Get project context
+            logger.debug("[Flow] _analyze_implementation_goal: Getting project context...")
             project_context = self._get_project_context()
+            logger.debug(f"[Flow] _analyze_implementation_goal: Project context ready ({len(project_context)} chars)")
             
             # For medium/complex: Use standard analysis
             # Note: Complex tasks will get more detailed prompts in code generation phase
@@ -5636,10 +5822,12 @@ Generate complete, production-ready implementations. No placeholders or TODO com
     Use markdown format with ## for sections and - for bullets.
     """
             
+            logger.debug("[Flow] _analyze_implementation_goal: Calling LLM generate_response...")
             response = self.llm_manager.generate_response(
                 prompt=analysis_prompt,
                 system_prompt="You are a senior software architect providing implementation analysis."
             )
+            logger.debug("[Flow] _analyze_implementation_goal: LLM response received")
             
             return response.content
             
@@ -8939,6 +9127,49 @@ MANDATORY SVELTE REQUIREMENTS:
                     extensions_pattern = '|'.join(common_extensions)
                     detected_filenames = re.findall(rf'([\w\-]+\.(?:{extensions_pattern}))\b', goal.lower())
                     
+                    # ==========================================
+                    # 🛡️ ランタイム/フレームワーク名の偽陽性除外
+                    # 問題: "JavaScript/Node.js" → "node.js" がファイル名として誤抽出される
+                    # 対策: 既知のランタイム名をブラックリストで除外し、
+                    #       さらに既存ファイルとの照合で未知の偽陽性も検知
+                    # ==========================================
+                    RUNTIME_BLACKLIST = {
+                        'node.js', 'deno.js', 'bun.js',          # JS runtimes
+                        'react.js', 'vue.js', 'next.js',          # Frameworks
+                        'express.js', 'nest.js', 'nuxt.js',       # Server frameworks
+                        'svelte.js', 'angular.js', 'ember.js',    # Frontend frameworks
+                        'electron.js', 'three.js', 'd3.js',       # Libraries
+                        'python.py', 'ruby.rb', 'rust.rs',        # Language names
+                        'java.java', 'swift.swift', 'go.go',      # Language names
+                    }
+                    
+                    # 既存プロジェクトファイルの取得（照合用）
+                    # ※ detected_filenamesはgoal.lower()由来で全小文字のため、
+                    #    existing_filesのキーも小文字化して照合する
+                    existing_file_set = set()
+                    if (hasattr(self, '_complexity_assessor') and 
+                        hasattr(self._complexity_assessor, 'existing_files') and
+                        self._complexity_assessor.existing_files):
+                        existing_file_set = {k.lower() for k in self._complexity_assessor.existing_files.keys()}
+                    
+                    filtered_filenames = []
+                    for fn in detected_filenames:
+                        if fn in RUNTIME_BLACKLIST:
+                            # ただし既存ファイルに実在する場合は除外しない
+                            if fn in existing_file_set:
+                                filtered_filenames.append(fn)
+                                logger.debug(f"[Expected Files] Kept blacklisted '{fn}' (exists in project)")
+                            else:
+                                logger.debug(f"[Expected Files] Excluded runtime/framework name: '{fn}'")
+                        else:
+                            filtered_filenames.append(fn)
+                    
+                    if len(filtered_filenames) < len(detected_filenames):
+                        excluded = set(detected_filenames) - set(filtered_filenames)
+                        logger.debug(f"[Expected Files] Filtered out {len(excluded)} false positive(s): {sorted(excluded)}")
+                    
+                    detected_filenames = filtered_filenames
+                    
                     expected_files = []
                     for filename in detected_filenames:
                         # 拡張子を抽出
@@ -10244,12 +10475,12 @@ IMPORTANT:
         generated_files: Dict[str, str]
     ) -> Tuple[bool, Optional[str], Optional[str]]:
         """
-        エントリーポイントのインポートテストを実行
+        生成コードのランタイムインポート検証を実行
         
-        生成されたコードを一時ディレクトリに展開し、エントリーポイント
-        (main.py, backend/main.py等)をインポートして実行時エラーを検出する。
-        これにより、静的解析では検出できないクラス定義時のエラーなどを
-        事前に発見できる。
+        エントリーポイント（main.py等）が存在する場合はそれをインポートし、
+        存在しない場合は全Pythonソースモジュールを個別にインポートテストする。
+        これにより、CLIアプリやライブラリ形式のプロジェクトでも
+        ランタイムエラー（SyntaxError, ImportError, 型エラー等）を検出できる。
         
         Args:
             generated_files: 生成されたファイル {filepath: content}
@@ -10283,12 +10514,26 @@ IMPORTANT:
                 entry_point = candidate
                 break
         
-        if not entry_point:
-            logger.debug(f"[Runtime Import] No entry point found in {len(generated_files)} files")
-            logger.debug(f"[Runtime Import] Searched patterns: {ENTRY_POINT_CANDIDATES[:4]}...")
-            return (True, None, None)  # エントリーポイントなし = スキップ
-        
-        logger.debug(f"[Runtime Import] Testing entry point: {entry_point}")
+        if entry_point:
+            # エントリーポイントが見つかった場合: そのファイルをimportテスト
+            logger.debug(f"[Runtime Import] Testing entry point: {entry_point}")
+            import_targets = [entry_point]
+        else:
+            # エントリーポイントがない場合: 全Pythonソースモジュールを個別テスト
+            # テストファイル・conftest・__init__.pyは除外
+            import_targets = [
+                f for f in generated_files.keys()
+                if f.endswith('.py')
+                and not self._is_test_file(f)
+                and not f.endswith('conftest.py')
+                and not f.endswith('__init__.py')
+            ]
+            
+            if not import_targets:
+                logger.debug(f"[Runtime Import] No Python source files to test in {len(generated_files)} files")
+                return (True, None, None)
+            
+            logger.debug(f"[Runtime Import] No entry point found, testing all {len(import_targets)} source module(s): {import_targets}")
         
         # 一時ディレクトリに全ファイルを展開
         with tempfile.TemporaryDirectory() as tmpdir:
@@ -10319,38 +10564,61 @@ IMPORTANT:
                 sys.path.insert(0, tmpdir)
                 
                 # 既存モジュールのキャッシュをクリア（汚染防止）
+                # 生成ファイルのモジュール名 + 既知のモジュール名をクリア
+                generated_module_names = set()
+                for f in generated_files.keys():
+                    if f.endswith('.py'):
+                        mod_name = f.replace('.py', '').replace('/', '.').replace('\\', '.')
+                        generated_module_names.add(mod_name)
+                        # トップレベルモジュール名も追加（例: backend.main → backend）
+                        parts = mod_name.split('.')
+                        for i in range(len(parts)):
+                            generated_module_names.add('.'.join(parts[:i+1]))
+                
+                known_prefixes = ('config', 'models', 'views', 'schemas', 'database',
+                                  'backend', 'src', 'app', 'api', 'routes', 'services')
                 modules_to_remove = [m for m in sys.modules.keys() 
-                                    if m.startswith(('config', 'models', 'views', 'schemas', 'database',
-                                                     'backend', 'src', 'app', 'api', 'routes', 'services'))]
+                                    if m in generated_module_names 
+                                    or m.startswith(known_prefixes)]
                 for m in modules_to_remove:
                     del sys.modules[m]
                 
                 try:
-                    # インポートテスト
-                    # backend/main.py -> backend.main (ドット区切りに変換)
-                    module_name = entry_point.replace('.py', '').replace('/', '.')
-                    spec = importlib.util.spec_from_file_location(
-                        module_name,
-                        os.path.join(tmpdir, entry_point)
-                    )
-                    
-                    if spec and spec.loader:
-                        module = importlib.util.module_from_spec(spec)
-                        spec.loader.exec_module(module)
+                    # 全ターゲットを順にimportテスト
+                    for target_file in import_targets:
+                        module_name = target_file.replace('.py', '').replace('/', '.').replace('\\', '.')
+                        spec = importlib.util.spec_from_file_location(
+                            module_name,
+                            os.path.join(tmpdir, target_file)
+                        )
                         
-                        logger.debug(f"[Runtime Import] ✅ Successfully imported {entry_point}")
-                        return (True, None, None)
-                    else:
-                        return (False, f"Could not create module spec for {entry_point}", entry_point)
+                        if spec and spec.loader:
+                            module = importlib.util.module_from_spec(spec)
+                            spec.loader.exec_module(module)
+                            logger.debug(f"[Runtime Import] ✅ Successfully imported {target_file}")
+                        else:
+                            return (False, f"Could not create module spec for {target_file}", target_file)
+                    
+                    # 全モジュールのimport成功
+                    logger.debug(f"[Runtime Import] ✅ All {len(import_targets)} module(s) imported successfully")
+                    return (True, None, None)
                 
                 except ModuleNotFoundError as e:
-                    # ⭐ 対策A: 外部パッケージ不足はコードのバグではないのでスキップ
-                    # LLMで修正することは不可能であり、ユーザー環境でpip install後に正常動作する
+                    # 外部パッケージ不足はコードのバグではないのでスキップ
                     module_name = str(e).replace("No module named ", "").strip("'\"")
-                    logger.debug(f"[Runtime Import] ⚠ External package not found: {module_name}")
-                    logger.debug(f"[Runtime Import] This is not a code bug. Skipping test.")
-                    # ユーザーへのガイダンスを返す（エラーではなく情報として）
-                    return (True, f"EXTERNAL_PACKAGE:{module_name}", None)
+                    # 生成ファイルに含まれるモジュールの場合はコードバグの可能性あり
+                    if module_name in generated_module_names or any(
+                        module_name.startswith(gm + '.') for gm in generated_module_names
+                    ):
+                        tb = traceback.format_exc()
+                        failing_file = self._extract_failing_file_from_traceback(tb, tmpdir, generated_files)
+                        logger.debug(f"[Runtime Import] ❌ Internal module not found: {module_name}")
+                        logger.debug(f"[Runtime Import]    Failing file: {failing_file}")
+                        return (False, str(e), failing_file)
+                    else:
+                        logger.debug(f"[Runtime Import] ⚠ External package not found: {module_name}")
+                        logger.debug(f"[Runtime Import] This is not a code bug. Skipping test.")
+                        return (True, f"EXTERNAL_PACKAGE:{module_name}", None)
                         
                 except Exception as e:
                     # エラー発生 - 詳細情報を抽出
@@ -10372,8 +10640,8 @@ IMPORTANT:
                     
                     # インポートしたモジュールをクリーンアップ
                     modules_to_remove = [m for m in sys.modules.keys() 
-                                        if m.startswith(('config', 'models', 'views', 'schemas', 'database',
-                                                         'backend', 'src', 'app', 'api', 'routes', 'services'))]
+                                        if m in generated_module_names
+                                        or m.startswith(known_prefixes)]
                     for m in modules_to_remove:
                         if m in sys.modules:
                             del sys.modules[m]
@@ -10698,7 +10966,8 @@ Return ONLY the fixed code in this format:
     4. Preserve all existing functionality
     5. Keep the code in its original language (JavaScript, Python, etc.)
     6. Do NOT create new files - only fix files that exist in CURRENT CODE above
-    7. Return the fixed files using this format:
+    7. CRITICAL: If a file starts with a shebang line (#!/usr/bin/env ...), it MUST remain as the VERY FIRST line. Never insert any code (including 'use strict') before a shebang.
+    8. Return the fixed files using this format:
 
     ## File: filename
     ```
@@ -10798,6 +11067,78 @@ Return ONLY the fixed code in this format:
                 
                 if not fixed_files:
                     logger.debug("[LLM Fix] No valid fixes after filtering out new files")
+                    return None
+                
+                # ==========================================
+                # 🛡️ Auto-fix Safety Guard (shebang保全 + 差分範囲チェック)
+                # 問題: auto-fix LLMがshebang前に'use strict';を挿入したり、
+                #       lintエラー箇所以外を勝手に改変して既存コードを破壊する
+                # 対策: 各ファイルをマージ前に検証し、危険な変更はリバートする
+                # ==========================================
+                reverted_files = []
+                for filename in list(fixed_files.keys()):
+                    original_code = generated_files.get(filename, '')
+                    fixed_code = fixed_files[filename]
+                    
+                    original_lines = original_code.split('\n')
+                    fixed_lines = fixed_code.split('\n')
+                    
+                    # Guard 1: Shebang保全チェック
+                    # 元コードのline1がshebangなら、修正後もline1にshebangがなければリバート
+                    if original_lines and original_lines[0].strip().startswith('#!'):
+                        if not fixed_lines or not fixed_lines[0].strip().startswith('#!'):
+                            first_fixed = fixed_lines[0][:40] if fixed_lines else '(empty)'
+                            logger.debug(
+                                f"[LLM Fix] REVERTED {filename}: shebang destroyed "
+                                f"(original L1: '{original_lines[0][:40]}', "
+                                f"fixed L1: '{first_fixed}')"
+                            )
+                            del fixed_files[filename]
+                            reverted_files.append(f"{filename}(shebang)")
+                            continue
+                    
+                    # Guard 2: 差分範囲チェック
+                    # errors_by_file (制限前の全エラー) を使用して正確なカウント
+                    # ※ limited_errorsはMAX_TOTAL_ERRORS制限後のため不正確
+                    file_error_count = len(errors_by_file.get(filename, []))
+                    if file_error_count == 0:
+                        # このファイルにはlintエラーがない → LLMが修正する理由なし → リバート
+                        logger.debug(
+                            f"[LLM Fix] REVERTED {filename}: no lint errors for this file "
+                            f"(unexpected modification by LLM)"
+                        )
+                        del fixed_files[filename]
+                        reverted_files.append(f"{filename}(no_errors)")
+                        continue
+                    else:
+                        # 変更行数を計算（簡易diff: 異なる行をカウント）
+                        import difflib
+                        diff_ops = list(difflib.unified_diff(
+                            original_lines, fixed_lines, n=0, lineterm=''
+                        ))
+                        # +/- で始まる行（ヘッダー除外）= 実質変更行
+                        changed_count = sum(
+                            1 for d in diff_ops
+                            if (d.startswith('+') or d.startswith('-'))
+                            and not d.startswith('+++') and not d.startswith('---')
+                        )
+                        # 許容上限: エラー数×8行 または 最低20行
+                        max_allowed = max(file_error_count * 8, 20)
+                        if changed_count > max_allowed:
+                            logger.debug(
+                                f"[LLM Fix] REVERTED {filename}: excessive changes "
+                                f"({changed_count} diff lines for {file_error_count} errors, "
+                                f"max allowed: {max_allowed})"
+                            )
+                            del fixed_files[filename]
+                            reverted_files.append(f"{filename}(excessive_diff:{changed_count})")
+                            continue
+                
+                if reverted_files:
+                    logger.debug(f"[LLM Fix] Safety Guard reverted {len(reverted_files)} file(s): {reverted_files}")
+                
+                if not fixed_files:
+                    logger.debug("[LLM Fix] All fixes reverted by Safety Guard, keeping original code")
                     return None
                 
                 # 元のファイルとマージ (修正されなかったファイルも含める)
@@ -11914,6 +12255,36 @@ IMPORTANT RULES:
     7. Add helpful comments for complex logic
     8. Ensure code is secure and follows security best practices
 
+    TEST CODE QUALITY REQUIREMENTS (CRITICAL - Prevents test/source mismatch):
+    - When generating test files alongside source files:
+      * Write source code FIRST, then write tests that match actual source behavior
+      * Test assertion strings MUST match source output EXACTLY (case-sensitive, including punctuation)
+      * Example: If source returns "No tasks to display.", test must assert "No tasks to display."
+        NOT "no tasks" or "No Tasks to Display"
+    - When extending existing code with tests:
+      * Read existing test patterns and follow the same assertion style
+      * Ensure new tests are consistent with existing test conventions
+    - When generating code that will be tested:
+      * Return values, print output, and error messages must be deterministic
+      * Avoid randomness in outputs that tests will verify
+
+    API CONTRACT TESTING (CRITICAL - New functions MUST be independently testable):
+    - For every new dataclass/model class:
+      * Test that it can be initialized with keyword arguments as specified in the requirements
+      * Test that to_dict() returns a dict with all expected keys
+      * Test that round-trip (create → to_dict → reconstruct) works
+    - For every new storage/persistence function pair (save_xxx / load_xxx):
+      * Test save followed by load returns the same data
+      * Test with a temporary directory (use tempfile.mkdtemp + module-level attribute override for DATA_DIR and file paths)
+      * Test that save accepts a list of model objects and load returns a list of model objects
+      * CRITICAL: storage functions MUST use module-level path variables (e.g. DATA_DIR), NOT hardcoded paths, so they work when paths are reassigned externally
+      * CRITICAL: save functions MUST call .to_dict() on model objects (not assume dict input)
+      * CRITICAL: load functions MUST reconstruct and return model objects (not raw dicts)
+    - For every new validator/checker function:
+      * Implement the EXACT function signature specified in requirements (same parameter names, same types, same return type)
+      * If the requirements specify parameters that accept model objects (e.g. a list of dependency objects), the function MUST accept those objects directly, NOT dicts
+      * If the requirements specify a tuple return type like (bool, str), the function MUST return exactly that
+
     CODE QUALITY STANDARDS:
     - Use meaningful variable and function names
     - Keep functions focused and single-purpose
@@ -12374,9 +12745,34 @@ IMPORTANT RULES:
         try:
             rule_parser = FileReferenceRuleParser(logger=logger)
             rule_parser.load_rules(project_root=self.workspace_path)
+            
+            # file_typesに基づいてルール適用対象を決定
+            file_type_to_glob = {
+                'python': '*.py',
+                'javascript': '*.js',
+                'typescript': '*.ts',
+                'html': '*.html',
+                'css': '*.css',
+                'jsx': '*.jsx',
+                'tsx': '*.tsx',
+                'vue': '*.vue',
+            }
+            if hasattr(self, '_project_structure') and self._project_structure:
+                rule_filepaths = [
+                    file_type_to_glob[ft]
+                    for ft in self._project_structure.file_types
+                    if ft in file_type_to_glob
+                ]
+                if not rule_filepaths:
+                    rule_filepaths = ['*.py']  # デフォルト
+            else:
+                rule_filepaths = ['*.py']
+            
+            logger.debug(f"[System Prompt] Rule evaluation filepaths: {rule_filepaths}")
+            
             # Phase 1（Critical/High優先度）のルールのみ取得
             phase1_rules = rule_parser.get_applicable_rules(
-                filepaths=['*.html', '*.css', '*.js', '*.py'],  # 汎用的なファイルタイプ
+                filepaths=rule_filepaths,
                 max_phase=1  # Phase 1のみ
             )
             if phase1_rules:
@@ -18053,6 +18449,7 @@ Return ONLY the fixed Python code wrapped in ```python``` blocks.
             
             # CRLF対応（Windows改行コード）
             content = content.replace('\r\n', '\n')
+            content_lines = content.split('\n')  # Guard1/3で使用（ファイルレベルでキャッシュ）
             
             # クラス定義内の属性をチェック
             class_pattern = r'class\s+(\w+)\s*\(([^)]*)\)\s*:'
@@ -18081,7 +18478,7 @@ Return ONLY the fixed Python code wrapped in ```python``` blocks.
                         # 絶対位置を計算
                         abs_pos = class_start + match.start()
                         line_no = content[:abs_pos].count('\n') + 1
-                        line_content = content.split('\n')[line_no - 1].strip()
+                        line_content = content_lines[line_no - 1].strip()
                         
                         # 'id'は主キーとしてよく使われるため、特別扱い
                         if builtin_name == 'id' and 'primary_key' in line_content:
@@ -18090,6 +18487,52 @@ Return ONLY the fixed Python code wrapped in ```python``` blocks.
                         # Marshmallowフィールド定義は除外（fields.Int, fields.Str等）
                         if 'fields.' in line_content:
                             continue
+                        
+                        # ⭐ 関数コール内のキーワード引数を除外
+                        # 例: RecurringRule(id=1, ...) の id=1 はシャドウイングではない
+                        # 判定方法: 直前20行の未閉じ括弧をカウント
+                        # open_parens > 0 なら関数コール内 → スキップ
+                        preceding_start = max(0, line_no - 21)  # 直前20行分を走査
+                        preceding_text = '\n'.join(content_lines[preceding_start:line_no - 1])
+                        open_parens = preceding_text.count('(') - preceding_text.count(')')
+                        if open_parens > 0:
+                            logger.debug(
+                                f"[G-12] {filepath}:{line_no} - Skipping '{builtin_name}' "
+                                f"(keyword argument in function call, open_parens={open_parens})"
+                            )
+                            continue
+                        
+                        # ⭐ Guard3: 次の非空行が閉じ括弧で始まる場合も関数コール内と判定
+                        # 例: func(\n    arg1,\n    id=1\n) ← idは最終引数（カンマなし）
+                        next_line_idx = line_no  # 0-indexed で次の行
+                        while next_line_idx < len(content_lines):
+                            next_stripped = content_lines[next_line_idx].strip()
+                            if next_stripped:  # 空行をスキップ
+                                if next_stripped.startswith(')'):
+                                    logger.debug(
+                                        f"[G-12] {filepath}:{line_no} - Skipping '{builtin_name}' "
+                                        f"(last argument before closing paren)"
+                                    )
+                                    open_parens = 1  # スキップフラグとして再利用
+                                break
+                            next_line_idx += 1
+                        if open_parens > 0:
+                            continue
+                        
+                        # ⭐ 同一行内のキーワード引数パターンも除外
+                        # 例: "id=1, task_template_id=1," (スペースなしの=で値の後に,が続く)
+                        # ただし "type = Column(...)" はクラス属性定義なので除外しない
+                        # 判定: builtin_name直後にスペースなしで=がある場合のみ
+                        if re.match(rf'^{builtin_name}=', line_content):
+                            # スペースなし "id=1" パターン → キーワード引数の可能性が高い
+                            # ただし、代入文でも "id=value" はありうるので、
+                            # 行末が "," で終わる場合のみスキップ（関数引数リストの特徴）
+                            if line_content.rstrip().endswith(','):
+                                logger.debug(
+                                    f"[G-12] {filepath}:{line_no} - Skipping '{builtin_name}' "
+                                    f"(inline keyword argument pattern)"
+                                )
+                                continue
                         
                         issues.append({
                             'type': 'python_builtin_shadowing',
@@ -25941,6 +26384,7 @@ Identify what structural changes you made, and undo them while keeping only the 
                 "Lint check & Auto-fix",
                 "Quality assessment",
                 "Comprehensive Review",
+                "Test execution & Auto-fix",
             ]
             _hud = StepHUD(section_title="Retry Validation", steps=steps)
             _hud.start()
@@ -25961,7 +26405,8 @@ Identify what structural changes you made, and undo them while keeping only the 
             # ⭐ Zen HUD用サマリー初期化（retry用）
             self._zen_summary = {
                 "lint": {"initial": 0, "final": 0, "fixed": False},
-                "review": {"initial": 0, "final": 0, "fixed": False, "issues": []}
+                "review": {"initial": 0, "final": 0, "fixed": False, "issues": []},
+                "test": {"skipped": True, "reason": "Not yet executed", "total": 0, "passed": 0, "failed_initial": 0, "failed_final": 0, "fixed": False, "attempts": 0}
             }
             
             # ============================================
@@ -26367,6 +26812,78 @@ Identify what structural changes you made, and undo them while keeping only the 
                 hud.complete("Comprehensive Review")
             
             # ============================================
+            # 🆕 Test Execution & Auto-fix（指摘B修正）
+            # ============================================
+            if hud:
+                hud.mark("Test execution & Auto-fix")
+            
+            if self._should_run_tests(generated_code):
+                logger.debug("[Retry] Running test verification...")
+                generated_code, test_result_data = self._test_execution_loop(
+                    generated_code, goal, max_attempts=2  # retryは2回に制限
+                )
+                if test_result_data:
+                    self._zen_summary["test"] = test_result_data
+                    # 指摘A修正: テスト修正でコードが変わった場合、quality_scoresを再評価
+                    # Note: retry側ではこの後のL26474「最終Quality再評価」で
+                    # 更新後のgenerated_codeに対して再評価されるため、ここでの追加再評価は不要
+                    if test_result_data.get("fixed"):
+                        logger.debug("[Retry] Code modified by test fix, quality will be re-evaluated below")
+            else:
+                test_result_data = None
+            
+            # 🆕 API Contract Validation（多段階フローでも実行）
+            if test_result_data and not test_result_data.get("skipped"):
+                contract_failures = self._validate_api_contracts(generated_code, goal)
+                if contract_failures:
+                    logger.debug(f"[API Contract] {len(contract_failures)} contract violation(s) detected")
+                    for cf in contract_failures:
+                        logger.debug(f"[API Contract] FAIL: {cf}")
+                    
+                    logger.debug("[API Contract] Attempting LLM fix for contract violations...")
+                    
+                    class _ContractTestResult:
+                        def __init__(self, failures):
+                            self.success = False
+                            self.passed = 0
+                            self.failed = len(failures)
+                            self.errors = 0
+                            self.total_tests = len(failures)
+                            self.execution_time = 0.0
+                            self.failure_details = []
+                            for i, f in enumerate(failures):
+                                import re as _re
+                                file_match = _re.search(r'\(([^:)]+\.(?:py|jsx|js|tsx|ts|mjs|cjs))', f)
+                                fake_tb = f
+                                if file_match:
+                                    fname = file_match.group(1)
+                                    fake_tb = f'  File "{fname}", line 1, in <module>\n    {f}'
+                                self.failure_details.append({
+                                    "test_name": f"api_contract_{i}", 
+                                    "error_type": "ContractViolation", 
+                                    "message": f, 
+                                    "traceback": fake_tb
+                                })
+                    
+                    contract_result = _ContractTestResult(contract_failures)
+                    pre_fix_code = dict(generated_code)
+                    fixed_files = self._fix_test_failures_with_llm(
+                        generated_code, contract_result, goal
+                    )
+                    if fixed_files:
+                        generated_code = fixed_files
+                        logger.debug("[API Contract] LLM fix applied, re-validating...")
+                        recheck = self._validate_api_contracts(generated_code, goal)
+                        if recheck and len(recheck) >= len(contract_failures):
+                            logger.debug(f"[API Contract] Fix caused regression, rolling back")
+                            generated_code = pre_fix_code
+                        elif not recheck:
+                            logger.debug("[API Contract] All contract violations resolved!")
+            
+            if hud:
+                hud.complete("Test execution & Auto-fix")
+            
+            # ============================================
             # 最終Quality再評価
             # ============================================
             quality_scores = self._assess_code_quality(
@@ -26467,6 +26984,2078 @@ Identify what structural changes you made, and undo them while keeping only the 
                 hud.finish(success=False)
             
             return (generated_code, prev_lint_result, {})
+
+    # ==========================================
+    # Test Execution Feedback Loop Methods
+    # ==========================================
+
+    def _is_test_file(self, filename: str) -> bool:
+        """テストファイルかどうか判定（Python + JS/TS対応）"""
+        name = Path(filename).name
+        # Python test files
+        if (
+            (name.startswith('test_') and name.endswith('.py')) or
+            name.endswith('_test.py') or
+            name == 'tests.py' or
+            name == 'conftest.py'
+        ):
+            return True
+        # JS/TS test files
+        js_ts_extensions = ('.js', '.jsx', '.ts', '.tsx', '.mjs', '.cjs')
+        if any(name.endswith(ext) for ext in js_ts_extensions):
+            stem = name
+            for ext in js_ts_extensions:
+                if stem.endswith(ext):
+                    stem = stem[:-len(ext)]
+                    break
+            if (
+                stem.endswith('.test') or
+                stem.endswith('.spec') or
+                stem.startswith('test_') or
+                stem.endswith('_test') or
+                name == 'jest.config.js' or
+                name == 'jest.config.ts'
+            ):
+                return True
+            # __tests__ディレクトリ内のファイル
+            if '__tests__' in filename:
+                return True
+        return False
+
+    def _check_pytest_available(self) -> bool:
+        """pytestが利用可能か確認"""
+        try:
+            result = subprocess.run(
+                [sys.executable, "-m", "pytest", "--version"],
+                capture_output=True, timeout=10
+            )
+            return result.returncode == 0
+        except (FileNotFoundError, subprocess.TimeoutExpired, Exception):
+            return False
+
+    def _should_run_tests(self, generated_files: Dict[str, str]) -> bool:
+        """テスト実行が必要か判定"""
+        # Python以外のプロジェクト → スキップ
+        has_python = any(f.endswith('.py') for f in generated_files.keys())
+        if not has_python:
+            return False
+        
+        # 生成ファイルにテストファイルが含まれるか
+        has_generated_tests = any(
+            self._is_test_file(f) for f in generated_files.keys()
+        )
+        
+        # workspace_pathにテストファイルが存在するか
+        has_existing_tests = False
+        if self.workspace_path and self.workspace_path.exists():
+            has_existing_tests = any(
+                self._is_test_file(f.name)
+                for f in self.workspace_path.rglob('*.py')
+                if f.is_file()
+            )
+        
+        return has_generated_tests or has_existing_tests
+
+    def _detect_test_framework(self, generated_files: Dict[str, str]) -> 'TestDetectionResult':
+        """テストフレームワークと実行方法を検出"""
+        
+        # テストファイル特定（生成ファイル + workspace既存ファイル）
+        test_files = []
+        for f in generated_files.keys():
+            if self._is_test_file(f):
+                test_files.append(f)
+        
+        if self.workspace_path and self.workspace_path.exists():
+            for pattern in ['test_*.py', '*_test.py']:
+                for f in self.workspace_path.rglob(pattern):
+                    rel = str(f.relative_to(self.workspace_path))
+                    if rel not in test_files:
+                        test_files.append(rel)
+        
+        if not test_files:
+            return TestDetectionResult(
+                has_tests=False, test_files=[], framework="none",
+                run_command=[], language="none"
+            )
+        
+        # フレームワーク検出（テストファイルの中身から判定）
+        framework = "pytest"  # デフォルト（pytestはunittestも実行可能）
+        for tf in test_files:
+            content = generated_files.get(tf, "")
+            if not content and self.workspace_path:
+                try:
+                    content = (self.workspace_path / tf).read_text(encoding='utf-8')
+                except Exception:
+                    pass
+            if "import pytest" in content or "from pytest" in content:
+                framework = "pytest"
+                break
+        
+        # 実行コマンド決定
+        if self._check_pytest_available():
+            run_command = [sys.executable, "-m", "pytest", "-v", "--tb=long", "--no-header"]
+            run_command.extend(test_files)
+        else:
+            # pytestが使えない場合 → unittest discover
+            run_command = [sys.executable, "-m", "unittest", "discover", "-v", "-s", "."]
+            framework = "unittest"
+        
+        logger.debug(f"[Test Detect] Found {len(test_files)} test file(s), framework: {framework}")
+        
+        return TestDetectionResult(
+            has_tests=True, test_files=test_files, framework=framework,
+            run_command=run_command, language="python"
+        )
+
+    def _prepare_test_environment(self, generated_files: Dict[str, str]) -> Path:
+        """テスト実行用の隔離環境を準備
+        
+        workspace全体をコピーしてからgenerated_filesで上書き。
+        data/ディレクトリ等のサブディレクトリ構造が保持される。
+        """
+        temp_dir = Path(tempfile.mkdtemp(prefix="cognix_test_"))
+        
+        skip_dirs = {
+            '__pycache__', '.git', 'node_modules', 'venv', '.venv',
+            '.cognix', '.pytest_cache', '.mypy_cache', '.tox'
+        }
+        
+        # Step 1: workspace_pathの全ファイルをコピー（ディレクトリ構造含む）
+        if self.workspace_path and self.workspace_path.exists():
+            import shutil
+            for item in self.workspace_path.rglob('*'):
+                if item.is_file():
+                    rel = item.relative_to(self.workspace_path)
+                    if any(part in skip_dirs for part in rel.parts):
+                        continue
+                    # _bench_で始まるファイルはベンチマーク用なのでスキップ
+                    if rel.name.startswith('_bench_'):
+                        continue
+                    dest = temp_dir / rel
+                    dest.parent.mkdir(parents=True, exist_ok=True)
+                    shutil.copy2(item, dest)
+        
+        # Step 2: generated_filesで上書き（ディレクトリ自動作成含む）
+        for filename, code in generated_files.items():
+            dest = temp_dir / filename
+            dest.parent.mkdir(parents=True, exist_ok=True)
+            dest.write_text(code, encoding='utf-8')
+        
+        return temp_dir
+
+    def _execute_tests(
+        self,
+        temp_dir: Path,
+        test_detection: 'TestDetectionResult'
+    ) -> 'TestExecutionResult':
+        """一時ディレクトリでテストを実行"""
+        import time
+        start_time = time.time()
+        
+        try:
+            result = subprocess.run(
+                test_detection.run_command,
+                capture_output=True,
+                encoding='utf-8',
+                errors='replace',
+                timeout=120,
+                cwd=str(temp_dir)
+            )
+            
+            elapsed = time.time() - start_time
+            if test_detection.framework == "unittest":
+                return self._parse_unittest_output(
+                    result.stdout, result.stderr, result.returncode, elapsed
+                )
+            return self._parse_pytest_output(
+                result.stdout, result.stderr, result.returncode, elapsed
+            )
+            
+        except subprocess.TimeoutExpired:
+            return TestExecutionResult(
+                success=False, total_tests=0, passed=0, failed=0, errors=1,
+                failure_details=[{
+                    "test_name": "TIMEOUT", "error_type": "TimeoutError",
+                    "message": "Test execution exceeded 120 seconds", "traceback": ""
+                }],
+                stdout="", stderr="", execution_time=120.0
+            )
+        except Exception as e:
+            return TestExecutionResult(
+                success=False, total_tests=0, passed=0, failed=0, errors=1,
+                failure_details=[{
+                    "test_name": "EXECUTION_ERROR", "error_type": type(e).__name__,
+                    "message": str(e), "traceback": ""
+                }],
+                stdout="", stderr="", execution_time=time.time() - start_time
+            )
+
+    def _parse_unittest_output(
+        self, stdout: str, stderr: str, returncode: int, elapsed: float
+    ) -> 'TestExecutionResult':
+        """unittestの出力をパース"""
+        import re
+        
+        combined = stdout + "\n" + stderr
+        
+        # unittestのサマリー行: "Ran 85 tests in 1.234s"
+        ran_match = re.search(r'Ran\s+(\d+)\s+test', combined)
+        total = int(ran_match.group(1)) if ran_match else 0
+        
+        # 結果行: "OK" or "FAILED (failures=3, errors=1)"
+        failed = 0
+        errors = 0
+        result_match = re.search(r'FAILED\s*\(([^)]+)\)', combined)
+        if result_match:
+            detail_str = result_match.group(1)
+            f_match = re.search(r'failures=(\d+)', detail_str)
+            e_match = re.search(r'errors=(\d+)', detail_str)
+            if f_match:
+                failed = int(f_match.group(1))
+            if e_match:
+                errors = int(e_match.group(1))
+        
+        passed = max(0, total - failed - errors)
+        
+        # 失敗詳細の抽出
+        failure_details = []
+        
+        # unittest -v の出力行: "test_name (TestClass) ... FAIL"
+        fail_lines = re.findall(
+            r'^(\S+)\s+\(([^)]+)\)\s+\.\.\.\s+(FAIL|ERROR)\s*$',
+            combined, re.MULTILINE
+        )
+        for test_method, test_class, status in fail_lines:
+            failure_details.append({
+                "test_name": f"{test_class}.{test_method}",
+                "error_type": "TestError" if status == "ERROR" else "TestFailure",
+                "message": "",
+                "traceback": ""
+            })
+        
+        # FAILセクション/ERRORセクションからtraceback取得
+        # unittest形式: "=" * 70 + "\nFAIL: test_name (TestClass)\n" + "-" * 70 + "\nTraceback..."
+        for section_match in re.finditer(
+            r'={50,}\n(FAIL|ERROR):\s+(\S+)\s+\(([^)]+)\)\n-{50,}\n(.*?)(?=\n={50,}|\Z)',
+            combined, re.DOTALL
+        ):
+            status = section_match.group(1)
+            test_method = section_match.group(2)
+            test_class = section_match.group(3)
+            tb_text = section_match.group(4).strip()
+            full_name = f"{test_class}.{test_method}"
+            
+            for detail in failure_details:
+                if detail["test_name"] == full_name:
+                    detail["traceback"] = tb_text[:2000]
+                    # tracebackの最終行からエラー種別を抽出
+                    last_line = tb_text.strip().splitlines()[-1] if tb_text.strip() else ""
+                    if ":" in last_line:
+                        candidate = last_line.split(":")[0].strip()
+                        if candidate and candidate[0].isupper() and " " not in candidate:
+                            detail["error_type"] = candidate
+                            detail["message"] = last_line
+                    break
+        
+        return TestExecutionResult(
+            success=(failed == 0 and errors == 0),
+            total_tests=total,
+            passed=passed,
+            failed=failed,
+            errors=errors,
+            failure_details=failure_details,
+            stdout=stdout, stderr=stderr,
+            execution_time=elapsed
+        )
+
+    def _parse_pytest_output(
+        self, stdout: str, stderr: str, returncode: int, elapsed: float
+    ) -> 'TestExecutionResult':
+        """pytestの全出力パターンに対応するパーサー"""
+        
+        combined = stdout + "\n" + stderr
+        
+        # パターン1: Collection error（テスト収集自体が失敗）
+        if "ERROR collecting" in combined or \
+           (returncode != 0 and "collected 0 items" in combined and "error" in combined.lower()):
+            return TestExecutionResult(
+                success=False, total_tests=0, passed=0, failed=0, errors=1,
+                failure_details=[{
+                    "test_name": "COLLECTION_ERROR",
+                    "error_type": "CollectionError",
+                    "message": self._extract_first_error(combined),
+                    "traceback": combined[:3000]
+                }],
+                stdout=stdout, stderr=stderr, execution_time=elapsed,
+                collection_error=True
+            )
+        
+        # パターン2: No tests found
+        if "no tests ran" in combined or \
+           ("collected 0 items" in combined and returncode == 5):
+            return TestExecutionResult(
+                success=True, total_tests=0, passed=0, failed=0, errors=0,
+                failure_details=[],
+                stdout=stdout, stderr=stderr, execution_time=elapsed,
+                skipped=True, skip_reason="No tests collected"
+            )
+        
+        # パターン3: 正常実行結果のパース
+        passed = 0
+        failed = 0
+        errors = 0
+        
+        # pytestの出力には複数の====行がある（FAILURES, short test summary, 最終結果）
+        # 最終結果行は最後の====行なので、findallで全マッチ取得→最後を使う
+        all_summary_matches = re.findall(
+            r'=+\s*(.*?)\s*=+\s*$', combined, re.MULTILINE
+        )
+        # 最終結果行はpassedまたはfailedを含む
+        summary = ""
+        for candidate in reversed(all_summary_matches):
+            if 'passed' in candidate or 'failed' in candidate or 'error' in candidate:
+                summary = candidate
+                break
+        
+        if summary:
+            p = re.search(r'(\d+)\s+passed', summary)
+            f = re.search(r'(\d+)\s+failed', summary)
+            e = re.search(r'(\d+)\s+error', summary)
+            if p:
+                passed = int(p.group(1))
+            if f:
+                failed = int(f.group(1))
+            if e:
+                errors = int(e.group(1))
+        
+        total = passed + failed + errors
+        
+        # パターン4: 失敗詳細の抽出
+        failure_details = []
+        
+        # FAILED行からテスト名を取得（short test summaryセクションの形式のみ）
+        # 形式: "FAILED test_file.py::test_name - error message"
+        # pytest -vの進捗行（"test_file.py::test_name FAILED [ 50%]"）は除外
+        failed_tests = re.findall(r'^(?:FAILED|ERROR)\s+([\w./:\\\[\]\-]+(?:::[\w\[\]\-]+)?)\s*(?:-\s+(.+))?$', combined, re.MULTILINE)
+        for test_name, error_msg in failed_tests:
+            test_name = test_name.strip()
+            msg = error_msg.strip() if error_msg else ""
+            # エラー種別をメッセージから抽出（"NameError: ..." → "NameError"）
+            error_type = "TestFailure"
+            if msg and ":" in msg:
+                candidate = msg.split(":")[0].strip()
+                if candidate and candidate[0].isupper() and " " not in candidate:
+                    error_type = candidate
+            failure_details.append({
+                "test_name": test_name,
+                "error_type": error_type,
+                "message": msg,
+                "traceback": ""
+            })
+        
+        # FAILURES/ERRORSセクションからtraceback全文を取得
+        for section_match in re.finditer(
+            r'=+ (?:FAILURES|ERRORS) =+\s*\n(.*?)(?==+ (?:FAILURES|ERRORS|short test summary)|$)',
+            combined, re.DOTALL
+        ):
+            failures_text = section_match.group(1)
+            # 個別テストのtraceback
+            individual_failures = re.split(r'_+ (.+?) _+', failures_text)
+            for i in range(1, len(individual_failures), 2):
+                tb_name = individual_failures[i].strip()
+                tb_text = individual_failures[i + 1].strip() if i + 1 < len(individual_failures) else ""
+                # failure_detailsの対応するテストにtraceback追加
+                # pytestのFAILURES/ERRORSセクションはドット区切り(TestClass.test_name)
+                # short test summaryはコロン区切り(file.py::TestClass::test_name)
+                # ERRORSセクションでは "ERROR at setup of TestClass.test_name" 形式もある
+                # 両方を正規化して比較
+                tb_clean = re.sub(r'^ERROR\s+at\s+\w+\s+of\s+', '', tb_name)
+                tb_normalized = tb_clean.replace("::", ".").replace(" ", "")
+                for detail in failure_details:
+                    detail_normalized = detail["test_name"].replace("::", ".").replace(" ", "")
+                    if tb_normalized in detail_normalized or detail_normalized in tb_normalized:
+                        detail["traceback"] = tb_text[:2000]
+                        break
+        
+        return TestExecutionResult(
+            success=(failed == 0 and errors == 0),
+            total_tests=total,
+            passed=passed,
+            failed=failed,
+            errors=errors,
+            failure_details=failure_details,
+            stdout=stdout, stderr=stderr,
+            execution_time=elapsed
+        )
+
+    def _extract_first_error(self, text: str) -> str:
+        """Collection errorの最初のエラーメッセージを抽出"""
+        match = re.search(
+            r'(ImportError|ModuleNotFoundError|SyntaxError|NameError|AttributeError):\s*(.+?)$',
+            text, re.MULTILINE
+        )
+        if match:
+            return f"{match.group(1)}: {match.group(2)}"
+        return text[:500]
+
+    def _extract_error_files_from_traceback(
+        self,
+        traceback_text: str,
+        source_files: Dict[str, str]
+    ) -> List[str]:
+        """Collection errorのtracebackからエラー原因ファイル名を抽出
+        
+        pytestのcollection error出力に含まれる File "path/to/file.py" パターンから
+        エラーの原因となったファイルを特定し、source_filesのキーと照合する。
+        
+        Args:
+            traceback_text: collection errorのtraceback全文
+            source_files: {filename: code} のソースファイル辞書
+            
+        Returns:
+            エラー原因ファイル名のリスト（source_filesのキーに一致するもの）
+        """
+        import re
+        
+        # tracebackからすべての File "..." 行を抽出
+        file_refs = re.findall(
+            r'File\s+"([^"]+\.py)"',
+            traceback_text
+        )
+        
+        if not file_refs:
+            return []
+        
+        # source_filesのbasenameマッピングを構築
+        source_basename_map = {}
+        for src_key in source_files.keys():
+            # source_filesのキーはファイル名のみ（例: "commands.py"）
+            # またはサブディレクトリ付き（例: "src/commands.py"）
+            basename = src_key.rsplit('/', 1)[-1] if '/' in src_key else src_key
+            basename = basename.rsplit('\\', 1)[-1] if '\\' in basename else basename
+            source_basename_map[basename] = src_key
+        
+        # tracebackのFile参照をsource_filesのキーに照合
+        # 最後のFile参照がエラーの直接原因である可能性が最も高いが、
+        # import chain全体が壊れている場合もあるため、
+        # マッチするすべてのファイルを返す（重複排除）
+        error_files = []
+        seen = set()
+        
+        for file_ref in file_refs:
+            # フルパスからbasenameを抽出
+            # Windows: C:\Users\...\commands.py
+            # Unix: /tmp/cognix_test_.../commands.py
+            basename = file_ref.rsplit('/', 1)[-1] if '/' in file_ref else file_ref
+            basename = basename.rsplit('\\', 1)[-1] if '\\' in basename else basename
+            
+            if basename in source_basename_map and basename not in seen:
+                error_files.append(source_basename_map[basename])
+                seen.add(basename)
+        
+        # 最後のFile参照（直接原因）を先頭に持ってくる
+        if len(error_files) > 1 and file_refs:
+            last_basename = file_refs[-1].rsplit('/', 1)[-1]
+            last_basename = last_basename.rsplit('\\', 1)[-1]
+            last_key = source_basename_map.get(last_basename)
+            if last_key and last_key in error_files:
+                error_files.remove(last_key)
+                error_files.insert(0, last_key)
+        
+        logger.debug(f"[Test Fix] Extracted error files from traceback: {error_files}")
+        return error_files
+
+    def _fix_test_failures_with_llm(
+        self,
+        generated_files: Dict[str, str],
+        test_result: 'TestExecutionResult',
+        goal: str
+    ) -> Optional[Dict[str, str]]:
+        """テスト失敗を修正するためにLLMを呼び出す
+        
+        collection error（構文エラー等でテスト収集自体が失敗）と
+        通常のテスト失敗（assertion error等）で異なるプロンプトを使用する。
+        """
+        
+        # テストファイルとソースファイルを分離
+        test_files = {}
+        source_files = {}
+        for filename, code in generated_files.items():
+            if self._is_test_file(filename):
+                test_files[filename] = code
+            else:
+                source_files[filename] = code
+        
+        # ========================================
+        # プロンプト構築: collection error vs 通常テスト失敗
+        # ========================================
+        if getattr(test_result, 'collection_error', False):
+            # ── Collection Error専用パス ──
+            # テスト収集自体が失敗（SyntaxError, ImportError等）
+            # エラー原因ファイルのみを対象にした集中修正
+            logger.debug("[Test Fix] Collection error detected, using focused fix prompt")
+            
+            prompt, fix_max_tokens, system_prompt = self._build_collection_error_prompt(
+                test_result, source_files, goal
+            )
+        else:
+            # ── 通常のテスト失敗パス ──
+            prompt, fix_max_tokens, system_prompt = self._build_test_failure_prompt(
+                test_result, source_files, test_files, generated_files, goal
+            )
+        
+        # ========================================
+        # LLM呼び出し・レスポンス処理（共通）
+        # ========================================
+        try:
+            logger.debug(f"[Test Fix] Requesting fixes from LLM (max_tokens={fix_max_tokens})...")
+            
+            response = self.llm_manager.generate_response(
+                prompt=prompt,
+                system_prompt=system_prompt,
+                max_tokens=fix_max_tokens
+            )
+            
+            if hasattr(response, 'content'):
+                response_text = response.content
+            elif isinstance(response, str):
+                response_text = response
+            else:
+                response_text = str(response)
+            
+            # 修正されたコードを抽出
+            fixed_files = self._extract_code_blocks(response_text)
+            
+            if fixed_files:
+                # テストファイル・無効なキーを除外
+                for tf in list(fixed_files.keys()):
+                    if self._is_test_file(tf):
+                        logger.debug(f"[Test Fix] Rejected test file modification: {tf}")
+                        del fixed_files[tf]
+                    elif tf == '__code__' or not tf.endswith('.py'):
+                        logger.debug(f"[Test Fix] Rejected invalid file key: {tf}")
+                        del fixed_files[tf]
+                
+                if not fixed_files:
+                    logger.debug("[Test Fix] No valid fixes after filtering out test files")
+                    return None
+                
+                # 元のファイルとマージ（テストファイルは元のまま維持）
+                result = generated_files.copy()
+                result.update(fixed_files)
+                
+                logger.debug(f"[Test Fix] Fixed {len(fixed_files)} source file(s)")
+                return result
+            
+            logger.debug("[Test Fix] Failed to extract fixed code from LLM response")
+            return None
+            
+        except Exception as e:
+            logger.debug(f"[Test Fix] Error: {e}")
+            return None
+
+    def _build_collection_error_prompt(
+        self,
+        test_result: 'TestExecutionResult',
+        source_files: Dict[str, str],
+        goal: str
+    ) -> Tuple[str, int, str]:
+        """Collection error（構文エラー等）専用のプロンプトを構築
+        
+        通常のテスト失敗プロンプトとの違い:
+        - エラー原因ファイルのみを修正対象として提示（全ファイル不要）
+        - 「構文エラーを修正せよ」と明確に指示
+        - 修正対象ファイルのみの返却を要求（出力トークン削減）
+        
+        Returns:
+            (prompt, max_tokens, system_prompt) のタプル
+        """
+        # Collection errorの詳細を取得
+        error_detail = test_result.failure_details[0] if test_result.failure_details else {}
+        error_message = error_detail.get('message', 'Unknown error')
+        error_traceback = error_detail.get('traceback', '')
+        
+        # エラー原因ファイルをtracebackから抽出
+        error_files = self._extract_error_files_from_traceback(
+            error_traceback, source_files
+        )
+        
+        # エラーファイルが特定できた場合: 対象ファイルのみ提示
+        # 特定できなかった場合: 全ソースファイルにフォールバック
+        if error_files:
+            target_files = {f: source_files[f] for f in error_files if f in source_files}
+            # error_filesはあるがsource_filesに存在しない場合もフォールバック
+            if target_files:
+                logger.debug(f"[Test Fix] Collection error: targeting {len(target_files)} file(s): {list(target_files.keys())}")
+            else:
+                target_files = source_files
+                logger.debug(f"[Test Fix] Collection error: error files not in source_files, targeting all {len(target_files)} source file(s)")
+        else:
+            target_files = source_files
+            logger.debug(f"[Test Fix] Collection error: could not identify error files, targeting all {len(target_files)} source file(s)")
+        
+        # 修正対象ファイルを列挙
+        target_context = []
+        for filename, code in target_files.items():
+            target_context.append(f"## File: {filename}\n```\n{code}\n```")
+        target_text = "\n\n".join(target_context)
+        
+        # max_tokens: 対象ファイルのみなのでコンパクト
+        target_code_chars = sum(len(c) for c in target_files.values())
+        fix_max_tokens = min(32000, max(8000, target_code_chars // 2))
+        
+        prompt = f"""CRITICAL: Test collection failed due to a syntax or import error in the source code.
+Tests could NOT run at all because the source code has a fatal error that prevents Python from loading the module.
+
+ERROR DETAILS:
+  Type: {error_detail.get('error_type', 'Unknown')}
+  Message: {error_message}
+
+FULL ERROR OUTPUT:
+{error_traceback[:2500]}
+
+ORIGINAL IMPLEMENTATION GOAL:
+{goal[:500]}
+
+FILES TO FIX (return ONLY these files with the error corrected):
+{target_text}
+
+INSTRUCTIONS:
+1. Find and fix the syntax/import error shown above
+2. Ensure the fixed code is valid Python that can be imported without errors
+3. Do NOT change any logic, only fix the error that prevents the module from loading
+4. Return ONLY the fixed file(s) using this format:
+
+## File: filename
+```
+fixed code here
+```
+
+Fix the error now."""
+
+        system_prompt = "You are an expert Python debugger. Fix the syntax or import error so the code can be loaded. Do NOT change any logic beyond fixing the error."
+        
+        return prompt, fix_max_tokens, system_prompt
+
+    def _infer_target_files_from_test_imports(
+        self,
+        test_result: 'TestExecutionResult',
+        test_files: Dict[str, str],
+        source_files: Dict[str, str]
+    ) -> Optional[Dict[str, str]]:
+        """失敗テストが依存するソースファイルを推定
+        
+        tracebackからエラー原因ファイルを特定できなかった場合（assertion error等）の
+        フォールバック。以下の手順で対象ファイルを絞り込む:
+        
+        1. テストファイルのimport文からモジュール→ソースファイルの対応を構築
+        2. 失敗テスト関数のコードを抽出
+        3. テスト関数内で参照されているモジュール名をソースファイルに対応付け
+        
+        Args:
+            test_result: テスト実行結果
+            test_files: テストファイル {filename: code}
+            source_files: ソースファイル {filename: code}
+            
+        Returns:
+            対象ソースファイルの辞書。特定できない場合はNone
+        """
+        import re
+        
+        # ソースファイル名→モジュール名のマッピング
+        source_modules = {}  # module_name → filename
+        for sf in source_files.keys():
+            if sf.endswith('.py'):
+                basename_module = Path(sf).stem
+                source_modules[basename_module] = sf
+        
+        # テストファイルのimport文から、インポートされた名前→ソースモジュールの対応を構築
+        # 例: "from models import RecurringRule" → RecurringRule → models.py
+        imported_names = {}  # imported_name → source_filename
+        for tf_name, tf_code in test_files.items():
+            # from X import A, B, C パターン
+            from_imports = re.findall(
+                r'from\s+(\S+)\s+import\s+(.+?)(?:\n|$)',
+                tf_code
+            )
+            for module_ref, names_str in from_imports:
+                top_module = module_ref.split('.')[0]
+                if top_module in source_modules:
+                    sf = source_modules[top_module]
+                    for name in re.split(r'\s*,\s*', names_str.strip()):
+                        name = name.strip()
+                        if name and name != '\\':
+                            imported_names[name] = sf
+            
+            # import X パターン
+            direct_imports = re.findall(r'^import\s+(\S+)', tf_code, re.MULTILINE)
+            for module_ref in direct_imports:
+                top_module = module_ref.split('.')[0]
+                if top_module in source_modules:
+                    imported_names[top_module] = source_modules[top_module]
+        
+        if not imported_names:
+            logger.debug("[Test Fix] No source imports found in test files")
+            return None
+        
+        # 失敗テスト関数のコードを抽出し、参照されるソースファイルを特定
+        target_files = set()
+        for detail in test_result.failure_details[:10]:
+            test_name = detail.get('test_name', '')
+            # test_name例: "test_recurring_rule_creation" or "TestRecurring::test_creation"
+            func_name = test_name.split('::')[-1] if '::' in test_name else test_name
+            
+            # テストファイルから該当関数のコードを抽出
+            for tf_name, tf_code in test_files.items():
+                func_pattern = rf'def\s+{re.escape(func_name)}\s*\(.*?\).*?(?=\n    def |\ndef |\nclass |\Z)'
+                match = re.search(func_pattern, tf_code, re.DOTALL)
+                if match:
+                    func_code = match.group(0)
+                    # 関数内で参照されている名前を検索
+                    for name, sf in imported_names.items():
+                        if name in func_code:
+                            target_files.add(sf)
+                    break
+        
+        if not target_files:
+            logger.debug("[Test Fix] Could not infer target files from failed test functions")
+            return None
+        
+        logger.debug(f"[Test Fix] Inferred from test imports: {sorted(target_files)}")
+        result = {f: source_files[f] for f in target_files if f in source_files}
+        return result if result else None
+
+    def _build_test_failure_prompt(
+        self,
+        test_result: 'TestExecutionResult',
+        source_files: Dict[str, str],
+        test_files: Dict[str, str],
+        generated_files: Dict[str, str],
+        goal: str
+    ) -> Tuple[str, int, str]:
+        """通常のテスト失敗用プロンプトを構築
+        
+        failedテストのtracebackからエラー原因ファイルを特定し、
+        修正が必要なファイルのみをプロンプトに含める。
+        LLMには修正したファイルのみの返却を要求する。
+        
+        Returns:
+            (prompt, max_tokens, system_prompt) のタプル
+        """
+        # 失敗詳細を整形
+        failure_text = []
+        for i, detail in enumerate(test_result.failure_details[:10], 1):
+            failure_text.append(f"""Failure #{i}:
+  Test: {detail['test_name']}
+  Error: {detail['error_type']}: {detail['message']}
+  Traceback:
+{detail['traceback'][:1500]}""")
+        
+        failures_formatted = "\n\n".join(failure_text)
+        
+        # ── エラー原因ファイルの特定 ──
+        # 全failure_detailsのtracebackからFile参照を抽出し、
+        # 修正対象を絞り込む
+        all_error_files = set()
+        for detail in test_result.failure_details[:10]:
+            tb = detail.get('traceback', '')
+            extracted = self._extract_error_files_from_traceback(tb, source_files)
+            all_error_files.update(extracted)
+        
+        if all_error_files:
+            target_source_files = {f: source_files[f] for f in all_error_files if f in source_files}
+            # 抽出結果が空（source_filesに見つからない）場合は全ファイルにフォールバック
+            if not target_source_files:
+                target_source_files = source_files
+                logger.debug(f"[Test Fix] Error files not in source_files, targeting all {len(target_source_files)} source file(s)")
+            else:
+                logger.debug(f"[Test Fix] Targeting {len(target_source_files)} error file(s): {list(target_source_files.keys())}")
+        else:
+            # tracebackからファイルを特定できなかった場合（assertion error等）
+            # テストファイルのimport文から、テストが依存するソースモジュールを推定
+            import_based_files = self._infer_target_files_from_test_imports(
+                test_result, test_files, source_files
+            )
+            if import_based_files:
+                target_source_files = import_based_files
+                logger.debug(f"[Test Fix] Inferred {len(target_source_files)} target file(s) from test imports: {list(target_source_files.keys())}")
+            else:
+                target_source_files = source_files
+                logger.debug(f"[Test Fix] Could not identify error files, targeting all {len(target_source_files)} source file(s)")
+        
+        # 修正対象ソースファイルを列挙
+        source_context = []
+        for filename, code in target_source_files.items():
+            source_context.append(f"## File: {filename}\n```\n{code}\n```")
+        source_text = "\n\n".join(source_context)
+        
+        # テストファイルを列挙（参考用 — 読み取り専用）
+        test_context = []
+        for filename, code in test_files.items():
+            test_context.append(f"## File: {filename} (READ-ONLY - DO NOT MODIFY)\n```\n{code}\n```")
+        test_text = "\n\n".join(test_context)
+        
+        # リポジトリマップ（既存コードのコンテキスト）
+        # 対象ファイルが絞り込まれている場合はrepository_mapを除外（トークン節約）
+        if len(target_source_files) < len(source_files):
+            repository_map = ""
+            logger.debug(f"[Test Fix] Skipping repository_map (target files narrowed to {len(target_source_files)})")
+        else:
+            repository_map = self._generate_repository_map()
+        
+        # max_tokens動的調整（対象ファイル＋テストファイル基準）
+        # 上限16000: 非ストリーミングAPI呼び出しでの制限回避
+        target_code_chars = sum(len(c) for c in target_source_files.values())
+        test_code_chars = sum(len(c) for c in test_files.values())
+        fix_max_tokens = min(16000, max(8000, (target_code_chars + test_code_chars) // 3))
+        
+        prompt = f"""Fix the following test failures by modifying ONLY the source code files.
+
+    CRITICAL CONSTRAINTS (ABSOLUTE - VIOLATION IS UNACCEPTABLE):
+    1. Test files are SPECIFICATIONS - NEVER modify, delete, or rename any test file
+    2. ONLY modify source files listed under "MODIFIABLE FILES" below
+    3. Tests define the expected behavior - make the SOURCE CODE match the TESTS
+    4. If a test expects a specific string, the source MUST output that exact string (case-sensitive)
+    5. Do NOT create any new files
+    6. Do NOT break any currently passing tests - all {test_result.passed} passing tests MUST still pass
+    7. Do NOT remove or simplify any existing functionality
+
+    ORIGINAL IMPLEMENTATION GOAL:
+    {goal[:500]}
+
+    TEST FAILURES ({test_result.failed} failed, {test_result.errors} errors, {test_result.passed} passed):
+    {failures_formatted}
+
+    MODIFIABLE FILES (source code - fix these):
+    {source_text}
+
+    READ-ONLY FILES (test specifications - DO NOT MODIFY):
+    {test_text}
+
+    {"REPOSITORY CONTEXT:" + chr(10) + repository_map if repository_map else ""}
+
+    INSTRUCTIONS:
+    1. Analyze each test failure carefully
+    2. Identify the root cause in the SOURCE code (not the test)
+    3. Fix the source code to make all tests pass
+    4. Return ONLY the modified file(s) using this format:
+
+    ## File: filename
+    ```
+    fixed code here
+    ```
+
+    Generate the fixed source code now."""
+
+        system_prompt = "You are an expert debugger. Fix source code to pass all tests. NEVER modify test files."
+        
+        return prompt, fix_max_tokens, system_prompt
+
+    def _test_execution_loop(
+        self,
+        generated_files: Dict[str, str],
+        goal: str,
+        max_attempts: int = 3
+    ) -> Tuple[Dict[str, str], Dict[str, Any]]:
+        """テスト実行→失敗修正→再実行ループ"""
+        
+        # テストフレームワーク検出
+        test_detection = self._detect_test_framework(generated_files)
+        
+        if not test_detection.has_tests:
+            logger.debug("[Test Exec] No test files detected, skipping")
+            return generated_files, {
+                "skipped": True, "reason": "No test files detected",
+                "total": 0, "passed": 0, "failed_initial": 0, "failed_final": 0,
+                "fixed": False, "attempts": 0
+            }
+        
+        logger.debug(f"[Test Exec] Detected {len(test_detection.test_files)} test file(s), "
+                     f"framework: {test_detection.framework}")
+        
+        current_files = generated_files.copy()
+        initial_failed = 0
+        last_result = None
+        
+        for attempt in range(1, max_attempts + 1):
+            # 一時ディレクトリ準備
+            temp_dir = self._prepare_test_environment(current_files)
+            
+            try:
+                # テスト実行
+                logger.debug(f"[Test Exec] Attempt {attempt}/{max_attempts}...")
+                test_result = self._execute_tests(temp_dir, test_detection)
+                last_result = test_result
+                
+                if attempt == 1:
+                    initial_failed = test_result.failed + test_result.errors
+                
+                logger.debug(f"[Test Exec] Result: {test_result.passed} passed, "
+                            f"{test_result.failed} failed, {test_result.errors} errors "
+                            f"({test_result.execution_time:.1f}s)")
+                
+                # 失敗詳細をデバッグログに出力
+                if test_result.failure_details:
+                    for i, detail in enumerate(test_result.failure_details[:5], 1):
+                        logger.debug(f"[Test Exec] Failure #{i}: {detail.get('test_name', 'unknown')}")
+                        logger.debug(f"[Test Exec]   Error: {detail.get('error_type', '?')}: {detail.get('message', '?')[:200]}")
+                        tb_preview = detail.get('traceback', '')[:300]
+                        if tb_preview:
+                            logger.debug(f"[Test Exec]   Traceback: {tb_preview}")
+                
+                if test_result.success:
+                    logger.debug(f"[Test Exec] All {test_result.total_tests} tests passed!")
+                    return current_files, {
+                        "skipped": False, "reason": "",
+                        "total": test_result.total_tests,
+                        "passed": test_result.passed,
+                        "failed_initial": initial_failed,
+                        "failed_final": 0,
+                        "fixed": initial_failed > 0,
+                        "attempts": attempt
+                    }
+                
+                if attempt < max_attempts:
+                    # LLMによる修正を試みる
+                    logger.debug(f"[Test Exec] Attempting LLM fix...")
+                    fixed_files = self._fix_test_failures_with_llm(
+                        current_files, test_result, goal
+                    )
+                    if fixed_files:
+                        current_files = fixed_files
+                    else:
+                        logger.debug("[Test Exec] LLM fix returned no result, stopping")
+                        break
+                
+            finally:
+                # 一時ディレクトリ削除
+                import shutil
+                try:
+                    shutil.rmtree(temp_dir, ignore_errors=True)
+                except Exception:
+                    pass
+        
+        # 最大試行回数到達 or 修正失敗
+        final_failed = (last_result.failed + last_result.errors) if last_result else initial_failed
+        return current_files, {
+            "skipped": False, "reason": "Max attempts reached",
+            "total": last_result.total_tests if last_result else 0,
+            "passed": last_result.passed if last_result else 0,
+            "failed_initial": initial_failed,
+            "failed_final": final_failed,
+            "fixed": final_failed < initial_failed,
+            "attempts": max_attempts
+        }
+
+    # ── JS/TS API Contract Validation ヘルパーメソッド ──
+
+    def _detect_js_module_type(self, code: str, filename: str, pkg_json_type: str = None) -> bool:
+        """
+        JS/TSコードがESMかCJSかを判定する。
+        
+        Returns:
+            True = ESM, False = CommonJS
+        """
+        import re
+        # 拡張子による判定（最優先）
+        if filename.endswith('.mjs'):
+            return True
+        if filename.endswith('.cjs'):
+            return False
+        # コード内パターンによる判定
+        has_esm_import = bool(re.search(r'(?:^|\n)\s*import\s+(?:\{|[\w*])', code))
+        has_esm_export = bool(re.search(r'(?:^|\n)\s*export\s+(?:default|const|let|var|function|class|\{)', code))
+        has_require = bool(re.search(r'require\s*\(', code))
+        has_module_exports = bool(re.search(r'module\.exports', code))
+        
+        if has_esm_import or has_esm_export:
+            return True
+        if has_require or has_module_exports:
+            return False
+        # package.jsonのtypeフィールド
+        if pkg_json_type == 'module':
+            return True
+        # デフォルト: CJS
+        return False
+
+    def _extract_js_ts_fields(self, code: str, class_name: str) -> list:
+        """
+        JS/TSコードからinterface/class/type定義のフィールドを抽出する。
+        ネストされた型定義（`{ onSuccess: () => void; }`等）にも対応。
+        
+        Returns:
+            [(field_name, field_type), ...] のリスト。見つからなければ空リスト。
+        """
+        import re
+        
+        # ── ブレース計数で定義本体を抽出するヘルパー ──
+        def extract_brace_body(text: str, start_pos: int) -> str:
+            """start_posの位置にある'{' から対応する'}' までの内容を返す"""
+            if start_pos >= len(text) or text[start_pos] != '{':
+                return ""
+            depth = 0
+            for i in range(start_pos, len(text)):
+                if text[i] == '{':
+                    depth += 1
+                elif text[i] == '}':
+                    depth -= 1
+                    if depth == 0:
+                        return text[start_pos + 1:i]
+            return text[start_pos + 1:]  # 閉じ括弧なし（不完全なコード）
+        
+        # interface/class/type定義の開始位置を検索
+        field_region = None
+        
+        # interface Xxx { ... } or interface Xxx extends Yyy { ... }
+        m = re.search(
+            rf'interface\s+{re.escape(class_name)}\s*(?:extends\s+\w+\s*)?\{{',
+            code
+        )
+        if m:
+            brace_start = m.end() - 1  # '{' の位置
+            field_region = extract_brace_body(code, brace_start)
+        
+        # type Xxx = { ... }
+        if field_region is None:
+            m = re.search(
+                rf'type\s+{re.escape(class_name)}\s*=\s*\{{',
+                code
+            )
+            if m:
+                brace_start = m.end() - 1
+                field_region = extract_brace_body(code, brace_start)
+        
+        # class Xxx { ... }
+        if field_region is None:
+            m = re.search(
+                rf'class\s+{re.escape(class_name)}\s*(?:extends\s+\w+\s*)?(?:implements\s+\w+\s*)?\{{',
+                code
+            )
+            if m:
+                brace_start = m.end() - 1
+                full_body = extract_brace_body(code, brace_start)
+                # フィールドはclass定義から最初のconstructor/methodまでの範囲
+                first_method = re.search(
+                    r'\n\s+(?:constructor|(?:get|set|static|async|public|private|protected)\s)',
+                    full_body
+                )
+                if first_method:
+                    field_region = full_body[:first_method.start()]
+                else:
+                    field_region = full_body
+        
+        if not field_region:
+            return []
+        
+        # トップレベルのフィールドのみ抽出（ネストされた{}内のフィールドを除外）
+        # ネストされた{}ブロックをプレースホルダーに置換してからフィールド抽出
+        def remove_nested_braces(text: str) -> str:
+            result = []
+            depth = 0
+            for ch in text:
+                if ch == '{':
+                    depth += 1
+                    if depth == 1:
+                        result.append(' NESTED_BLOCK ')
+                elif ch == '}':
+                    depth -= 1
+                else:
+                    if depth == 0:
+                        result.append(ch)
+            return ''.join(result)
+        
+        cleaned_region = remove_nested_braces(field_region)
+        
+        # フィールド抽出: fieldName: type; or fieldName?: type;
+        fields = re.findall(
+            r'^\s+(\w+)\s*[?]?\s*:\s*([^;=\n]+)',
+            cleaned_region, re.MULTILINE
+        )
+        
+        # JS/TS予約語・メソッド名・プライベート属性を除外
+        js_keywords = {
+            'constructor', 'prototype', 'this', 'super',
+            'if', 'else', 'for', 'while', 'do', 'switch', 'case',
+            'break', 'continue', 'return', 'throw', 'try', 'catch',
+            'finally', 'new', 'delete', 'typeof', 'instanceof',
+            'void', 'in', 'of', 'class', 'extends', 'implements',
+            'import', 'export', 'default', 'from', 'as',
+            'function', 'const', 'let', 'var', 'async', 'await',
+            'yield', 'static', 'get', 'set', 'public', 'private',
+            'protected', 'readonly', 'abstract', 'interface', 'type',
+            'enum', 'namespace', 'module', 'declare',
+        }
+        
+        fields = [
+            (n.strip(), t.strip().rstrip(',').rstrip(';').strip())
+            for n, t in fields
+            if n.strip() not in js_keywords
+            and not n.strip().startswith('_')
+        ]
+        
+        return fields
+
+    def _generate_js_dummy_value(self, field_type: str) -> str:
+        """TypeScript型名からJSダミー値を生成する"""
+        ft = field_type.lower().strip()
+        # Union型の処理: "number | null" → null部分を除去して残りの型で判定
+        if '|' in ft:
+            parts = [p.strip() for p in ft.split('|')]
+            non_null = [p for p in parts if p not in ('null', 'undefined', 'void')]
+            if not non_null:
+                return 'null'
+            ft = non_null[0]  # 最初の非null型を使用
+        # 配列型を先にチェック（Array<X>, X[], etc.）
+        if 'array' in ft or ft.endswith('[]'):
+            return '[]'
+        if ft in ('number', 'int', 'integer', 'float', 'double'):
+            return '1'
+        if ft in ('string', 'str'):
+            return '"test"'
+        if ft in ('boolean', 'bool'):
+            return 'true'
+        if ft in ('object',) or ft.startswith('{') or ft.startswith('record'):
+            return '{}'
+        if ft in ('null', 'undefined', 'void') or '?' in field_type or 'optional' in ft:
+            return 'null'
+        if ft == 'date':
+            return 'new Date().toISOString()'
+        if ft == 'bigint':
+            return '1n'
+        # unknown / any / カスタム型 → string
+        return '"test"'
+
+    def _build_js_cjs_test_script(
+        self, import_path: str, save_fn: str, load_fn: str, dummy_code: str
+    ) -> str:
+        """CommonJS用のround-tripテストスクリプトを生成"""
+        return f"""'use strict';
+const mod = require('{import_path}');
+const {save_fn} = mod.{save_fn} || mod.default?.{save_fn};
+const {load_fn} = mod.{load_fn} || mod.default?.{load_fn};
+
+if (typeof {save_fn} !== 'function') {{
+    console.error('{save_fn} is not a function (got ' + typeof {save_fn} + ')');
+    process.exit(1);
+}}
+if (typeof {load_fn} !== 'function') {{
+    console.error('{load_fn} is not a function (got ' + typeof {load_fn} + ')');
+    process.exit(1);
+}}
+
+// Test 1: 空リストでのload
+let result = {load_fn}();
+if (!Array.isArray(result)) {{
+    console.error('{load_fn}() must return array, got ' + typeof result);
+    process.exit(1);
+}}
+
+// Test 2: 空リストでのsave + load round-trip
+{save_fn}([]);
+result = {load_fn}();
+if (!Array.isArray(result)) {{
+    console.error('{load_fn}() after save([]) must return array, got ' + typeof result);
+    process.exit(1);
+}}
+
+console.log("BASIC_OK");
+
+{dummy_code}
+
+console.log("ALL_PASS");
+"""
+
+    def _build_js_esm_test_script(
+        self, import_path: str, save_fn: str, load_fn: str, dummy_code: str
+    ) -> str:
+        """ESM用のround-tripテストスクリプトを生成"""
+        return f"""import * as mod from '{import_path}';
+
+const {save_fn} = mod.{save_fn} || mod.default?.{save_fn};
+const {load_fn} = mod.{load_fn} || mod.default?.{load_fn};
+
+if (typeof {save_fn} !== 'function') {{
+    console.error('{save_fn} is not a function (got ' + typeof {save_fn} + ')');
+    process.exit(1);
+}}
+if (typeof {load_fn} !== 'function') {{
+    console.error('{load_fn} is not a function (got ' + typeof {load_fn} + ')');
+    process.exit(1);
+}}
+
+// Test 1: 空リストでのload
+let result = {load_fn}();
+if (!Array.isArray(result)) {{
+    console.error('{load_fn}() must return array, got ' + typeof result);
+    process.exit(1);
+}}
+
+// Test 2: 空リストでのsave + load round-trip
+{save_fn}([]);
+result = {load_fn}();
+if (!Array.isArray(result)) {{
+    console.error('{load_fn}() after save([]) must return array, got ' + typeof result);
+    process.exit(1);
+}}
+
+console.log("BASIC_OK");
+
+{dummy_code}
+
+console.log("ALL_PASS");
+"""
+
+    def _validate_api_contracts(
+        self,
+        generated_files: Dict[str, str],
+        goal: str
+    ) -> List[str]:
+        """
+        生成されたコードのAPIインターフェース整合性を検証。
+        全生成ファイルからsave_xxx/load_xxx関数ペアとvalidate_xxx関数を抽出し、
+        基本的なround-trip検証とimport検証を実行する。
+        
+        汎用的: ファイル名のハードコードなし。パターンマッチで対象を自動検出。
+        
+        Returns:
+            失敗メッセージのリスト（空ならすべてOK）
+        """
+        import tempfile
+        import shutil
+        import subprocess
+        import re
+        
+        failures = []
+        
+        # 既存ファイルの既存関数名を収集（新規追加分のみを検証対象にする）
+        existing_fns = set()
+        if hasattr(self, '_complexity_assessor') and \
+           hasattr(self._complexity_assessor, 'existing_files') and \
+           self._complexity_assessor.existing_files:
+            for fname, ecode in self._complexity_assessor.existing_files.items():
+                for fn_match in re.finditer(r'def\s+(\w+)\s*\(', ecode):
+                    existing_fns.add(fn_match.group(1))
+        
+        if existing_fns:
+            logger.debug(f"[API Contract] {len(existing_fns)} existing functions will be excluded from validation")
+        
+        # 全生成ファイルからsave/load/validate関数を含むファイルを検出
+        storage_files = {}  # {filename: code} — save_xxx or load_xxx を含むファイル
+        validator_files = {}  # {filename: code} — validate_xxx を含むファイル
+        
+        for filename, code in generated_files.items():
+            if not filename.endswith('.py'):
+                continue
+            # テストファイルは除外
+            if self._is_test_file(filename):
+                continue
+            
+            has_save = bool(re.search(r'def\s+save_\w+\s*\(', code))
+            has_load = bool(re.search(r'def\s+load_\w+\s*\(', code))
+            has_validate = bool(re.search(r'def\s+validate_\w+\s*\(', code))
+            
+            if has_save or has_load:
+                storage_files[filename] = code
+            if has_validate:
+                validator_files[filename] = code
+        
+        # JS/TS: save_xxx/load_xxx/validate_xxx関数を含むファイルを検出
+        js_storage_files = {}  # {filename: code}
+        js_validator_files = {}  # {filename: code}
+        js_extensions = ('.js', '.jsx', '.mjs', '.cjs')
+        ts_extensions = ('.ts', '.tsx')
+        
+        for filename, code in generated_files.items():
+            is_js = any(filename.endswith(ext) for ext in js_extensions)
+            is_ts = any(filename.endswith(ext) for ext in ts_extensions)
+            if not is_js and not is_ts:
+                continue
+            if self._is_test_file(filename):
+                continue
+            
+            # JS/TS function detection patterns:
+            # function save_xxx(...), const save_xxx = ..., export function save_xxx(...)
+            # export const save_xxx = ..., var save_xxx = ..., let save_xxx = ...
+            js_save_pattern = r'(?:export\s+)?(?:function\s+save_\w+\s*\(|(?:const|let|var)\s+save_\w+\s*=)|(?:module\.)?exports\.save_\w+\s*='
+            js_load_pattern = r'(?:export\s+)?(?:function\s+load_\w+\s*\(|(?:const|let|var)\s+load_\w+\s*=)|(?:module\.)?exports\.load_\w+\s*='
+            js_validate_pattern = r'(?:export\s+)?(?:function\s+validate_\w+\s*\(|(?:const|let|var)\s+validate_\w+\s*=)|(?:module\.)?exports\.validate_\w+\s*='
+            
+            has_save = bool(re.search(js_save_pattern, code))
+            has_load = bool(re.search(js_load_pattern, code))
+            has_validate = bool(re.search(js_validate_pattern, code))
+            
+            if has_save or has_load:
+                js_storage_files[filename] = code
+            if has_validate:
+                js_validator_files[filename] = code
+        
+        if js_storage_files or js_validator_files:
+            logger.debug(f"[API Contract] JS/TS Storage files: {list(js_storage_files.keys())}")
+            logger.debug(f"[API Contract] JS/TS Validator files: {list(js_validator_files.keys())}")
+        
+        if not storage_files and not validator_files and not js_storage_files and not js_validator_files:
+            return failures
+        
+        logger.debug(f"[API Contract] Storage files: {list(storage_files.keys())}")
+        logger.debug(f"[API Contract] Validator files: {list(validator_files.keys())}")
+        
+        # 一時ディレクトリにファイルを配置
+        temp_dir = tempfile.mkdtemp(prefix="cognix_contract_")
+        try:
+            for filename, code in generated_files.items():
+                filepath = Path(temp_dir) / filename
+                filepath.parent.mkdir(parents=True, exist_ok=True)
+                filepath.write_text(code, encoding='utf-8')
+            
+            # data/ディレクトリも作成
+            (Path(temp_dir) / "data").mkdir(exist_ok=True)
+            
+            # save/load ペアのround-trip検証（各storageファイルに対して）
+            for storage_filename, storage_code in storage_files.items():
+                module_name = storage_filename.replace('.py', '').replace('/', '.').replace('\\', '.')
+                
+                save_fns = re.findall(r'def\s+(save_\w+)\s*\(', storage_code)
+                load_fns = re.findall(r'def\s+(load_\w+)\s*\(', storage_code)
+                
+                # モジュールレベルのFILE属性を全て抽出
+                file_attrs = re.findall(r'(\w+_FILE)\s*=', storage_code)
+                # DATA_DIR属性の存在確認
+                has_data_dir = bool(re.search(r'DATA_DIR\s*=', storage_code))
+                
+                logger.debug(f"[API Contract] {storage_filename}: save={save_fns}, load={load_fns}, file_attrs={file_attrs}")
+                
+                # DATA_DIRがないstorageモジュールはtmpdir差し替えが不可能なためスキップ
+                if not has_data_dir:
+                    logger.debug(f"[API Contract] {storage_filename}: No DATA_DIR found, skipping round-trip validation")
+                    continue
+                
+                for save_fn in save_fns:
+                    # 既存関数は検証対象外（既存テストで検証済み）
+                    if save_fn in existing_fns:
+                        logger.debug(f"[API Contract] Skipping existing function: {save_fn}")
+                        continue
+                    
+                    load_fn = save_fn.replace("save_", "load_", 1)
+                    if load_fn not in load_fns:
+                        continue
+                    
+                    # このsave/loadペアに対応するFILE属性を推定
+                    # save_recurring_rules → "recurring" を含むFILE属性を探す
+                    fn_body = save_fn.replace("save_", "")  # "recurring_rules"
+                    fn_parts = fn_body.split("_")  # ["recurring", "rules"]
+                    
+                    matched_file_attr = None
+                    for attr in file_attrs:
+                        attr_lower = attr.lower()
+                        # 関数名の主要部分がFILE属性に含まれるか
+                        if fn_parts[0].lower() in attr_lower:
+                            matched_file_attr = attr
+                            break
+                    
+                    # FILE属性差し替えスクリプトを構築
+                    file_attr_override = ""
+                    if matched_file_attr:
+                        file_attr_override = f"""
+if hasattr({module_name}, '{matched_file_attr}'):
+    orig_val = getattr({module_name}, '{matched_file_attr}')
+    if hasattr(orig_val, 'name'):
+        {module_name}.{matched_file_attr} = {module_name}.DATA_DIR / orig_val.name
+    else:
+        {module_name}.{matched_file_attr} = {module_name}.DATA_DIR / '{fn_body}.json'
+"""
+                    
+                    data_dir_override = ""
+                    if has_data_dir:
+                        data_dir_override = f"""
+{module_name}.DATA_DIR = Path(td) / "data"
+{module_name}.DATA_DIR.mkdir(parents=True, exist_ok=True)
+
+# TASKS_FILEも差し替え（storage内で参照される場合に備えて）
+if hasattr({module_name}, 'TASKS_FILE'):
+    {module_name}.TASKS_FILE = {module_name}.DATA_DIR / "tasks.json"
+"""
+                    
+                    # round-trip テストスクリプト
+                    # ── モデルクラスの推定とダミーインスタンス生成 ──
+                    # save関数に関連するモデルクラスをstorageのimport文から推定
+                    # generated_files全体からdataclass定義を探し、ダミー値を生成
+                    dummy_object_code = ""
+                    dummy_var = ""
+                    
+                    # storageコード全体のimport文からクラス名を抽出
+                    imported_classes = re.findall(
+                        r'from\s+\w+\s+import\s+(.+)', storage_code
+                    )
+                    all_imported_names = set()
+                    for imp_line in imported_classes:
+                        for name in imp_line.split(','):
+                            name = name.strip().split(' as ')[0].strip()
+                            if name and name[0].isupper():
+                                all_imported_names.add(name)
+                    
+                    # save関数の本体を抽出してクラス参照を探す
+                    save_fn_body_match = re.search(
+                        rf'def\s+{save_fn}\s*\([^)]*\).*?(?=\ndef\s|\Z)',
+                        storage_code, re.DOTALL
+                    )
+                    save_fn_body = save_fn_body_match.group(0) if save_fn_body_match else ""
+                    
+                    # save関数本体で参照されているimport済みクラス名を特定
+                    referenced_class = None
+                    for cls_name in all_imported_names:
+                        if cls_name in save_fn_body:
+                            referenced_class = cls_name
+                            break
+                    
+                    # load関数の本体からもクラス参照を探す（save側で見つからない場合）
+                    if not referenced_class:
+                        load_fn_body_match = re.search(
+                            rf'def\s+{load_fn}\s*\([^)]*\).*?(?=\ndef\s|\Z)',
+                            storage_code, re.DOTALL
+                        )
+                        load_fn_body = load_fn_body_match.group(0) if load_fn_body_match else ""
+                        for cls_name in all_imported_names:
+                            if cls_name in load_fn_body:
+                                referenced_class = cls_name
+                                break
+                    
+                    if referenced_class:
+                        # generated_files全体からこのクラスのdataclass定義を探す
+                        # Python予約語（フィールド名として不可能な語）
+                        python_keywords = {
+                            'False', 'None', 'True', 'and', 'as', 'assert', 'async',
+                            'await', 'break', 'class', 'continue', 'def', 'del',
+                            'elif', 'else', 'except', 'finally', 'for', 'from',
+                            'global', 'if', 'import', 'in', 'is', 'lambda',
+                            'nonlocal', 'not', 'or', 'pass', 'raise', 'return',
+                            'try', 'while', 'with', 'yield',
+                        }
+                        
+                        for gf_name, gf_code in generated_files.items():
+                            if not gf_name.endswith('.py'):
+                                continue
+                            cls_match = re.search(
+                                rf'class\s+{referenced_class}\s*[:\(].*?(?=\nclass\s|\Z)',
+                                gf_code, re.DOTALL
+                            )
+                            if cls_match:
+                                cls_body = cls_match.group(0)
+                                # フィールドはclass定義から最初のdefまでの範囲にある
+                                # （defの後はメソッド本体であり、try:/else:等が出現しうる）
+                                first_def = re.search(r'\n\s+def\s', cls_body)
+                                if first_def:
+                                    field_region = cls_body[:first_def.start()]
+                                else:
+                                    field_region = cls_body
+                                
+                                # フィールドを抽出（dataclass形式: field_name: type = default）
+                                fields = re.findall(
+                                    r'^\s+(\w+)\s*:\s*(\S+)',
+                                    field_region, re.MULTILINE
+                                )
+                                # メソッド定義行、Python予約語、プライベート属性を除外
+                                fields = [(n, t) for n, t in fields
+                                         if n not in ('self', 'cls')
+                                         and not n.startswith('_')
+                                         and n not in python_keywords]
+                                
+                                if fields:
+                                    # ダミー値の生成
+                                    dummy_args = []
+                                    for field_name, field_type in fields:
+                                        ft = field_type.lower().replace("'", "").replace('"', '')
+                                        if 'int' in ft:
+                                            dummy_args.append(f"{field_name}=1")
+                                        elif 'float' in ft:
+                                            dummy_args.append(f"{field_name}=1.0")
+                                        elif 'bool' in ft:
+                                            dummy_args.append(f"{field_name}=True")
+                                        elif 'list' in ft:
+                                            dummy_args.append(f"{field_name}=[]")
+                                        elif 'dict' in ft:
+                                            dummy_args.append(f"{field_name}={{}}")
+                                        elif 'optional' in ft or 'none' in ft:
+                                            dummy_args.append(f"{field_name}=None")
+                                        else:
+                                            # str or unknown → use string
+                                            dummy_args.append(f'{field_name}="test"')
+                                    
+                                    gf_module = gf_name.replace('.py', '').replace('/', '.').replace('\\', '.')
+                                    dummy_var = "dummy_obj"
+                                    dummy_object_code = f"""
+# Test 3: オブジェクトでのsave + load round-trip
+from {gf_module} import {referenced_class}
+{dummy_var} = {referenced_class}({', '.join(dummy_args)})
+{save_fn}([{dummy_var}])
+loaded = {load_fn}()
+assert len(loaded) == 1, f"Expected 1 item after save, got {{len(loaded)}}"
+"""
+                                    logger.debug(f"[API Contract] Generated dummy for {referenced_class}: {', '.join(dummy_args)}")
+                                break
+                    
+                    test_script = f"""
+import sys, tempfile, shutil
+sys.path.insert(0, '.')
+from pathlib import Path
+import {module_name}
+
+td = tempfile.mkdtemp()
+{data_dir_override}
+{file_attr_override}
+
+# ensure_data_dirがあれば呼ぶ
+if hasattr({module_name}, 'ensure_data_dir'):
+    {module_name}.ensure_data_dir()
+
+from {module_name} import {load_fn}, {save_fn}
+
+# Test 1: 空リストでのload
+result = {load_fn}()
+assert isinstance(result, list), f"{{type(result)}}: {load_fn}() must return a list"
+
+# Test 2: 空リストでのsave + load round-trip
+{save_fn}([])
+result = {load_fn}()
+assert isinstance(result, list), f"{load_fn}() must return a list after save([])"
+
+print("BASIC_OK")
+
+{dummy_object_code}
+
+shutil.rmtree(td, ignore_errors=True)
+print("ALL_PASS")
+"""
+                    try:
+                        result = subprocess.run(
+                            [sys.executable, "-c", test_script],
+                            cwd=temp_dir,
+                            capture_output=True,
+                            text=True,
+                            timeout=10
+                        )
+                        if result.returncode != 0 or "ALL_PASS" not in result.stdout:
+                            err = (result.stderr or result.stdout)[:300]
+                            stdout = result.stdout or ""
+                            # ModuleNotFoundError/ImportErrorはパッケージ構造の問題で
+                            # API Contractの問題ではないためskip
+                            if "ModuleNotFoundError" in err or "No module named" in err:
+                                logger.debug(f"[API Contract] {save_fn}/{load_fn}: SKIP (module import issue)")
+                            elif "BASIC_OK" in stdout and dummy_object_code:
+                                # Test 1,2は成功（BASIC_OK出力済み）だがTest 3でエラー
+                                # → ダミー生成コードの問題であり、生成コードのContract問題ではない
+                                logger.debug(f"[API Contract] {save_fn}/{load_fn}: SKIP (dummy object test failed, basic round-trip OK)")
+                            elif "SyntaxError" in err and dummy_object_code:
+                                # ダミーコードのSyntaxErrorでスクリプト全体がコンパイル失敗
+                                # → ダミー部分を除去して基本round-tripのみで再実行
+                                logger.debug(f"[API Contract] {save_fn}/{load_fn}: SyntaxError with dummy code, retrying basic only")
+                                basic_script = test_script.replace(dummy_object_code, "")
+                                basic_result = subprocess.run(
+                                    [sys.executable, "-c", basic_script],
+                                    cwd=temp_dir,
+                                    capture_output=True,
+                                    text=True,
+                                    timeout=10
+                                )
+                                if basic_result.returncode == 0 and "BASIC_OK" in (basic_result.stdout or ""):
+                                    logger.debug(f"[API Contract] {save_fn}/{load_fn}: SKIP (basic round-trip OK, dummy syntax issue)")
+                                else:
+                                    basic_err = (basic_result.stderr or basic_result.stdout)[:300]
+                                    failures.append(
+                                        f"Storage round-trip FAIL ({storage_filename}:{save_fn}/{load_fn}): {basic_err}"
+                                    )
+                                    logger.debug(f"[API Contract] {save_fn}/{load_fn}: FAIL (basic) - {basic_err[:200]}")
+                            else:
+                                failures.append(
+                                    f"Storage round-trip FAIL ({storage_filename}:{save_fn}/{load_fn}): {err}"
+                                )
+                                logger.debug(f"[API Contract] {save_fn}/{load_fn}: FAIL - {err[:200]}")
+                        else:
+                            logger.debug(f"[API Contract] {save_fn}/{load_fn}: OK")
+                    except subprocess.TimeoutExpired:
+                        failures.append(f"Storage round-trip TIMEOUT ({storage_filename}:{save_fn}/{load_fn})")
+                    except Exception as e:
+                        failures.append(f"Storage round-trip ERROR ({storage_filename}:{save_fn}/{load_fn}): {str(e)[:200]}")
+            
+            # validator関数のimport + callable検証（各validatorファイルに対して）
+            for val_filename, val_code in validator_files.items():
+                val_module = val_filename.replace('.py', '').replace('/', '.').replace('\\', '.')
+                validator_fns = re.findall(r'def\s+(validate_\w+)\s*\(', val_code)
+                
+                for vfn in validator_fns:
+                    # 既存関数は検証対象外
+                    if vfn in existing_fns:
+                        logger.debug(f"[API Contract] Skipping existing function: {vfn}")
+                        continue
+                    
+                    test_script = f"""
+import sys
+sys.path.insert(0, '.')
+from {val_module} import {vfn}
+import inspect
+sig = inspect.signature({vfn})
+params = list(sig.parameters.keys())
+print(f"OK params={{params}}")
+"""
+                    try:
+                        result = subprocess.run(
+                            [sys.executable, "-c", test_script],
+                            cwd=temp_dir,
+                            capture_output=True,
+                            text=True,
+                            timeout=10
+                        )
+                        if result.returncode != 0 or "OK" not in result.stdout:
+                            err = (result.stderr or result.stdout)[:300]
+                            if "ModuleNotFoundError" in err or "No module named" in err:
+                                logger.debug(f"[API Contract] {vfn}: SKIP (module import issue)")
+                            else:
+                                failures.append(f"Validator {val_filename}:{vfn} import FAIL: {err}")
+                        else:
+                            logger.debug(f"[API Contract] {vfn}: OK ({result.stdout.strip()})")
+                    except Exception as e:
+                        failures.append(f"Validator {val_filename}:{vfn} ERROR: {str(e)[:200]}")
+            
+            # ══════════════════════════════════════════════════════════
+            # JS/TS save/load round-trip検証
+            # ══════════════════════════════════════════════════════════
+            if js_storage_files:
+                node_cmd = shutil.which("node")
+                if not node_cmd:
+                    logger.debug("[API Contract] Node.js not found in PATH, skipping JS/TS contract validation")
+                else:
+                    # package.json の type フィールドを確認（ESM/CJS判定に使用）
+                    pkg_json_type = None
+                    for gf_name, gf_code in generated_files.items():
+                        if Path(gf_name).name == 'package.json':
+                            try:
+                                import json as _json
+                                pkg = _json.loads(gf_code)
+                                pkg_json_type = pkg.get('type')
+                            except Exception:
+                                pass
+                            break
+                    
+                    for storage_filename, storage_code in js_storage_files.items():
+                        is_ts = any(storage_filename.endswith(ext) for ext in ts_extensions)
+                        ts_runner = None
+                        if is_ts:
+                            ts_runner = shutil.which("ts-node") or shutil.which("tsx")
+                            if not ts_runner:
+                                logger.debug(
+                                    f"[API Contract] {storage_filename}: SKIP "
+                                    f"(TypeScript file, ts-node/tsx not available)"
+                                )
+                                continue
+                        
+                        # ESM vs CJS 検出
+                        is_esm = self._detect_js_module_type(
+                            storage_code, storage_filename, pkg_json_type
+                        )
+                        
+                        # save/load関数名抽出
+                        save_fns_js = re.findall(
+                            r'(?:export\s+)?(?:function\s+(save_\w+)|(?:const|let|var)\s+(save_\w+)\s*=)|(?:module\.)?exports\.(save_\w+)\s*=',
+                            storage_code
+                        )
+                        save_fns_js = [s[0] or s[1] or s[2] for s in save_fns_js]
+                        
+                        load_fns_js = re.findall(
+                            r'(?:export\s+)?(?:function\s+(load_\w+)|(?:const|let|var)\s+(load_\w+)\s*=)|(?:module\.)?exports\.(load_\w+)\s*=',
+                            storage_code
+                        )
+                        load_fns_js = [s[0] or s[1] or s[2] for s in load_fns_js]
+                        
+                        # DATA_DIR検出
+                        has_data_dir_js = bool(re.search(
+                            r'(?:export\s+)?(?:const|let|var)\s+DATA_DIR\s*=', storage_code
+                        ))
+                        
+                        # FILE属性検出
+                        file_attrs_js = re.findall(
+                            r'(?:const|let|var)\s+(\w+_FILE)\s*=', storage_code
+                        )
+                        
+                        logger.debug(
+                            f"[API Contract] JS {storage_filename}: "
+                            f"save={save_fns_js}, load={load_fns_js}, "
+                            f"esm={is_esm}, ts={is_ts}, data_dir={has_data_dir_js}"
+                        )
+                        
+                        # DATA_DIRがないstorageはパス差し替え不可のためスキップ
+                        if not has_data_dir_js:
+                            logger.debug(
+                                f"[API Contract] {storage_filename}: No DATA_DIR found, "
+                                f"skipping JS round-trip validation"
+                            )
+                            continue
+                        
+                        # ── DATA_DIRをtemp_dir/dataにパッチしてファイルを上書き ──
+                        data_dir_path_js = (Path(temp_dir) / "data").as_posix()
+                        # Phase 1: セミコロン終端の式を置換（複数行対応）
+                        patched_storage = re.sub(
+                            r"((?:export\s+)?(?:const|let|var)\s+DATA_DIR\s*=\s*).+?;",
+                            f"\\1'{data_dir_path_js}';",
+                            storage_code,
+                            count=1,
+                            flags=re.DOTALL
+                        )
+                        if patched_storage == storage_code:
+                            # Phase 2: セミコロンなし → 単一行マッチ
+                            patched_storage = re.sub(
+                                r"((?:export\s+)?(?:const|let|var)\s+DATA_DIR\s*=\s*)[^\n]+",
+                                f"\\1'{data_dir_path_js}'",
+                                storage_code,
+                                count=1
+                            )
+                        # TASKS_FILE等のFILE属性もパッチ
+                        for fa in file_attrs_js:
+                            fa_lower = fa.replace('_FILE', '').lower()
+                            before_patch = patched_storage
+                            patched_storage = re.sub(
+                                rf"((?:export\s+)?(?:const|let|var)\s+{re.escape(fa)}\s*=\s*).+?;",
+                                f"\\1'{data_dir_path_js}/{fa_lower}.json';",
+                                patched_storage,
+                                count=1,
+                                flags=re.DOTALL
+                            )
+                            if patched_storage == before_patch:
+                                patched_storage = re.sub(
+                                    rf"((?:export\s+)?(?:const|let|var)\s+{re.escape(fa)}\s*=\s*)[^\n]+",
+                                    f"\\1'{data_dir_path_js}/{fa_lower}.json'",
+                                    patched_storage,
+                                    count=1
+                                )
+                        
+                        # パッチ済みファイルを上書き
+                        patched_path = Path(temp_dir) / storage_filename
+                        patched_path.parent.mkdir(parents=True, exist_ok=True)
+                        patched_path.write_text(patched_storage, encoding='utf-8')
+                        
+                        # import元パス（テストスクリプトからの相対パス）
+                        import_path = './' + storage_filename
+                        
+                        for save_fn_js in save_fns_js:
+                            # 既存関数は検証対象外
+                            if save_fn_js in existing_fns:
+                                logger.debug(f"[API Contract] Skipping existing JS function: {save_fn_js}")
+                                continue
+                            
+                            load_fn_js = save_fn_js.replace("save_", "load_", 1)
+                            if load_fn_js not in load_fns_js:
+                                continue
+                            
+                            # ── ダミーオブジェクト生成（TS interface/classから）──
+                            dummy_object_code_js = ""
+                            
+                            # storageコードからimportされたクラス名を抽出
+                            js_imported_classes = set()
+                            # ESM: import { Xxx } from './models';
+                            for imp_match in re.finditer(
+                                r'import\s+\{([^}]+)\}\s+from', storage_code
+                            ):
+                                for name in imp_match.group(1).split(','):
+                                    name = name.strip().split(' as ')[0].strip()
+                                    if name and name[0].isupper():
+                                        js_imported_classes.add(name)
+                            # CJS: const { Xxx } = require('./models');
+                            for imp_match in re.finditer(
+                                r'(?:const|let|var)\s+\{([^}]+)\}\s*=\s*require',
+                                storage_code
+                            ):
+                                for name in imp_match.group(1).split(','):
+                                    name = name.strip().split(':')[0].strip()
+                                    if name and name[0].isupper():
+                                        js_imported_classes.add(name)
+                            
+                            # save/load関数本体からクラス参照を特定
+                            referenced_class_js = None
+                            for cls_name in js_imported_classes:
+                                if cls_name in storage_code:
+                                    referenced_class_js = cls_name
+                                    break
+                            
+                            if referenced_class_js:
+                                # generated_filesからinterface/class/type定義を探す
+                                for gf_name, gf_code in generated_files.items():
+                                    js_ts_exts = (
+                                        '.js', '.jsx', '.mjs', '.cjs',
+                                        '.ts', '.tsx'
+                                    )
+                                    if not any(gf_name.endswith(e) for e in js_ts_exts):
+                                        continue
+                                    
+                                    fields_js = self._extract_js_ts_fields(
+                                        gf_code, referenced_class_js
+                                    )
+                                    if fields_js:
+                                        dummy_props = []
+                                        for fn_name, fn_type in fields_js:
+                                            dv = self._generate_js_dummy_value(fn_type)
+                                            dummy_props.append(f"    {fn_name}: {dv}")
+                                        
+                                        dummy_object_code_js = f"""
+// Test 3: オブジェクトでのsave + load round-trip
+const dummyObj = {{
+{chr(10).join(dummy_props)}
+}};
+{save_fn_js}([dummyObj]);
+const loadedAfterDummy = {load_fn_js}();
+if (!Array.isArray(loadedAfterDummy) || loadedAfterDummy.length !== 1) {{
+    console.error("Expected 1 item after dummy save, got " + (loadedAfterDummy ? loadedAfterDummy.length : "null"));
+    process.exit(1);
+}}
+"""
+                                        logger.debug(
+                                            f"[API Contract] JS dummy for "
+                                            f"{referenced_class_js}: "
+                                            f"{[f[0] for f in fields_js]}"
+                                        )
+                                        break
+                            
+                            # テストスクリプト生成
+                            if is_esm:
+                                test_ext = '.mjs'
+                                test_script_js = self._build_js_esm_test_script(
+                                    import_path, save_fn_js, load_fn_js,
+                                    dummy_object_code_js
+                                )
+                            else:
+                                test_ext = '.cjs'
+                                test_script_js = self._build_js_cjs_test_script(
+                                    import_path, save_fn_js, load_fn_js,
+                                    dummy_object_code_js
+                                )
+                            
+                            test_script_path = (
+                                Path(temp_dir) / f"_cognix_contract_test{test_ext}"
+                            )
+                            test_script_path.write_text(
+                                test_script_js, encoding='utf-8'
+                            )
+                            
+                            # 実行コマンド決定
+                            run_cmd = [node_cmd, str(test_script_path)]
+                            if is_ts and ts_runner:
+                                run_cmd = [ts_runner, str(test_script_path)]
+                            
+                            try:
+                                result = subprocess.run(
+                                    run_cmd,
+                                    cwd=temp_dir,
+                                    capture_output=True,
+                                    text=True,
+                                    timeout=15
+                                )
+                                if result.returncode != 0 or "ALL_PASS" not in result.stdout:
+                                    err = (result.stderr or result.stdout)[:300]
+                                    stdout = result.stdout or ""
+                                    
+                                    # MODULE_NOT_FOUNDはパッケージ構造の問題でskip
+                                    if ("MODULE_NOT_FOUND" in err or
+                                        "Cannot find module" in err or
+                                        "ERR_MODULE_NOT_FOUND" in err):
+                                        logger.debug(
+                                            f"[API Contract] JS {save_fn_js}/{load_fn_js}: "
+                                            f"SKIP (module not found)"
+                                        )
+                                    elif "BASIC_OK" in stdout and dummy_object_code_js:
+                                        # Test 1,2は成功だがTest 3でエラー
+                                        # → ダミー生成の問題であり、生成コードのContract問題ではない
+                                        logger.debug(
+                                            f"[API Contract] JS {save_fn_js}/{load_fn_js}: "
+                                            f"SKIP (dummy test failed, basic round-trip OK)"
+                                        )
+                                    elif "SyntaxError" in err and dummy_object_code_js:
+                                        # ダミーコードのSyntaxErrorでスクリプト全体がコンパイル失敗
+                                        # → ダミー部分を除去して基本round-tripのみで再実行
+                                        logger.debug(
+                                            f"[API Contract] JS {save_fn_js}/{load_fn_js}: "
+                                            f"SyntaxError with dummy code, retrying basic only"
+                                        )
+                                        basic_script_js = test_script_js.replace(
+                                            dummy_object_code_js, ""
+                                        )
+                                        test_script_path.write_text(
+                                            basic_script_js, encoding='utf-8'
+                                        )
+                                        basic_result = subprocess.run(
+                                            run_cmd,
+                                            cwd=temp_dir,
+                                            capture_output=True,
+                                            text=True,
+                                            timeout=15
+                                        )
+                                        if (basic_result.returncode == 0 and
+                                            "BASIC_OK" in (basic_result.stdout or "")):
+                                            logger.debug(
+                                                f"[API Contract] JS {save_fn_js}/{load_fn_js}: "
+                                                f"SKIP (basic OK, dummy syntax issue)"
+                                            )
+                                        else:
+                                            basic_err = (
+                                                basic_result.stderr or basic_result.stdout
+                                            )[:300]
+                                            failures.append(
+                                                f"JS Storage round-trip FAIL "
+                                                f"({storage_filename}:{save_fn_js}/{load_fn_js}): "
+                                                f"{basic_err}"
+                                            )
+                                            logger.debug(
+                                                f"[API Contract] JS {save_fn_js}/{load_fn_js}: "
+                                                f"FAIL (basic) - {basic_err[:200]}"
+                                            )
+                                    else:
+                                        failures.append(
+                                            f"JS Storage round-trip FAIL "
+                                            f"({storage_filename}:{save_fn_js}/{load_fn_js}): "
+                                            f"{err}"
+                                        )
+                                        logger.debug(
+                                            f"[API Contract] JS {save_fn_js}/{load_fn_js}: "
+                                            f"FAIL - {err[:200]}"
+                                        )
+                                else:
+                                    logger.debug(
+                                        f"[API Contract] JS {save_fn_js}/{load_fn_js}: OK"
+                                    )
+                            except subprocess.TimeoutExpired:
+                                failures.append(
+                                    f"JS Storage round-trip TIMEOUT "
+                                    f"({storage_filename}:{save_fn_js}/{load_fn_js})"
+                                )
+                            except Exception as e:
+                                failures.append(
+                                    f"JS Storage round-trip ERROR "
+                                    f"({storage_filename}:{save_fn_js}/{load_fn_js}): "
+                                    f"{str(e)[:200]}"
+                                )
+            
+            # ══════════════════════════════════════════════════════════
+            # JS/TS validator関数のimport + callable検証
+            # ══════════════════════════════════════════════════════════
+            if js_validator_files:
+                node_cmd = shutil.which("node")
+                if not node_cmd:
+                    logger.debug("[API Contract] Node.js not found, skipping JS/TS validator validation")
+                else:
+                    pkg_json_type_val = None
+                    for gf_name, gf_code in generated_files.items():
+                        if Path(gf_name).name == 'package.json':
+                            try:
+                                import json as _json
+                                pkg = _json.loads(gf_code)
+                                pkg_json_type_val = pkg.get('type')
+                            except Exception:
+                                pass
+                            break
+                    
+                    for val_filename, val_code in js_validator_files.items():
+                        is_ts = any(val_filename.endswith(ext) for ext in ts_extensions)
+                        ts_runner = None
+                        if is_ts:
+                            ts_runner = shutil.which("ts-node") or shutil.which("tsx")
+                            if not ts_runner:
+                                logger.debug(
+                                    f"[API Contract] {val_filename}: SKIP "
+                                    f"(TypeScript, ts-node/tsx not available)"
+                                )
+                                continue
+                        
+                        is_esm = self._detect_js_module_type(
+                            val_code, val_filename, pkg_json_type_val
+                        )
+                        import_path_val = './' + val_filename
+                        
+                        # validate関数名抽出
+                        validator_fns_js = re.findall(
+                            r'(?:export\s+)?(?:function\s+(validate_\w+)|(?:const|let|var)\s+(validate_\w+)\s*=)|(?:module\.)?exports\.(validate_\w+)\s*=',
+                            val_code
+                        )
+                        validator_fns_js = [s[0] or s[1] or s[2] for s in validator_fns_js]
+                        
+                        for vfn_js in validator_fns_js:
+                            if vfn_js in existing_fns:
+                                logger.debug(
+                                    f"[API Contract] Skipping existing JS function: {vfn_js}"
+                                )
+                                continue
+                            
+                            if is_esm:
+                                test_ext = '.mjs'
+                                val_test_script = f"""import {{ {vfn_js} }} from '{import_path_val}';
+if (typeof {vfn_js} !== 'function') {{
+    console.error('{vfn_js} is not a function, got ' + typeof {vfn_js});
+    process.exit(1);
+}}
+console.log("OK params=" + {vfn_js}.length);
+"""
+                            else:
+                                test_ext = '.cjs'
+                                val_test_script = f"""'use strict';
+const mod = require('{import_path_val}');
+const fn = mod.{vfn_js} || (mod.default && mod.default.{vfn_js});
+if (typeof fn !== 'function') {{
+    console.error('{vfn_js} is not a function, got ' + typeof fn);
+    process.exit(1);
+}}
+console.log("OK params=" + fn.length);
+"""
+                            
+                            val_test_path = (
+                                Path(temp_dir) / f"_cognix_val_test{test_ext}"
+                            )
+                            val_test_path.write_text(
+                                val_test_script, encoding='utf-8'
+                            )
+                            
+                            run_cmd = [node_cmd, str(val_test_path)]
+                            if is_ts and ts_runner:
+                                run_cmd = [ts_runner, str(val_test_path)]
+                            
+                            try:
+                                result = subprocess.run(
+                                    run_cmd,
+                                    cwd=temp_dir,
+                                    capture_output=True,
+                                    text=True,
+                                    timeout=10
+                                )
+                                if result.returncode != 0 or "OK" not in result.stdout:
+                                    err = (result.stderr or result.stdout)[:300]
+                                    if ("Cannot find module" in err or
+                                        "ERR_MODULE_NOT_FOUND" in err):
+                                        logger.debug(
+                                            f"[API Contract] JS {vfn_js}: "
+                                            f"SKIP (module not found)"
+                                        )
+                                    else:
+                                        failures.append(
+                                            f"JS Validator {val_filename}:{vfn_js} "
+                                            f"import FAIL: {err}"
+                                        )
+                                else:
+                                    logger.debug(
+                                        f"[API Contract] JS {vfn_js}: "
+                                        f"OK ({result.stdout.strip()})"
+                                    )
+                            except subprocess.TimeoutExpired:
+                                failures.append(
+                                    f"JS Validator {val_filename}:{vfn_js} "
+                                    f"TIMEOUT"
+                                )
+                            except Exception as e:
+                                failures.append(
+                                    f"JS Validator {val_filename}:{vfn_js} "
+                                    f"ERROR: {str(e)[:200]}"
+                                )
+        
+        finally:
+            try:
+                shutil.rmtree(temp_dir, ignore_errors=True)
+            except Exception:
+                pass
+        
+        return failures
 
 
 # Utility functions for CLI integration

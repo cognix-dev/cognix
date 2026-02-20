@@ -5,6 +5,31 @@ All notable changes to Cognix will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.2.5] - 2026-02-20
+
+### Added
+- **Safety Guard** - Auto-fix validation system that prevents destructive corrections
+  - Shebang line preservation check for executable files
+  - Diff scope limiting relative to error count (prevents excessive modifications)
+- **Runtime Blacklist** - False positive filename filtering during code extraction
+  - Filters out runtime/framework names (e.g., `node.js`) from generated file lists
+- **Near-Identical File Preservation** - Detects and reverts micro-corruption in existing files
+  - Compares LLM-reproduced files against originals using similarity threshold
+  - Automatically restores original when corruption is detected
+
+### Fixed
+- **G-12 Python Builtin Shadowing** - Fixed false positives on keyword arguments in function calls
+  - Guard 1: Expanded preceding line window from 5 to 20 lines for function call detection
+  - Guard 3: Added closing parenthesis detection for last arguments without trailing commas
+  - Eliminated task_g regression (exec: 62.5% → 100%)
+- **API Contract Validation** - Fixed field extraction parsing Python reserved words (`try`, `else`) as dataclass fields
+  - Added Python keyword filtering and scope limitation to field extraction
+  - Added test validation with `BASIC_OK`/`ALL_PASS` markers and syntax error recovery
+  - Added rollback mechanism that restores pre-fix code when LLM fixes cause regressions
+- **Performance** - Cached `content_lines` split at file level in `_validate_python_builtin_shadowing` (eliminates redundant per-class splits)
+- **config.py** - Fixed version number (was stuck at 0.2.3 since v0.2.4 release)
+- Version number updated to 0.2.5 across all files
+
 ## [0.2.4] - 2026-02-15
 
 ### Fixed
@@ -307,6 +332,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 pip install cognix
 ```
 
+[0.2.5]: https://github.com/cognix-dev/cognix/compare/v0.2.4...v0.2.5
 [0.2.4]: https://github.com/cognix-dev/cognix/compare/v0.2.3...v0.2.4
 [0.2.3]: https://github.com/cognix-dev/cognix/compare/v0.2.2...v0.2.3
 [0.2.2]: https://github.com/cognix-dev/cognix/compare/v0.2.1...v0.2.2
