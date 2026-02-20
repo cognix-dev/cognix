@@ -525,7 +525,18 @@ class AnthropicProvider(LLMProvider):
         temperature: float = 0.7,
         max_tokens: int = 4000
     ) -> LLMResponse:
-        """Generate response from Anthropic"""
+        """Generate response from Anthropic (streaming-based)
+        
+        内部でSDKの高レベルストリーミングAPI（client.messages.stream）を使用。
+        get_final_message()で完全なMessageオブジェクトを取得する。
+        これにより、大きなmax_tokensでもAnthropicの
+        「Streaming is required for operations that may take longer than 10 minutes」
+        エラーを回避できる。呼び出し側のインターフェースは変更なし。
+        
+        出典: https://docs.anthropic.com/en/api/messages-streaming
+        「This is especially useful for requests with large max_tokens values,
+         where the SDKs require streaming to avoid HTTP timeouts.」
+        """
         try:
             system_message, converted_messages = self._convert_messages(messages)
             
@@ -539,7 +550,10 @@ class AnthropicProvider(LLMProvider):
             if system_message:
                 kwargs["system"] = system_message
             
-            response = self.client.messages.create(**kwargs)
+            # SDK高レベルストリーミングAPI
+            # get_final_message()が全イベントを集約し完全なMessageオブジェクトを返す
+            with self.client.messages.stream(**kwargs) as stream:
+                response = stream.get_final_message()
             
             return LLMResponse(
                 content=response.content[0].text,

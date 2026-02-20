@@ -32,7 +32,7 @@ class Config:
     DEFAULT_CONFIG = {
         # NOTE: 正規のバージョン定義は cognix/__init__.py の __version__
         # ここはconfigファイルのデフォルト値。表示用には __version__ を使うこと。
-        "version": "0.2.3",
+        "version": "0.2.5",
         "model": "claude-sonnet-4-5-20250929",
         "temperature": 0.7,
         "max_tokens": 4000,
