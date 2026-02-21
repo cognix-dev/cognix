@@ -1,0 +1,224 @@
+[
+  {
+    "tool": "cognix",
+    "task": "task_g",
+    "workdir": "C:\\Users\\benchuser\\cognix-bench\\results\\task_g_cognix_run1",
+    "command": [
+      "cognix",
+      "--make-file",
+      "C:\\Users\\benchuser\\cognix-bench\\tasks\\task_g\\prompt.md",
+      "--model",
+      "claude-sonnet-4-5-20250929"
+    ],
+    "exit_code": 0,
+    "duration_sec": 930.85,
+    "stdout_file": "C:\\Users\\benchuser\\cognix-bench\\results\\task_g_cognix_run1\\_bench_stdout_task_g_cognix_run1.log",
+    "stderr_file": "C:\\Users\\benchuser\\cognix-bench\\results\\task_g_cognix_run1\\_bench_stderr_task_g_cognix_run1.log",
+    "error": null,
+    "run_number": 1,
+    "verification": {
+      "axis1_execution": {
+        "passed": 8,
+        "total": 8
+      },
+      "axis2_dependency": {
+        "resolved": 55,
+        "total": 55
+      },
+      "axis3_lint": {
+        "errors": 0,
+        "lines": 2768
+      },
+      "axis4_scope": {
+        "passed": 12,
+        "total": 12
+      },
+      "raw_details": {
+        "execution": [
+          "Existing tests: OK (83 passed, 0 failed)",
+          "New tests added: OK (83 total, 22 new)",
+          "RecurringRule model: OK",
+          "Recurring storage: OK",
+          "Dependencies + circular detection: OK",
+          "Dependency storage: OK",
+          "Dashboard command: OK",
+          "CLI subcommands: OK (6/6 found)"
+        ],
+        "dependency": [],
+        "lint": [
+          "ruff error: 'NoneType' object has no attribute 'strip'"
+        ],
+        "scope": [
+          "Required files: PASS (10/10)",
+          "RecurringRule class: PASS",
+          "TaskDependency class: PASS",
+          "Recurring storage functions: PASS",
+          "Dependency storage functions: PASS",
+          "Circular dependency validator: PASS",
+          "Recurring commands: PASS (3/3)",
+          "Dependency commands: PASS (3/3)",
+          "Dashboard command: PASS",
+          "format_dashboard: PASS",
+          "Recurring plugin hooks: PASS",
+          "Existing functions preserved: PASS"
+        ]
+      }
+    },
+    "scores": {
+      "axis1_execution_rate": 1.0,
+      "axis2_dependency_rate": 1.0,
+      "axis3_lint_error_density": 0.0,
+      "axis4_scope_rate": 1.0,
+      "axis5_speed_sec": 930.85
+    },
+    "timestamp": "2026-02-18T11:26:05.528502+00:00"
+  },
+  {
+    "tool": "cognix",
+    "task": "task_g",
+    "workdir": "C:\\Users\\benchuser\\cognix-bench\\results\\task_g_cognix_run2",
+    "command": [
+      "cognix",
+      "--make-file",
+      "C:\\Users\\benchuser\\cognix-bench\\tasks\\task_g\\prompt.md",
+      "--model",
+      "claude-sonnet-4-5-20250929"
+    ],
+    "exit_code": 0,
+    "duration_sec": 891.11,
+    "stdout_file": "C:\\Users\\benchuser\\cognix-bench\\results\\task_g_cognix_run2\\_bench_stdout_task_g_cognix_run2.log",
+    "stderr_file": "C:\\Users\\benchuser\\cognix-bench\\results\\task_g_cognix_run2\\_bench_stderr_task_g_cognix_run2.log",
+    "error": null,
+    "run_number": 2,
+    "verification": {
+      "axis1_execution": {
+        "passed": 8,
+        "total": 8
+      },
+      "axis2_dependency": {
+        "resolved": 55,
+        "total": 55
+      },
+      "axis3_lint": {
+        "errors": 0,
+        "lines": 2778
+      },
+      "axis4_scope": {
+        "passed": 12,
+        "total": 12
+      },
+      "raw_details": {
+        "execution": [
+          "Existing tests: OK (85 passed, 0 failed)",
+          "New tests added: OK (85 total, 24 new)",
+          "RecurringRule model: OK",
+          "Recurring storage: OK",
+          "Dependencies + circular detection: OK",
+          "Dependency storage: OK",
+          "Dashboard command: OK",
+          "CLI subcommands: OK (6/6 found)"
+        ],
+        "dependency": [],
+        "lint": [
+          "ruff error: 'NoneType' object has no attribute 'strip'"
+        ],
+        "scope": [
+          "Required files: PASS (10/10)",
+          "RecurringRule class: PASS",
+          "TaskDependency class: PASS",
+          "Recurring storage functions: PASS",
+          "Dependency storage functions: PASS",
+          "Circular dependency validator: PASS",
+          "Recurring commands: PASS (3/3)",
+          "Dependency commands: PASS (3/3)",
+          "Dashboard command: PASS",
+          "format_dashboard: PASS",
+          "Recurring plugin hooks: PASS",
+          "Existing functions preserved: PASS"
+        ]
+      }
+    },
+    "scores": {
+      "axis1_execution_rate": 1.0,
+      "axis2_dependency_rate": 1.0,
+      "axis3_lint_error_density": 0.0,
+      "axis4_scope_rate": 1.0,
+      "axis5_speed_sec": 891.11
+    },
+    "timestamp": "2026-02-18T11:41:00.159818+00:00"
+  },
+  {
+    "tool": "cognix",
+    "task": "task_g",
+    "workdir": "C:\\Users\\benchuser\\cognix-bench\\results\\task_g_cognix_run3",
+    "command": [
+      "cognix",
+      "--make-file",
+      "C:\\Users\\benchuser\\cognix-bench\\tasks\\task_g\\prompt.md",
+      "--model",
+      "claude-sonnet-4-5-20250929"
+    ],
+    "exit_code": 0,
+    "duration_sec": 769.01,
+    "stdout_file": "C:\\Users\\benchuser\\cognix-bench\\results\\task_g_cognix_run3\\_bench_stdout_task_g_cognix_run3.log",
+    "stderr_file": "C:\\Users\\benchuser\\cognix-bench\\results\\task_g_cognix_run3\\_bench_stderr_task_g_cognix_run3.log",
+    "error": null,
+    "run_number": 3,
+    "verification": {
+      "axis1_execution": {
+        "passed": 8,
+        "total": 8
+      },
+      "axis2_dependency": {
+        "resolved": 57,
+        "total": 57
+      },
+      "axis3_lint": {
+        "errors": 0,
+        "lines": 2845
+      },
+      "axis4_scope": {
+        "passed": 12,
+        "total": 12
+      },
+      "raw_details": {
+        "execution": [
+          "Existing tests: OK (84 passed, 0 failed)",
+          "New tests added: OK (84 total, 23 new)",
+          "RecurringRule model: OK",
+          "Recurring storage: OK",
+          "Dependencies + circular detection: OK",
+          "Dependency storage: OK",
+          "Dashboard command: OK",
+          "CLI subcommands: OK (6/6 found)"
+        ],
+        "dependency": [],
+        "lint": [
+          "ruff error: 'NoneType' object has no attribute 'strip'"
+        ],
+        "scope": [
+          "Required files: PASS (10/10)",
+          "RecurringRule class: PASS",
+          "TaskDependency class: PASS",
+          "Recurring storage functions: PASS",
+          "Dependency storage functions: PASS",
+          "Circular dependency validator: PASS",
+          "Recurring commands: PASS (3/3)",
+          "Dependency commands: PASS (3/3)",
+          "Dashboard command: PASS",
+          "format_dashboard: PASS",
+          "Recurring plugin hooks: PASS",
+          "Existing functions preserved: PASS"
+        ]
+      }
+    },
+    "scores": {
+      "axis1_execution_rate": 1.0,
+      "axis2_dependency_rate": 1.0,
+      "axis3_lint_error_density": 0.0,
+      "axis4_scope_rate": 1.0,
+      "axis5_speed_sec": 769.01
+    },
+    "timestamp": "2026-02-18T11:53:51.385841+00:00"
+  }
+]
