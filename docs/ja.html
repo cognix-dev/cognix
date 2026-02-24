@@ -98,11 +98,14 @@ body {
 
 .hero h1 {
   font-family: 'Bricolage Grotesque', sans-serif;
-  font-size: clamp(2.6rem, 6.5vw, 5rem);
+  font-size: clamp(2.2rem, 5.5vw, 4rem);
   font-weight: 800;
-  line-height: 1.2;
+  line-height: 1.25;
   letter-spacing: -.025em;
   color: var(--t1);
+  border-left: 4px solid var(--green);
+  padding-left: .5em;
+  text-align: left;
   opacity: 0;
   animation: fadeUp .9s .3s cubic-bezier(.22,1,.36,1) forwards;
 }
@@ -116,10 +119,10 @@ body {
 
 .hero-sub {
   margin-top: 1.5rem;
-  font-size: .98rem;
+  font-size: 1.05rem;
   color: var(--t2);
-  font-weight: 300;
-  max-width: 520px;
+  font-weight: 400;
+  max-width: 580px;
   line-height: 1.7;
   opacity: 0;
   animation: fadeUp .9s .5s cubic-bezier(.22,1,.36,1) forwards;
@@ -202,13 +205,13 @@ body {
   position: relative;
   padding: 3.8rem 0 4.8rem;
   border-bottom: 1px solid var(--border);
-  opacity: 0;
-  transform: translateY(36px);
+  opacity: 1;
+  transform: translateY(0);
   transition: opacity .75s cubic-bezier(.22,1,.36,1),
               transform .75s cubic-bezier(.22,1,.36,1);
 }
+.feature.hidden { opacity: 0; transform: translateY(36px); }
 .feature:last-child { border-bottom: none; }
-.feature.visible { opacity:1; transform: translateY(0); }
 
 /* Number */
 .f-num {
@@ -225,7 +228,7 @@ body {
   letter-spacing: -.04em;
   transition: opacity .6s;
 }
-.feature.visible .f-num { opacity: .2; }
+.feature:not(.hidden) .f-num { opacity: .2; }
 
 /* Title */
 .f-tag {
@@ -687,6 +690,9 @@ nav {
 
 /* ── RESPONSIVE ── */
 @media (max-width: 600px) {
+  .hero { min-height: auto; padding: 4.5rem 1.2rem 2rem; }
+  .hero-glow { display: none; }
+  .hero h1 { font-size: clamp(3rem, 10vw, 3.5rem); }
   .f-num { font-size: 4rem; top: 2.2rem; right: 0; }
   .f-title { max-width: 100%; font-size: 1.35rem; }
   .comparison { grid-template-columns: 1fr; }
@@ -721,7 +727,7 @@ nav {
   <div class="hero-glow"></div>
   <div class="hero-label">Autonomous code generation powered by flow engineering.</div>
   <h1>速さではなく<span class="g">品質</span>。<br>派手さではなく<span class="g">堅実さ</span>。</h1>
-  <p class="hero-sub">AIコード生成の66%は「惜しいけど動かない」。<br>Cognixは多段階検証で、<strong style="color:var(--t1)">動くコード</strong>を出力する。</p>
+  <p class="hero-sub">実行正確率<strong style="color:var(--green)">100%</strong> — Claude Codeに並び、<strong style="color:var(--green)">Aiderを上回る</strong>。<br>同じLLM、同じタスクで<a href="https://zenn.dev/cognix/articles/b3d1ae60ad56d4" target="_blank" rel="noopener" style="color:var(--green);text-decoration:underline;text-underline-offset:3px">実証済み</a>。</p>
   <a class="hero-cta" href="https://github.com/cognix-dev/cognix/blob/main/README_JA.md#クイックスタート" target="_blank" rel="noopener">
     pipx install cognix
   </a>
@@ -1145,8 +1151,9 @@ window.addEventListener('scroll', () => {
 });
 
 // ── Scroll Reveal (features) ──
+document.querySelectorAll('.feature').forEach(el => el.classList.add('hidden'));
 const obs = new IntersectionObserver((entries) => {
-  entries.forEach(e => { if (e.isIntersecting) e.target.classList.add('visible'); });
+  entries.forEach(e => { if (e.isIntersecting) { e.target.classList.remove('hidden'); obs.unobserve(e.target); } });
 }, { threshold: 0.12, rootMargin: '0px 0px -50px 0px' });
 
 document.querySelectorAll('.feature').forEach(el => obs.observe(el));
