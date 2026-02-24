@@ -129,7 +129,7 @@ body {
   font-size: 1.08rem;
   color: var(--t2);
   font-weight: 400;
-  max-width: 560px;
+  max-width: 640px;
   line-height: 1.7;
   opacity: 0;
   animation: fadeUp .9s .5s cubic-bezier(.22,1,.36,1) forwards;
@@ -212,13 +212,13 @@ body {
   position: relative;
   padding: 3.8rem 0 4.8rem;
   border-bottom: 1px solid var(--border);
-  opacity: 0;
-  transform: translateY(36px);
+  opacity: 1;
+  transform: translateY(0);
   transition: opacity .75s cubic-bezier(.22,1,.36,1),
               transform .75s cubic-bezier(.22,1,.36,1);
 }
+.feature.hidden { opacity: 0; transform: translateY(36px); }
 .feature:last-child { border-bottom: none; }
-.feature.visible { opacity:1; transform: translateY(0); }
 
 /* Number */
 .f-num {
@@ -235,7 +235,7 @@ body {
   letter-spacing: -.04em;
   transition: opacity .6s;
 }
-.feature.visible .f-num { opacity: .2; }
+.feature:not(.hidden) .f-num { opacity: .2; }
 
 /* Title */
 .f-tag {
@@ -698,6 +698,8 @@ nav {
 
 /* ── RESPONSIVE ── */
 @media (max-width: 600px) {
+  .hero { min-height: auto; padding: 4.5rem 1.5rem 2rem; }
+  .hero-glow { display: none; }
   .f-num { font-size: 4rem; top: 2.2rem; right: 0; }
   .f-title { max-width: 100%; font-size: 1.35rem; }
   .comparison { grid-template-columns: 1fr; }
@@ -733,7 +735,7 @@ nav {
   <div class="hero-inner">
     <div class="hero-label">Autonomous code generation powered by flow engineering.</div>
     <h1>Not speed. <span class="g">QUALITY.</span><br>Not flash. <span class="g">RIGOR.</span></h1>
-    <p class="hero-sub">66% of AI-generated code is "almost right but doesn't work."<br>Cognix uses multi-stage validation to output <strong style="color:var(--t1)">code that works</strong>.</p>
+    <p class="hero-sub" style="text-align:center;max-width:820px;margin-left:auto;margin-right:auto"><strong style="color:var(--green)">100%</strong> execution accuracy — matching Claude Code, <strong style="color:var(--green)">surpassing Aider</strong>.<br>Same LLM, same tasks. <a href="https://dev.to/cognix-dev/ai-cli-coding-tool-execution-accuracy-benchmark-claude-code-vs-aider-vs-cognix-on-the-same-llm-3j9f" target="_blank" rel="noopener" style="color:var(--green);text-decoration:underline;text-underline-offset:3px">Proven by benchmark</a>.</p>
   </div>
   <a class="hero-cta" href="https://github.com/cognix-dev/cognix#quick-start" target="_blank" rel="noopener">
     pipx install cognix
@@ -1158,8 +1160,9 @@ window.addEventListener('scroll', () => {
 });
 
 // ── Scroll Reveal (features) ──
+document.querySelectorAll('.feature').forEach(el => el.classList.add('hidden'));
 const obs = new IntersectionObserver((entries) => {
-  entries.forEach(e => { if (e.isIntersecting) e.target.classList.add('visible'); });
+  entries.forEach(e => { if (e.isIntersecting) { e.target.classList.remove('hidden'); obs.unobserve(e.target); } });
 }, { threshold: 0.12, rootMargin: '0px 0px -50px 0px' });
 
 document.querySelectorAll('.feature').forEach(el => obs.observe(el));
