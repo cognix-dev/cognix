@@ -231,7 +231,11 @@ class SessionManager:
                         model_used=entry_data['model_used'],
                         command_type=entry_data.get('command_type'),
                         target_files=entry_data.get('target_files', []),
-                        metadata=entry_data.get('metadata', {})
+                        metadata=entry_data.get('metadata', {}),
+                        tokens_input=entry_data.get('tokens_input', 0),
+                        tokens_output=entry_data.get('tokens_output', 0),
+                        tokens_total=entry_data.get('tokens_total', 0),
+                        duration_seconds=entry_data.get('duration_seconds', 0.0),
                     )
                     entries.append(entry)
                     
@@ -258,7 +262,11 @@ class SessionManager:
                 entries=entries,
                 total_entries=data.get('total_entries', len(entries)),
                 metadata=data.get('metadata', {}) if isinstance(data.get('metadata'), dict) else {},
-                workflow_state=data.get('workflow_state')  # ← 追加
+                workflow_state=data.get('workflow_state'),
+                total_tokens_input=data.get('total_tokens_input', 0),
+                total_tokens_output=data.get('total_tokens_output', 0),
+                total_tokens=data.get('total_tokens', 0),
+                total_duration_seconds=data.get('total_duration_seconds', 0.0),
             )
             
             # Final validation

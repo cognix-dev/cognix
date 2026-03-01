@@ -357,15 +357,13 @@ class ComplexityAssessor:
             'postgres replication', 'mysql cluster',
 
             # ゲーム・インタラクティブ系（高度な実装が必要）
-            'game engine', 'particle system', 'particle',
+            'game engine', 'particle system',
             'collision detection', 'physics engine', 'physics simulation',
-            'animation system', 'canvas game', 'webgl',
+            'custom animation', 'canvas game', 'webgl',
             'web audio', 'audio engine', 'sound engine',
             'sprite', 'tilemap', 'game loop',
             'requestanimationframe', 'shader',
-            '60fps', 'frame rate',
             'object pool', 'object pooling',
-            'state machine', 'fsm',
             'pathfinding', 'procedural generation',
         ]
     
@@ -545,7 +543,9 @@ class ComplexityAssessor:
                 score += 0.8
 
         # ⭐ 要件セクション数によるブースト（Markdown見出しが多い＝構造化された詳細spec）
-        heading_count = goal.count('\n## ') + goal.count('\n### ')
+        # コードブロック内の見出し（## コメント等）を除外してカウント
+        clean_goal = re.sub(r'```[\s\S]*?```', '', goal)
+        heading_count = len(re.findall(r'(?:^|\n)#{2,3}\s', clean_goal))
         if heading_count >= 10:
             score += 2.0
         elif heading_count >= 5:
@@ -9336,7 +9336,10 @@ MANDATORY SVELTE REQUIREMENTS:
                     max_tokens = max(max_tokens, 8000)
                 elif goal_length >= 1500:
                     max_tokens = max(max_tokens, 6000)
-                
+
+                # API上限を超えないよう安全弁（Multi-File側で別途16000まで引き上げる）
+                max_tokens = min(max_tokens, 16000)
+
                 # Multi-File生成の場合、max_tokensを増やす（複数ファイル生成には十分なトークンが必要）
                 # 
                 # 修正: 2025-12-29, 2025-01-22
@@ -22717,10 +22720,11 @@ Return ONLY the fixed JavaScript code wrapped in ```javascript``` blocks.
                                 'fix': 'Implement missing feature per spec'
                             })
                         self._zen_summary["review"]["issues"] = existing_issues
-                        logger.debug(
-                            f"[Spec Fulfillment] Score: {fulfillment:.2f}, "
-                            f"added {len(spec_issues)} spec gap issue(s) to review"
-                        )
+                    self._zen_summary["review"]["fulfillment_score"] = fulfillment
+                    logger.debug(
+                        f"[Spec Fulfillment] Score: {fulfillment:.2f}, "
+                        f"added {len(spec_issues)} spec gap issue(s) to review"
+                    )
         except Exception as e:
             logger.debug(f"[Spec Fulfillment] Check failed (non-fatal): {e}")
 
