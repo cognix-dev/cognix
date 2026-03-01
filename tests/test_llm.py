@@ -1,12 +1,16 @@
-"""Tests for llm.py bug fixes (c4ca527)
+"""Tests for llm.py bug fixes (c4ca527 + Fix B/C/D)
 
 Covers:
 - Streaming empty choices guard
 - Anthropic empty response guard
 - Responses API safe dict access
 - Default model names
+- Fix B: Fallback token estimation uses 0 (not len//4)
+- Fix C: Temperature override logs warning
+- Fix D: Empty message validation in Anthropic _convert_messages
 """
 
+import logging
 import pytest
 from unittest.mock import MagicMock, patch, PropertyMock
 from types import SimpleNamespace
@@ -183,3 +187,110 @@ class TestResponsesAPISafeDictAccess:
             messages, temperature=0.7, max_tokens=100
         ))
         assert "hello" in result
+
+
+# ── Fix B: Fallback Token Estimation ─────────────────────────────
+
+class TestFallbackTokenEstimation:
+    """Fallback usage should be all zeros, not len(content)//4."""
+
+    @patch("openai.OpenAI")
+    def test_fallback_usage_is_zero(self, mock_openai_cls):
+        from cognix.llm import OpenAIProvider
+
+        provider = OpenAIProvider(api_key="fake-key", model="gpt-5.2")
+
+        # Simulate a stream that yields content but no usage object
+        chunk1 = SimpleNamespace(
+            choices=[SimpleNamespace(delta=SimpleNamespace(content="hello world"))]
+        )
+        chunk2 = SimpleNamespace(
+            choices=[SimpleNamespace(delta=SimpleNamespace(content=None))]
+        )
+        provider.client.chat.completions.create.return_value = [chunk1, chunk2]
+
+        messages = [{"role": "user", "content": "test"}]
+        # Consume the stream to trigger the fallback path
+        result = list(provider._stream_response_via_chat_completions(
+            messages, temperature=0.7, max_tokens=100
+        ))
+        assert result == ["hello world"]
+
+    @patch("openai.OpenAI")
+    def test_source_code_no_len_div_4(self, mock_openai_cls):
+        """Verify len(content) // 4 pattern is NOT in the fallback."""
+        import inspect
+        from cognix.llm import OpenAIProvider
+        source = inspect.getsource(OpenAIProvider)
+        assert "len(content) // 4" not in source, \
+            "Fallback should use 0, not len(content) // 4"
+
+
+# ── Fix C: Temperature Warning ───────────────────────────────────
+
+class TestTemperatureWarning:
+    """GPT-5 temperature override should log a warning."""
+
+    @patch("openai.OpenAI")
+    def test_temperature_override_logs_warning(self, mock_openai_cls):
+        from cognix.llm import OpenAIProvider
+
+        provider = OpenAIProvider(api_key="fake-key", model="gpt-5.2")
+
+        with patch("logging.getLogger") as mock_get_logger:
+            mock_logger = MagicMock()
+            mock_get_logger.return_value = mock_logger
+            params = provider._get_params_for_model(max_tokens=100, temperature=0.5)
+
+        mock_logger.warning.assert_called_once()
+        assert "temperature" in mock_logger.warning.call_args[0][0].lower(), \
+            "Warning message should mention temperature"
+        # Temperature should NOT be in the params (GPT-5 uses default 1)
+        assert "temperature" not in params
+
+    @patch("openai.OpenAI")
+    def test_temperature_1_no_warning(self, mock_openai_cls, caplog):
+        from cognix.llm import OpenAIProvider
+
+        provider = OpenAIProvider(api_key="fake-key", model="gpt-5.2")
+
+        with caplog.at_level(logging.WARNING, logger="cognix.llm"):
+            params = provider._get_params_for_model(max_tokens=100, temperature=1.0)
+
+        assert not any("temperature" in record.message.lower() for record in caplog.records), \
+            "Should NOT log a warning when temperature is 1.0"
+
+
+# ── Fix D: Empty Message Validation ──────────────────────────────
+
+class TestEmptyMessageValidation:
+    """_convert_messages should raise ValueError when all messages are empty."""
+
+    @patch("anthropic.Anthropic")
+    def test_all_empty_messages_raises(self, mock_anthropic_cls):
+        from cognix.llm import AnthropicProvider
+
+        provider = AnthropicProvider(api_key="fake-key")
+
+        # All messages have empty content
+        messages = [
+            {"role": "user", "content": ""},
+            {"role": "assistant", "content": ""},
+        ]
+
+        with pytest.raises(ValueError, match="No valid messages"):
+            provider._convert_messages(messages)
+
+    @patch("anthropic.Anthropic")
+    def test_valid_messages_pass(self, mock_anthropic_cls):
+        from cognix.llm import AnthropicProvider
+
+        provider = AnthropicProvider(api_key="fake-key")
+
+        messages = [
+            {"role": "user", "content": "hello"},
+        ]
+
+        system_msg, converted = provider._convert_messages(messages)
+        assert len(converted) == 1
+        assert converted[0]["content"] == "hello"
