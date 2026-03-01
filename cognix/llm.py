@@ -71,7 +71,7 @@ class OpenAIProvider(LLMProvider):
         "o1-preview",
     ]
     
-    def __init__(self, api_key: str, model: str = "gpt-5.1", base_url: str = None):
+    def __init__(self, api_key: str, model: str = "gpt-5.2", base_url: str = None):
         """Initialize OpenAI provider with optional base URL for OpenRouter support"""
         self.api_key = api_key
         self.model = model
@@ -298,13 +298,13 @@ class OpenAIProvider(LLMProvider):
         # Base parameters
         params = {
             "model": self.model,
-            "input": input_messages if input_messages else messages[-1]["content"],
+            "input": input_messages if input_messages else messages[-1].get("content", ""),
         }
-        
+
         # instructionsがある場合は追加
         if instructions:
             params["instructions"] = instructions
-        
+
         # Codexモデルはtemperatureをサポートしない
         # 出典: platform.openai.com/docs/guides/latest-model
         # "It does not support all GPT-5.2 parameters or API surfaces."
@@ -411,7 +411,7 @@ class OpenAIProvider(LLMProvider):
         stream = self.client.chat.completions.create(**params)
         
         for chunk in stream:
-            if chunk.choices[0].delta.content is not None:
+            if chunk.choices and chunk.choices[0].delta.content is not None:
                 yield chunk.choices[0].delta.content
     
     def _stream_response_via_responses_api(
@@ -434,7 +434,7 @@ class OpenAIProvider(LLMProvider):
         # Base parameters
         params = {
             "model": self.model,
-            "input": input_messages if input_messages else messages[-1]["content"],
+            "input": input_messages if input_messages else messages[-1].get("content", ""),
             "stream": True
         }
         
@@ -481,7 +481,7 @@ class OpenAIProvider(LLMProvider):
 class AnthropicProvider(LLMProvider):
     """Anthropic API provider"""
     
-    def __init__(self, api_key: str, model: str = "claude-3-opus-20240229"):
+    def __init__(self, api_key: str, model: str = "claude-sonnet-4-5-20250929"):
         """Initialize Anthropic provider"""
         self.api_key = api_key
         self.model = model
@@ -556,7 +556,7 @@ class AnthropicProvider(LLMProvider):
                 response = stream.get_final_message()
             
             return LLMResponse(
-                content=response.content[0].text,
+                content=response.content[0].text if response.content else "",
                 model=self.model,
                 usage={
                     "prompt_tokens": response.usage.input_tokens,

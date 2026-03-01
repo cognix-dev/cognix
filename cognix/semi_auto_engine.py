@@ -221,38 +221,29 @@ class ComplexityAssessor:
 
         
     def _init_simple_keywords(self) -> List[str]:
-        """Simple indicators (40+ keywords)"""
+        """Simple indicators
+
+        注意: 汎用的すぎる語（display, show, output, timer, counter等）は
+        複雑なspec内でも頻出するため、simple判定に使用しない。
+        ここに含めるのは「それ自体が simple な実装を意味する」キーワードのみ。
+        """
         return [
-            # 基本的な挨拶・表示
-            'hello world', 'hello', 'hi', 'greet', 'welcome',
-            'display', 'print', 'show', 'output',
-            
+            # 基本的な挨拶・表示（明確にsimpleなもののみ）
+            'hello world',
+
             # 基本的な計算・変換
             'simple calculator', 'basic calculator', 'add subtract',
-            'calculator', 'math', 'arithmetic',
-            'converter', 'conversion', 'convert',
-            'temperature', 'currency', 'unit',
-            
-            # 基本的な生成
-            'random number', 'random', 'generate number',
-            'dice', 'coin flip', 'lottery',
-            
-            # 基本的なタイマー・時計
-            'timer', 'stopwatch', 'countdown', 'counter',
-            'clock', 'time display', 'current time',
-            
-            # 基本的なゲーム・パズル
-            'fizzbuzz', 'guess number', 'guessing game',
+            'fizzbuzz',
+
+            # 基本的なゲーム・パズル（名前自体がsimple確定のもの）
+            'guess number', 'guessing game',
             'tic tac toe', 'rock paper scissors',
-            
+
             # 基本的な文字列操作
-            'reverse string', 'palindrome', 'word count',
-            'character count', 'string manipulation',
-            
-            # 修飾語
-            'simple', 'basic', 'minimal', 'quick', 'easy',
-            'beginner', 'starter', 'demo', 'example',
-            'prototype', 'proof of concept', 'poc'
+            'reverse string', 'palindrome',
+
+            # 修飾語（ただし spec 内に buried されるケースを考慮し限定的に）
+            'proof of concept', 'poc',
         ]
     
     def _init_medium_keywords(self) -> List[str]:
@@ -363,7 +354,17 @@ class ComplexityAssessor:
             # 具体的な技術スタック(Complex確定)
             'elasticsearch', 'kafka', 'rabbitmq',
             'redis cluster', 'mongodb cluster',
-            'postgres replication', 'mysql cluster'
+            'postgres replication', 'mysql cluster',
+
+            # ゲーム・インタラクティブ系（高度な実装が必要）
+            'game engine', 'particle system',
+            'collision detection', 'physics engine', 'physics simulation',
+            'custom animation', 'canvas game', 'webgl',
+            'web audio', 'audio engine', 'sound engine',
+            'sprite', 'tilemap', 'game loop',
+            'requestanimationframe', 'shader',
+            'object pool', 'object pooling',
+            'pathfinding', 'procedural generation',
         ]
     
     def _init_exclusion_patterns(self) -> Dict[str, List[str]]:
@@ -520,7 +521,36 @@ class ComplexityAssessor:
         if is_fullstack:
             # フルスタックは+2.0でcomplex確定（閾値2.0）
             score += 2.0
-        
+
+        # ⭐ スペック文字数によるブースト
+        # 長大なspecは詳細要件を含む可能性が高く、simpleと判定すべきでない
+        goal_length = len(goal)
+        if goal_length >= 5000:
+            score += 2.5
+        elif goal_length >= 3000:
+            score += 1.5
+        elif goal_length >= 1500:
+            score += 0.8
+
+        # ⭐ 添付ファイルのサイズも考慮
+        if hasattr(self, 'existing_files') and self.existing_files:
+            total_spec_chars = sum(len(content) for content in self.existing_files.values())
+            if total_spec_chars >= 5000:
+                score += 2.5
+            elif total_spec_chars >= 3000:
+                score += 1.5
+            elif total_spec_chars >= 1500:
+                score += 0.8
+
+        # ⭐ 要件セクション数によるブースト（Markdown見出しが多い＝構造化された詳細spec）
+        # コードブロック内の見出し（## コメント等）を除外してカウント
+        clean_goal = re.sub(r'```[\s\S]*?```', '', goal)
+        heading_count = len(re.findall(r'(?:^|\n)#{2,3}\s', clean_goal))
+        if heading_count >= 10:
+            score += 2.0
+        elif heading_count >= 5:
+            score += 1.0
+
         return score
 
 
@@ -5787,8 +5817,12 @@ Generate complete, production-ready implementations. No placeholders or TODO com
             Analysis result string
         """
         # Simple complexity: Skip detailed analysis
-        if complexity == "simple":
+        # ただし、goalが長い場合(詳細なspec)はスキップしない
+        goal_length = len(goal)
+        if complexity == "simple" and goal_length < 1500:
             return f"Simple implementation: {goal}\nDirect code generation without detailed analysis."
+        elif complexity == "simple":
+            logger.debug(f"[Flow] _analyze_implementation_goal: Simple complexity but large goal ({goal_length} chars) - running analysis anyway")
         
         # LLM not available: Return basic analysis
         if not self.llm_manager:
@@ -5847,8 +5881,12 @@ Generate complete, production-ready implementations. No placeholders or TODO com
             Implementation plan string
         """
         # Simple complexity: Skip detailed planning
-        if complexity == "simple":
+        # ただし、goalが長い場合(詳細なspec)はスキップしない
+        goal_length = len(goal)
+        if complexity == "simple" and goal_length < 1500:
             return f"Simple implementation plan: Direct code generation for {goal}"
+        elif complexity == "simple":
+            logger.debug(f"[Flow] _create_implementation_plan: Simple complexity but large goal ({goal_length} chars) - running planning anyway")
         
         if not self.llm_manager:
             return f"Implementation plan for: {goal}\n1. Create main module\n2. Implement core functionality\n3. Add error handling\n4. Create tests"
@@ -9279,6 +9317,8 @@ MANDATORY SVELTE REQUIREMENTS:
                     signal.alarm(60)  # 60秒タイムアウト
             
                 # 改善策A: 複雑性に応じてmax_tokensを設定
+                # ⭐ specサイズも考慮した動的サイジング
+                goal_length = len(goal) if goal else 0
                 if complexity == "simple":
                     max_tokens = 2000
                 elif complexity == "medium":
@@ -9287,7 +9327,19 @@ MANDATORY SVELTE REQUIREMENTS:
                     max_tokens = 8000
                 else:
                     max_tokens = 4000
-                
+
+                # ⭐ specが長い場合はmax_tokensを底上げ
+                # 詳細なspecは長いコード出力を要求するため
+                if goal_length >= 5000:
+                    max_tokens = max(max_tokens, 12000)
+                elif goal_length >= 3000:
+                    max_tokens = max(max_tokens, 8000)
+                elif goal_length >= 1500:
+                    max_tokens = max(max_tokens, 6000)
+
+                # API上限を超えないよう安全弁（Multi-File側で別途16000まで引き上げる）
+                max_tokens = min(max_tokens, 16000)
+
                 # Multi-File生成の場合、max_tokensを増やす（複数ファイル生成には十分なトークンが必要）
                 # 
                 # 修正: 2025-12-29, 2025-01-22
@@ -12093,12 +12145,39 @@ IMPORTANT RULES:
                     # 統計情報の取得も失敗した場合は何も追加しない
                     pass
         
-        # ⭐ UI Knowledge を追加（新規追加）
-        ui_knowledge = self._get_ui_knowledge()
-        if ui_knowledge:
-            context_parts.append("\n# UI Component Knowledge:")
-            context_parts.append(ui_knowledge)
-        
+        # ⭐ UI Knowledge を追加（条件付き）
+        # ゲーム/Canvas/WebGL系プロジェクトでは不要なUI知識を注入しない
+        # また、単一HTMLファイルプロジェクトでも不要
+        should_inject_ui_knowledge = True
+        skip_reason = ""
+
+        if hasattr(self, '_project_structure') and self._project_structure:
+            file_types = self._project_structure.file_types or []
+            reason_lower = (self._project_structure.reason or "").lower()
+
+            game_indicators = [
+                'game', 'canvas', 'webgl', 'tetris', 'puzzle',
+                'animation', 'particle', 'sprite', 'physics',
+            ]
+            if any(ind in reason_lower for ind in game_indicators):
+                should_inject_ui_knowledge = False
+                skip_reason = f"game/canvas project detected (reason: {self._project_structure.reason[:80]})"
+
+            if file_types == ['html'] and self._project_structure.stage == 'single':
+                should_inject_ui_knowledge = False
+                skip_reason = skip_reason or "single HTML file project"
+
+        if should_inject_ui_knowledge:
+            ui_knowledge = self._get_ui_knowledge()
+            if ui_knowledge:
+                MAX_UI_KNOWLEDGE_CHARS = 20000
+                if len(ui_knowledge) > MAX_UI_KNOWLEDGE_CHARS:
+                    ui_knowledge = ui_knowledge[:MAX_UI_KNOWLEDGE_CHARS] + "\n... (truncated for token budget)"
+                context_parts.append("\n# UI Component Knowledge:")
+                context_parts.append(ui_knowledge)
+        else:
+            logger.debug(f"[UI Knowledge] Skipped injection: {skip_reason}")
+
         return '\n'.join(context_parts)
 
     def _get_ui_knowledge(self) -> str:
@@ -14256,8 +14335,16 @@ IMPORTANT RULES:
             )
             
             # 要件充足度を反映
-            #file_score = file_score * requirement_score
-            
+            # requirement_score < 1.0 の場合のみペナルティを適用
+            if requirement_score < 1.0:
+                pre_req_score = file_score
+                file_score = file_score * requirement_score
+                logger.debug(
+                    f"[Quality] {filename}: Requirement fulfillment penalty:\n"
+                    f"  - requirement_score: {requirement_score:.2f}\n"
+                    f"  - {pre_req_score:.4f} × {requirement_score:.2f} = {file_score:.4f}"
+                )
+
             quality_scores[filename] = round(file_score, 2)
         
         # グローバルイシューの表示
@@ -22609,10 +22696,38 @@ Return ONLY the fixed JavaScript code wrapped in ```javascript``` blocks.
                 self._zen_summary["review"]["final"] = len(final_issues)
                 self._zen_summary["review"]["issues"] = final_issues  # ファイル単位のissue情報を保存
                 self._zen_summary["review"]["fixed"] = (
-                    self._zen_summary["review"]["initial"] > 0 and 
+                    self._zen_summary["review"]["initial"] > 0 and
                     len(final_issues) < self._zen_summary["review"]["initial"]
                 )
-        
+
+        # ⭐ P2-2: Spec充足度チェック → 未充足をreview issuesに昇格
+        # blocking issue修正ループとは別に、spec要件の抜け漏れを報告する
+        # 自動修正はしない（リグレッションリスクが高い）がissueとして記録
+        try:
+            if hasattr(self, 'requirement_validator') and self.requirement_validator and goal:
+                req_result = self.requirement_validator.validate_requirements(goal, all_files)
+                fulfillment = req_result.get('fulfillment_score', 1.0)
+                if fulfillment < 0.9:
+                    spec_issues = req_result.get('issues', [])
+                    if spec_issues:
+                        existing_issues = self._zen_summary.get("review", {}).get("issues", [])
+                        for spec_issue in spec_issues:
+                            existing_issues.append({
+                                'file': '(spec)',
+                                'line': None,
+                                'type': 'spec_gap',
+                                'description': spec_issue,
+                                'fix': 'Implement missing feature per spec'
+                            })
+                        self._zen_summary["review"]["issues"] = existing_issues
+                    self._zen_summary["review"]["fulfillment_score"] = fulfillment
+                    logger.debug(
+                        f"[Spec Fulfillment] Score: {fulfillment:.2f}, "
+                        f"added {len(spec_issues)} spec gap issue(s) to review"
+                    )
+        except Exception as e:
+            logger.debug(f"[Spec Fulfillment] Check failed (non-fatal): {e}")
+
         return all_files
     
     # ============================================================

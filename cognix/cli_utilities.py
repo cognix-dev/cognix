@@ -589,16 +589,16 @@ Made by Individual Developer | MIT License"""
         err_console.print(f"[white]    {'Model':<18}{autosave_info['model']}[/white]")
         err_console.print(f"[white]    {'Directory':<18}{autosave_info['directory']}[/white]")
 
-        # 追加の統計があれば行追加（既存 stats 利用）
-        stats = self.session_manager.get_session_stats()
-        if stats:
-            total_tokens = stats.get('total_tokens', 0)
+        # 追加の統計があれば行追加（トークン統計APIを使用）
+        token_stats = self.session_manager.get_token_statistics()
+        if token_stats:
+            total_tokens = token_stats.get('total_tokens', 0)
             if total_tokens > 0:
-                cost = stats.get('estimated_cost', 0.0)
-                err_console.print(f"  Token Usage    {total_tokens:,} (~${cost:.2f})")
-            duration = stats.get('total_duration', 0.0)
+                cost = token_stats.get('estimated_cost', 0.0)
+                err_console.print(f"[white]    {'Token Usage':<18}{total_tokens:,} (~${cost:.2f})[/white]")
+            duration = token_stats.get('total_duration_seconds', 0.0)
             if duration > 0:
-                err_console.print(f"  Total Duration {format_duration(duration)}")
+                err_console.print(f"[white]    {'Total Duration':<18}{token_stats.get('duration_formatted', '0s')}[/white]")
 
         # rule()はANSIコードを返すのでprint()で直接出力
         print("\n" + rule())
