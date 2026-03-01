@@ -106,7 +106,8 @@ class RepositoryModule(CLIModuleBase):
                     ai_response=response_content,
                     model_used=getattr(self.llm_manager, 'current_model', 'unknown'),
                     command_type="repo-status",
-                    metadata={"verbose": verbose}
+                    metadata={"verbose": verbose},
+                    tokens_used=getattr(response, 'usage', None),
                 )
             
         except Exception as e:
@@ -219,7 +220,8 @@ class RepositoryModule(CLIModuleBase):
                     metadata={
                         "project_dir": project_dir,
                         "project_type": project_type
-                    }
+                    },
+                    tokens_used=getattr(response, 'usage', None),
                 )
             
         except Exception as e:
@@ -296,7 +298,8 @@ class RepositoryModule(CLIModuleBase):
                     ai_response=response_content,
                     model_used=getattr(self.llm_manager, 'current_model', 'unknown'),
                     command_type="repo-deps",
-                    metadata={}
+                    metadata={},
+                    tokens_used=getattr(response, 'usage', None),
                 )
             
         except Exception as e:

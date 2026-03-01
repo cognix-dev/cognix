@@ -171,8 +171,10 @@ class OpenAIProvider(LLMProvider):
             params["max_completion_tokens"] = max_tokens
             # GPT-5 only supports temperature = 1
             if temperature != 1.0:
-                # Silent adjustment for GPT-5
-                pass
+                import logging
+                logging.getLogger(__name__).warning(
+                    f"Model {self.model} forces temperature=1, ignoring requested {temperature}"
+                )
             # Don't set temperature for GPT-5 (uses default 1)
         else:
             params["max_tokens"] = max_tokens
@@ -260,8 +262,8 @@ class OpenAIProvider(LLMProvider):
         if usage is None:
             usage_dict = {
                 "prompt_tokens": 0,
-                "completion_tokens": len(content) // 4,  # Rough estimate
-                "total_tokens": len(content) // 4
+                "completion_tokens": 0,
+                "total_tokens": 0
             }
         else:
             usage_dict = {
@@ -517,8 +519,11 @@ class AnthropicProvider(LLMProvider):
                     "content": content
                 })
         
+        if not converted_messages:
+            raise ValueError("No valid messages after filtering empty content")
+
         return system_message, converted_messages
-    
+
     def generate_response(
         self,
         messages: List[Dict[str, str]],

@@ -522,34 +522,39 @@ class ComplexityAssessor:
             # フルスタックは+2.0でcomplex確定（閾値2.0）
             score += 2.0
 
-        # ⭐ スペック文字数によるブースト
-        # 長大なspecは詳細要件を含む可能性が高く、simpleと判定すべきでない
+        # ⭐ スペックサイズブースト（3種合計で最大+4.0に制限）
+        score_before_boost = score
+        boost = 0.0
+
+        # 文字数ブースト
         goal_length = len(goal)
         if goal_length >= 5000:
-            score += 2.5
+            boost += 2.5
         elif goal_length >= 3000:
-            score += 1.5
+            boost += 1.5
         elif goal_length >= 1500:
-            score += 0.8
+            boost += 0.8
 
-        # ⭐ 添付ファイルのサイズも考慮
+        # 添付ファイルサイズブースト
         if hasattr(self, 'existing_files') and self.existing_files:
             total_spec_chars = sum(len(content) for content in self.existing_files.values())
             if total_spec_chars >= 5000:
-                score += 2.5
+                boost += 2.5
             elif total_spec_chars >= 3000:
-                score += 1.5
+                boost += 1.5
             elif total_spec_chars >= 1500:
-                score += 0.8
+                boost += 0.8
 
-        # ⭐ 要件セクション数によるブースト（Markdown見出しが多い＝構造化された詳細spec）
-        # コードブロック内の見出し（## コメント等）を除外してカウント
+        # 要件セクション数ブースト（コードブロック内の見出しを除外）
         clean_goal = re.sub(r'```[\s\S]*?```', '', goal)
         heading_count = len(re.findall(r'(?:^|\n)#{2,3}\s', clean_goal))
         if heading_count >= 10:
-            score += 2.0
+            boost += 2.0
         elif heading_count >= 5:
-            score += 1.0
+            boost += 1.0
+
+        # ブースト合計を+4.0に制限
+        score += min(boost, 4.0)
 
         return score
 

@@ -150,7 +150,8 @@ class FileOperationsModule(CLIModuleBase):
                     ai_response=response_content,
                     model_used=getattr(self.llm_manager, 'current_model', 'unknown'),
                     command_type="edit",
-                    metadata={"filename": filename}
+                    metadata={"filename": filename},
+                    tokens_used=getattr(response, 'usage', None),
                 )
             
         except Exception as e:
@@ -251,7 +252,8 @@ class FileOperationsModule(CLIModuleBase):
                     ai_response=response_content,
                     model_used=getattr(self.llm_manager, 'current_model', 'unknown'),
                     command_type="fix",
-                    metadata={"filename": filename}
+                    metadata={"filename": filename},
+                    tokens_used=getattr(response, 'usage', None),
                 )
             
         except Exception as e:
@@ -373,7 +375,8 @@ class FileOperationsModule(CLIModuleBase):
                     ai_response=response_content,
                     model_used=getattr(self.llm_manager, 'current_model', 'unknown'),
                     command_type="review",
-                    metadata={"target": target}
+                    metadata={"target": target},
+                    tokens_used=getattr(response, 'usage', None),
                 )
             
         except Exception as e:

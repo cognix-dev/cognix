@@ -1,10 +1,11 @@
-"""Tests for semi_auto_engine.py complexity assessment fixes (c4ca527)
+"""Tests for semi_auto_engine.py complexity assessment fixes (c4ca527 + Fix E)
 
 Covers:
 - Removed overly generic complex keywords
 - Retained specific complex keywords
 - Heading count detection (code block exclusion)
 - Spec size boost scoring
+- Fix E: Boost cap (max +4.0)
 """
 
 import re
@@ -161,3 +162,57 @@ class TestComplexityClassification:
         # 'state machine' should not appear in complex matches
         assert "state machine" not in details.get("complex_matches_filtered", [])
         assert "state machine" not in details.get("complex_matches_original", [])
+
+
+# ── Fix E: Boost Cap ─────────────────────────────────────────────
+
+class TestBoostCap:
+    """Spec size boosts (goal_length + existing_files + headings) should cap at +4.0."""
+
+    def test_boost_cap_in_source(self):
+        """Verify _calculate_score caps spec-size boosts at 4.0."""
+        import inspect
+        source = inspect.getsource(ComplexityAssessor._calculate_score)
+        assert "min(boost, 4.0)" in source, \
+            "_calculate_score should cap spec-size boost at 4.0"
+
+    def test_boost_cap_behavioral(self):
+        """Adding more boost factors should not scale linearly past cap."""
+        a = ComplexityAssessor()
+        a.existing_files = {}
+
+        # Both specs use many words to keep word_count score stable
+        words = " ".join(["zzz"] * 30)  # 30 words (score += 1.0 for >= 20 words)
+
+        # Spec A: only goal_length boost (pad to 5500+ chars → +2.5)
+        spec_a = words + " " + "z" * (5500 - len(words) - 1)
+        _, details_a = a.assess_complexity(spec_a)
+
+        # Spec B: goal_length boost + headings boost
+        headings = "\n".join([f"## zzz {i}" for i in range(12)])
+        spec_b = words + "\n" + headings + "\n" + "z" * (5500 - len(words) - len(headings) - 2)
+        _, details_b = a.assess_complexity(spec_b)
+
+        # Without cap: headings would add +2.0 (total boost 4.5)
+        # With cap: headings can only add +1.5 (total boost capped at 4.0)
+        diff = details_b['score'] - details_a['score']
+        assert diff <= 1.5 + 0.1, \
+            f"Headings boost should be limited by cap (expected <=1.6, got {diff})"
+
+    def test_boost_with_existing_files(self):
+        """existing_files boost + goal_length boost should also be capped."""
+        a = ComplexityAssessor()
+        # Simulate large existing files (+2.5 boost)
+        a.existing_files = {"big.txt": "y" * 6000}
+
+        # Large goal (+2.5 boost) + headings (+2.0 boost)
+        # Total uncapped: 7.0
+        headings = "\n".join([f"## Section {i}" for i in range(12)])
+        spec = headings + "\n" + "z" * 5000
+        _, details = a.assess_complexity(spec)
+
+        # Base score from existing_files environment may add some points,
+        # but the 3 size boosts together should be capped at +4.0
+        # We check that the score is less than what it would be uncapped
+        assert details['score'] < 7.0, \
+            f"Boost cap should prevent score from reaching 7.0+, got {details['score']}"

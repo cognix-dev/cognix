@@ -177,6 +177,7 @@ IMPORTANT COGNIX SESSION CONTEXT:
                 enhanced_system_prompt = base_system_prompt + session_context
 
             # LLM応答生成
+            _last_usage = None  # トークン使用量（ストリーミング時はNone）
             if hasattr(self, 'llm_manager') and self.llm_manager:
                 if self.config.get("stream_responses", True):
                     # ストリーミング応答
@@ -186,7 +187,7 @@ IMPORTANT COGNIX SESSION CONTEXT:
                         system_prompt=enhanced_system_prompt,
                         conversation_history=conversation_history
                     )
-                    
+
                     model_prefix = self._get_model_prefix()
                     full_response = self._stream_with_typewriter(stream_gen, model_prefix)
                 else:
@@ -198,7 +199,8 @@ IMPORTANT COGNIX SESSION CONTEXT:
                         conversation_history=conversation_history
                     )
                     full_response = response.content if hasattr(response, 'content') else str(response)
-                    
+                    _last_usage = getattr(response, 'usage', None)
+
                     model_prefix = self._get_model_prefix()
                     self._display_with_typewriter(full_response, model_prefix)
             else:
@@ -233,7 +235,8 @@ IMPORTANT COGNIX SESSION CONTEXT:
                         "referenced_functions": [f.function_name for f in parsed_refs.functions if f.found],
                         "reference_errors": len(error_messages) if error_messages else 0
                     },
-                    workflow_state=None
+                    workflow_state=None,
+                    tokens_used=_last_usage,
                 )
 
         except Exception as e:
@@ -330,7 +333,8 @@ IMPORTANT COGNIX SESSION CONTEXT:
                     ai_response=response_content,
                     model_used=getattr(self.llm_manager, 'current_model', 'unknown'),
                     command_type="think",
-                    metadata={"goal": goal}
+                    metadata={"goal": goal},
+                    tokens_used=getattr(response, 'usage', None),
                 )
                 
             err_console.print(Text.from_ansi(f"\n Next step: {GREEN}/plan{RESET}"))
@@ -409,7 +413,8 @@ IMPORTANT COGNIX SESSION CONTEXT:
                     ai_response=response_content,
                     model_used=getattr(self.llm_manager, 'current_model', 'unknown'),
                     command_type="plan",
-                    metadata={"goal": goal}
+                    metadata={"goal": goal},
+                    tokens_used=getattr(response, 'usage', None),
                 )
                 
             err_console.print(Text.from_ansi(f"\n Next step: {GREEN}/write [filename]{RESET}"))
@@ -519,7 +524,8 @@ IMPORTANT COGNIX SESSION CONTEXT:
                     ai_response=response_content,
                     model_used=getattr(self.llm_manager, 'current_model', 'unknown'),
                     command_type="write",
-                    metadata={"filename": filename, "goal": goal}
+                    metadata={"filename": filename, "goal": goal},
+                    tokens_used=getattr(response, 'usage', None),
                 )
                 
         except Exception as e:
