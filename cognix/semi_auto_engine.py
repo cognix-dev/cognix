@@ -523,7 +523,6 @@ class ComplexityAssessor:
             score += 2.0
 
         # ⭐ スペックサイズブースト（3種合計で最大+4.0に制限）
-        score_before_boost = score
         boost = 0.0
 
         # 文字数ブースト
