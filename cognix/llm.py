@@ -519,7 +519,7 @@ class AnthropicProvider(LLMProvider):
                     "content": content
                 })
         
-        if not converted_messages:
+        if not converted_messages and not system_message:
             raise ValueError("No valid messages after filtering empty content")
 
         return system_message, converted_messages

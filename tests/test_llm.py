@@ -294,3 +294,33 @@ class TestEmptyMessageValidation:
         system_msg, converted = provider._convert_messages(messages)
         assert len(converted) == 1
         assert converted[0]["content"] == "hello"
+
+    @patch("anthropic.Anthropic")
+    def test_system_only_messages_pass(self, mock_anthropic_cls):
+        """System-only conversations should NOT raise ValueError."""
+        from cognix.llm import AnthropicProvider
+
+        provider = AnthropicProvider(api_key="fake-key")
+
+        messages = [
+            {"role": "system", "content": "You are a helpful assistant"},
+        ]
+
+        system_msg, converted = provider._convert_messages(messages)
+        assert system_msg == "You are a helpful assistant"
+        assert converted == []
+
+    @patch("anthropic.Anthropic")
+    def test_empty_system_and_empty_user_raises(self, mock_anthropic_cls):
+        """Empty system + empty user should raise ValueError."""
+        from cognix.llm import AnthropicProvider
+
+        provider = AnthropicProvider(api_key="fake-key")
+
+        messages = [
+            {"role": "system", "content": ""},
+            {"role": "user", "content": ""},
+        ]
+
+        with pytest.raises(ValueError, match="No valid messages"):
+            provider._convert_messages(messages)
