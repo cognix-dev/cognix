@@ -377,6 +377,7 @@ class OpenAIProvider(LLMProvider):
         max_tokens: int = 4000
     ) -> Generator[str, None, None]:
         """Stream response from OpenAI"""
+        self._last_stream_usage = None
         try:
             # Responses API専用モデルの場合
             if self._is_responses_api_only():
@@ -384,12 +385,12 @@ class OpenAIProvider(LLMProvider):
                     messages, temperature, max_tokens
                 )
                 return
-            
+
             # 通常のChat Completions API
             yield from self._stream_response_via_chat_completions(
                 messages, temperature, max_tokens
             )
-                    
+
         except Exception as e:
             raise Exception(f"OpenAI streaming error: {e}")
     
@@ -404,17 +405,30 @@ class OpenAIProvider(LLMProvider):
         params = {
             "model": self.model,
             "messages": messages,
-            "stream": True
+            "stream": True,
+            "stream_options": {"include_usage": True}
         }
-        
+
         # Add model-specific parameters
         params.update(self._get_params_for_model(max_tokens, temperature))
-        
-        stream = self.client.chat.completions.create(**params)
-        
+
+        # stream_options 非対応エンドポイント（OpenRouter等）向けフォールバック
+        try:
+            stream = self.client.chat.completions.create(**params)
+        except Exception:
+            params.pop("stream_options", None)
+            stream = self.client.chat.completions.create(**params)
+
         for chunk in stream:
             if chunk.choices and chunk.choices[0].delta.content is not None:
                 yield chunk.choices[0].delta.content
+            # 最終チャンクにusageが含まれる（stream_options: include_usage）
+            if hasattr(chunk, 'usage') and chunk.usage is not None:
+                self._last_stream_usage = {
+                    "prompt_tokens": getattr(chunk.usage, 'prompt_tokens', 0),
+                    "completion_tokens": getattr(chunk.usage, 'completion_tokens', 0),
+                    "total_tokens": getattr(chunk.usage, 'total_tokens', 0)
+                }
     
     def _stream_response_via_responses_api(
         self,
@@ -472,7 +486,14 @@ class OpenAIProvider(LLMProvider):
                 if delta:
                     yield delta
             elif event_type == "response.completed":
-                # 完了イベント
+                # 完了イベント — usage情報を取得
+                resp = getattr(event, 'response', None)
+                if resp and hasattr(resp, 'usage') and resp.usage:
+                    self._last_stream_usage = {
+                        "prompt_tokens": getattr(resp.usage, 'input_tokens', 0),
+                        "completion_tokens": getattr(resp.usage, 'output_tokens', 0),
+                        "total_tokens": getattr(resp.usage, 'total_tokens', 0)
+                    }
                 break
             elif event_type == "error":
                 # エラーイベント
@@ -582,9 +603,10 @@ class AnthropicProvider(LLMProvider):
         max_tokens: int = 4000
     ) -> Generator[str, None, None]:
         """Stream response from Anthropic"""
+        self._last_stream_usage = None
         try:
             system_message, converted_messages = self._convert_messages(messages)
-            
+
             kwargs = {
                 "model": self.model,
                 "messages": converted_messages,
@@ -592,16 +614,32 @@ class AnthropicProvider(LLMProvider):
                 "max_tokens": max_tokens,
                 "stream": True
             }
-            
+
             if system_message:
                 kwargs["system"] = system_message
-            
+
             stream = self.client.messages.create(**kwargs)
-            
+
+            input_tokens = 0
+            output_tokens = 0
             for chunk in stream:
                 if chunk.type == "content_block_delta":
                     yield chunk.delta.text
-                    
+                elif chunk.type == "message_start":
+                    # message_start イベントに input_tokens が含まれる
+                    if hasattr(chunk, 'message') and hasattr(chunk.message, 'usage'):
+                        input_tokens = getattr(chunk.message.usage, 'input_tokens', 0)
+                elif chunk.type == "message_delta":
+                    # message_delta イベントに output_tokens が含まれる
+                    if hasattr(chunk, 'usage'):
+                        output_tokens = getattr(chunk.usage, 'output_tokens', 0)
+
+            self._last_stream_usage = {
+                "prompt_tokens": input_tokens,
+                "completion_tokens": output_tokens,
+                "total_tokens": input_tokens + output_tokens
+            }
+
         except Exception as e:
             raise Exception(f"Anthropic streaming error: {e}")
 
@@ -866,11 +904,14 @@ class LLMManager:
         # Add current prompt
         messages.append({"role": "user", "content": prompt})
         
+        self._last_stream_usage = None
         yield from provider.stream_response(
             messages=messages,
             temperature=temperature,
             max_tokens=max_tokens
         )
+        # ストリーム完了後、プロバイダーからusage情報を引き継ぐ
+        self._last_stream_usage = getattr(provider, '_last_stream_usage', None)
     
     def get_available_models(self) -> List[str]:
         """Get list of available models (config-based)"""
