@@ -104,6 +104,16 @@ class UtilitiesModule(CLIModuleBase):
                     stats = self.session_manager.get_session_stats()
                     if stats:
                         err_console.print(f"Session Entries: {stats.get('total_entries', 0)}")
+
+                    token_stats = self.session_manager.get_token_statistics()
+                    total_tokens = token_stats.get('total_tokens', 0)
+                    if total_tokens > 0:
+                        cost = token_stats.get('estimated_cost', 0.0)
+                        err_console.print(f"Token Usage: {total_tokens:,} (~${cost:.2f})")
+                        err_console.print(f"  Input: {token_stats.get('total_tokens_input', 0):,}  Output: {token_stats.get('total_tokens_output', 0):,}")
+                    duration = token_stats.get('total_duration_seconds', 0.0)
+                    if duration > 0:
+                        err_console.print(f"Total Duration: {token_stats.get('duration_formatted', '0s')}")
             
         except Exception as e:
             if hasattr(self, 'error_handler') and self.error_handler:
