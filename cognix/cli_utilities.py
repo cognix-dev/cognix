@@ -61,59 +61,48 @@ class UtilitiesModule(CLIModuleBase):
             args: Command arguments (optional)
         """
         try:
-            # 詳細レベルの取得
-            verbose = False
-            if args:
-                args_str = args.strip() if isinstance(args, str) else " ".join(args).strip()
-                if args_str == "-v" or args_str == "--verbose":
-                    verbose = True
-            
             # 基本的なシステム情報
             err_console.print("\n📊 System Status:")
             err_console.print(f"Python: {sys.version.split()[0]}")
             err_console.print(f"Platform: {platform.platform()}")
             err_console.print(f"Working Directory: {os.getcwd()}")
-            
+
             # Cognixの状態
             err_console.print("\n📋 Cognix Status:")
-            
+
             if hasattr(self.config, 'config_path'):
                 err_console.print(f"Config File: {self.config.config_path}")
             elif hasattr(self.config, 'config_file'):
                 err_console.print(f"Config File: {self.config.config_file}")
             else:
-                # フォールバック: 標準的な設定ファイルパスを表示
                 config_path = Path.home() / ".cognix" / "config.json"
                 err_console.print(f"Config File: {config_path}")
-            
+
             if hasattr(self, 'llm_manager') and self.llm_manager:
                 err_console.print(f"Current Model: {self.llm_manager.current_model}")
                 err_console.print(f"Available Models: {', '.join(self.llm_manager.get_available_models())}")
-            
+
             if hasattr(self, 'context') and self.context:
                 err_console.print(f"Project Root: {self.context.root_dir}")
-            
-            # 詳細情報(verboseモード時のみ)
-            if verbose:
-                err_console.print("\n🔍 Detailed Information:")
-                
-                if hasattr(self, 'memory') and self.memory:
-                    err_console.print(f"Memory Entries: {len(self.memory.get_entries(100))}")
-                
-                if hasattr(self, 'session_manager') and self.session_manager:
-                    stats = self.session_manager.get_session_stats()
-                    if stats:
-                        err_console.print(f"Session Entries: {stats.get('total_entries', 0)}")
 
-                    token_stats = self.session_manager.get_token_statistics()
-                    total_tokens = token_stats.get('total_tokens', 0)
-                    if total_tokens > 0:
-                        cost = token_stats.get('estimated_cost', 0.0)
-                        err_console.print(f"Token Usage: {total_tokens:,} (~${cost:.2f})")
-                        err_console.print(f"  Input: {token_stats.get('total_tokens_input', 0):,}  Output: {token_stats.get('total_tokens_output', 0):,}")
-                    duration = token_stats.get('total_duration_seconds', 0.0)
-                    if duration > 0:
-                        err_console.print(f"Total Duration: {token_stats.get('duration_formatted', '0s')}")
+            # セッション・トークン情報
+            if hasattr(self, 'memory') and self.memory:
+                err_console.print(f"Memory Entries: {len(self.memory.get_entries(100))}")
+
+            if hasattr(self, 'session_manager') and self.session_manager:
+                stats = self.session_manager.get_session_stats()
+                if stats:
+                    err_console.print(f"Session Entries: {stats.get('total_entries', 0)}")
+
+                token_stats = self.session_manager.get_token_statistics()
+                total_tokens = token_stats.get('total_tokens', 0)
+                if total_tokens > 0:
+                    cost = token_stats.get('estimated_cost', 0.0)
+                    err_console.print(f"Token Usage: {total_tokens:,} (~${cost:.2f})")
+                    err_console.print(f"  Input: {token_stats.get('total_tokens_input', 0):,}  Output: {token_stats.get('total_tokens_output', 0):,}")
+                duration = token_stats.get('total_duration_seconds', 0.0)
+                if duration > 0:
+                    err_console.print(f"Total Duration: {token_stats.get('duration_formatted', '0s')}")
             
         except Exception as e:
             if hasattr(self, 'error_handler') and self.error_handler:
