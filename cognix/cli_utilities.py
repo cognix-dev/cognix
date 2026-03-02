@@ -589,16 +589,20 @@ Made by Individual Developer | MIT License"""
         err_console.print(f"[white]    {'Model':<18}{autosave_info['model']}[/white]")
         err_console.print(f"[white]    {'Directory':<18}{autosave_info['directory']}[/white]")
 
-        # 追加の統計があれば行追加（トークン統計APIを使用）
-        token_stats = self.session_manager.get_token_statistics()
-        if token_stats:
-            total_tokens = token_stats.get('total_tokens', 0)
-            if total_tokens > 0:
-                cost = token_stats.get('estimated_cost', 0.0)
-                err_console.print(f"[white]    {'Token Usage':<18}{total_tokens:,} (~${cost:.2f})[/white]")
-            duration = token_stats.get('total_duration_seconds', 0.0)
-            if duration > 0:
-                err_console.print(f"[white]    {'Total Duration':<18}{token_stats.get('duration_formatted', '0s')}[/white]")
+        # 追加の統計があれば行追加（autosave_infoから直接取得）
+        # NOTE: この時点ではセッション未復元のため、get_token_statistics()ではなく
+        #       autosave_infoに含まれる保存済みトークンデータを使用する
+        total_tokens = autosave_info.get('total_tokens', 0)
+        if total_tokens > 0:
+            tokens_input = autosave_info.get('total_tokens_input', 0)
+            tokens_output = autosave_info.get('total_tokens_output', 0)
+            input_cost = tokens_input * 3.00 / 1_000_000
+            output_cost = tokens_output * 15.00 / 1_000_000
+            cost = input_cost + output_cost
+            err_console.print(f"[white]    {'Token Usage':<18}{total_tokens:,} (~${cost:.2f})[/white]")
+        duration = autosave_info.get('total_duration_seconds', 0.0)
+        if duration > 0:
+            err_console.print(f"[white]    {'Total Duration':<18}{format_duration(duration)}[/white]")
 
         # rule()はANSIコードを返すのでprint()で直接出力
         print("\n" + rule())
