@@ -177,7 +177,7 @@ IMPORTANT COGNIX SESSION CONTEXT:
                 enhanced_system_prompt = base_system_prompt + session_context
 
             # LLM応答生成
-            _last_usage = None  # トークン使用量（ストリーミング時はNone）
+            _last_usage = None  # トークン使用量
             if hasattr(self, 'llm_manager') and self.llm_manager:
                 if self.config.get("stream_responses", True):
                     # ストリーミング応答
@@ -190,6 +190,8 @@ IMPORTANT COGNIX SESSION CONTEXT:
 
                     model_prefix = self._get_model_prefix()
                     full_response = self._stream_with_typewriter(stream_gen, model_prefix)
+                    # ストリーム完了後にusage情報を取得
+                    _last_usage = getattr(self.llm_manager, '_last_stream_usage', None)
                 else:
                     # 通常応答
                     response = self.llm_manager.generate_response(

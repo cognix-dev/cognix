@@ -324,3 +324,121 @@ class TestEmptyMessageValidation:
 
         with pytest.raises(ValueError, match="No valid messages"):
             provider._convert_messages(messages)
+
+
+# ── Fix F: Streaming Usage Capture ────────────────────────────────
+
+class TestStreamingUsageCapture:
+    """stream_response should capture token usage in _last_stream_usage."""
+
+    @patch("anthropic.Anthropic")
+    def test_anthropic_stream_captures_usage(self, mock_anthropic_cls):
+        from cognix.llm import AnthropicProvider
+
+        provider = AnthropicProvider(api_key="fake-key")
+
+        # Simulate Anthropic streaming events
+        events = [
+            SimpleNamespace(
+                type="message_start",
+                message=SimpleNamespace(
+                    usage=SimpleNamespace(input_tokens=150)
+                )
+            ),
+            SimpleNamespace(
+                type="content_block_delta",
+                delta=SimpleNamespace(text="Hello")
+            ),
+            SimpleNamespace(
+                type="content_block_delta",
+                delta=SimpleNamespace(text=" world")
+            ),
+            SimpleNamespace(
+                type="message_delta",
+                usage=SimpleNamespace(output_tokens=42)
+            ),
+        ]
+        provider.client.messages.create.return_value = events
+
+        messages = [{"role": "user", "content": "test"}]
+        result = list(provider.stream_response(messages))
+
+        assert result == ["Hello", " world"]
+        assert provider._last_stream_usage is not None
+        assert provider._last_stream_usage["prompt_tokens"] == 150
+        assert provider._last_stream_usage["completion_tokens"] == 42
+        assert provider._last_stream_usage["total_tokens"] == 192
+
+    @patch("openai.OpenAI")
+    def test_openai_chat_stream_captures_usage(self, mock_openai_cls):
+        from cognix.llm import OpenAIProvider
+
+        provider = OpenAIProvider(api_key="fake-key", model="gpt-5.2")
+
+        # Simulate OpenAI streaming chunks with usage in final chunk
+        chunks = [
+            SimpleNamespace(
+                choices=[SimpleNamespace(delta=SimpleNamespace(content="Hi"))],
+                usage=None
+            ),
+            SimpleNamespace(
+                choices=[],
+                usage=SimpleNamespace(prompt_tokens=100, completion_tokens=20, total_tokens=120)
+            ),
+        ]
+        provider.client.chat.completions.create.return_value = chunks
+
+        messages = [{"role": "user", "content": "test"}]
+        result = list(provider.stream_response(messages))
+
+        assert result == ["Hi"]
+        assert provider._last_stream_usage is not None
+        assert provider._last_stream_usage["prompt_tokens"] == 100
+        assert provider._last_stream_usage["completion_tokens"] == 20
+        assert provider._last_stream_usage["total_tokens"] == 120
+
+    @patch("anthropic.Anthropic")
+    def test_stream_usage_zeros_on_no_events(self, mock_anthropic_cls):
+        """If no usage events arrive, _last_stream_usage should still be a dict with zeros."""
+        from cognix.llm import AnthropicProvider
+
+        provider = AnthropicProvider(api_key="fake-key")
+
+        # Only content events, no message_start or message_delta
+        events = [
+            SimpleNamespace(
+                type="content_block_delta",
+                delta=SimpleNamespace(text="test")
+            ),
+        ]
+        provider.client.messages.create.return_value = events
+
+        messages = [{"role": "user", "content": "test"}]
+        list(provider.stream_response(messages))
+
+        # Should still have a dict, but with zeros
+        assert provider._last_stream_usage is not None
+        assert provider._last_stream_usage["total_tokens"] == 0
+
+    @patch("openai.OpenAI")
+    def test_openai_stream_options_fallback(self, mock_openai_cls):
+        """If stream_options is unsupported, should fallback without it."""
+        from cognix.llm import OpenAIProvider
+
+        provider = OpenAIProvider(api_key="fake-key", model="gpt-5.2")
+
+        # First call raises error (stream_options unsupported), second succeeds
+        chunk = SimpleNamespace(
+            choices=[SimpleNamespace(delta=SimpleNamespace(content="ok"))],
+            usage=None
+        )
+        provider.client.chat.completions.create.side_effect = [
+            Exception("stream_options not supported"),
+            [chunk]
+        ]
+
+        messages = [{"role": "user", "content": "test"}]
+        result = list(provider.stream_response(messages))
+        assert result == ["ok"]
+        # Usage not captured in fallback path (no stream_options)
+        assert provider._last_stream_usage is None
