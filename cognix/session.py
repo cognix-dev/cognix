@@ -366,7 +366,12 @@ class SessionManager:
             "last_updated": session.last_updated,
             "entries": session.total_entries,
             "model": session.current_model,
-            "directory": session.current_directory
+            "directory": session.current_directory,
+            # Token statistics from saved session
+            "total_tokens_input": session.total_tokens_input,
+            "total_tokens_output": session.total_tokens_output,
+            "total_tokens": session.total_tokens,
+            "total_duration_seconds": session.total_duration_seconds,
         }
     
     def clear_current_session(self):
@@ -526,91 +531,95 @@ class SessionManager:
             "duration_formatted": duration_formatted
         }
 
-    def format_relative_time(timestamp_str: str) -> str:
-        """タイムスタンプを相対時間表示に変換
-        
-        Args:
-            timestamp_str: ISO形式のタイムスタンプ文字列
-            
-        Returns:
-            相対時間の文字列（例: "2 hours ago", "Yesterday"）
-        """
-        try:
-            # タイムスタンプをdatetimeに変換
-            if isinstance(timestamp_str, datetime):
-                timestamp = timestamp_str
-            else:
-                # ISO形式のパース（マイクロ秒含む）
-                timestamp = datetime.fromisoformat(timestamp_str.replace('Z', '+00:00'))
-            
-            now = datetime.now()
-            
-            # タイムゾーン情報を削除して比較
-            if timestamp.tzinfo is not None:
-                timestamp = timestamp.replace(tzinfo=None)
-            if now.tzinfo is not None:
-                now = now.replace(tzinfo=None)
-            
-            delta = now - timestamp
-            
-            # 秒単位に変換
-            seconds = delta.total_seconds()
-            
-            # 未来の時刻の場合
-            if seconds < 0:
-                return timestamp_str
-            
-            # 1分未満
-            if seconds < 60:
-                return "Just now"
-            
-            # 1時間未満
-            if seconds < 3600:
-                minutes = int(seconds / 60)
-                return f"{minutes} minute{'s' if minutes > 1 else ''} ago"
-            
-            # 24時間未満
-            if seconds < 86400:
-                hours = int(seconds / 3600)
-                return f"{hours} hour{'s' if hours > 1 else ''} ago"
-            
-            # 48時間未満（Yesterday）
-            if seconds < 172800:
-                return "Yesterday"
-            
-            # 7日未満
-            if seconds < 604800:
-                days = int(seconds / 86400)
-                return f"{days} days ago"
-            
-            # それ以上は日付を表示
-            return timestamp.strftime("%Y-%m-%d %H:%M:%S")
-            
-        except Exception:
-            # パースエラーの場合は元の文字列を返す
+
+# ── Module-level utility functions ──────────────────────────────
+
+def format_relative_time(timestamp_str: str) -> str:
+    """タイムスタンプを相対時間表示に変換
+
+    Args:
+        timestamp_str: ISO形式のタイムスタンプ文字列
+
+    Returns:
+        相対時間の文字列（例: "2 hours ago", "Yesterday"）
+    """
+    try:
+        # タイムスタンプをdatetimeに変換
+        if isinstance(timestamp_str, datetime):
+            timestamp = timestamp_str
+        else:
+            # ISO形式のパース（マイクロ秒含む）
+            timestamp = datetime.fromisoformat(timestamp_str.replace('Z', '+00:00'))
+
+        now = datetime.now()
+
+        # タイムゾーン情報を削除して比較
+        if timestamp.tzinfo is not None:
+            timestamp = timestamp.replace(tzinfo=None)
+        if now.tzinfo is not None:
+            now = now.replace(tzinfo=None)
+
+        delta = now - timestamp
+
+        # 秒単位に変換
+        seconds = delta.total_seconds()
+
+        # 未来の時刻の場合
+        if seconds < 0:
             return timestamp_str
 
-    def format_duration(seconds: float) -> str:
-        """秒数を人間が読みやすい形式に変換
-        
-        Args:
-            seconds: 秒数
-            
-        Returns:
-            時間文字列（例: "2h 34m", "45s"）
-        """
+        # 1分未満
         if seconds < 60:
-            return f"{int(seconds)}s"
-        
-        minutes = int(seconds / 60)
-        if minutes < 60:
-            remaining_seconds = int(seconds % 60)
-            if remaining_seconds > 0:
-                return f"{minutes}m {remaining_seconds}s"
-            return f"{minutes}m"
-        
-        hours = int(minutes / 60)
-        remaining_minutes = int(minutes % 60)
-        if remaining_minutes > 0:
-            return f"{hours}h {remaining_minutes}m"
-        return f"{hours}h"
+            return "Just now"
+
+        # 1時間未満
+        if seconds < 3600:
+            minutes = int(seconds / 60)
+            return f"{minutes} minute{'s' if minutes > 1 else ''} ago"
+
+        # 24時間未満
+        if seconds < 86400:
+            hours = int(seconds / 3600)
+            return f"{hours} hour{'s' if hours > 1 else ''} ago"
+
+        # 48時間未満（Yesterday）
+        if seconds < 172800:
+            return "Yesterday"
+
+        # 7日未満
+        if seconds < 604800:
+            days = int(seconds / 86400)
+            return f"{days} days ago"
+
+        # それ以上は日付を表示
+        return timestamp.strftime("%Y-%m-%d %H:%M:%S")
+
+    except Exception:
+        # パースエラーの場合は元の文字列を返す
+        return timestamp_str
+
+
+def format_duration(seconds: float) -> str:
+    """秒数を人間が読みやすい形式に変換
+
+    Args:
+        seconds: 秒数
+
+    Returns:
+        時間文字列（例: "2h 34m", "45s"）
+    """
+    if seconds < 60:
+        return f"{int(seconds)}s"
+
+    minutes = int(seconds / 60)
+    if minutes < 60:
+        remaining_seconds = int(seconds % 60)
+        if remaining_seconds > 0:
+            return f"{minutes}m {remaining_seconds}s"
+        return f"{minutes}m"
+
+    hours = int(minutes / 60)
+    remaining_minutes = int(minutes % 60)
+    if remaining_minutes > 0:
+        return f"{hours}h {remaining_minutes}m"
+    return f"{hours}h"

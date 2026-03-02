@@ -1,4 +1,4 @@
-"""Tests for session.py token restoration fix (c4ca527)
+"""Tests for session.py token restoration fix (c4ca527 + Fix G)
 
 Covers:
 - Token fields in add_entry()
@@ -6,6 +6,7 @@ Covers:
 - Backward compatibility with old session files
 - Cost calculation in get_token_statistics()
 - Duration formatting
+- Fix G: get_autosave_info() returns token data for startup banner
 """
 
 import json
@@ -235,3 +236,104 @@ class TestTokenStatistics:
         )
         stats = session_manager.get_token_statistics()
         assert stats["duration_formatted"] == "1h 5m"
+
+
+# ── Fix G: get_autosave_info Token Data ─────────────────────────
+
+class TestAutosaveInfoTokenData:
+    """get_autosave_info() should return token data for startup banner display."""
+
+    def test_autosave_info_includes_token_fields(self, session_manager):
+        """autosave_info should contain token stats from saved session."""
+        session_manager.add_entry(
+            user_input="hello",
+            ai_response="world",
+            model_used="test-model",
+            tokens_used={
+                "prompt_tokens": 150,
+                "completion_tokens": 42,
+                "total_tokens": 192,
+            },
+            duration_seconds=3.5,
+        )
+        # add_entry calls autosave(), so autosave.json should exist now
+
+        info = session_manager.get_autosave_info()
+        assert info is not None
+        assert info["total_tokens_input"] == 150
+        assert info["total_tokens_output"] == 42
+        assert info["total_tokens"] == 192
+        assert info["total_duration_seconds"] == 3.5
+
+    def test_autosave_info_tokens_survive_reload(self, session_manager):
+        """Token data should survive a fresh SessionManager reload."""
+        session_manager.add_entry(
+            user_input="test",
+            ai_response="response",
+            model_used="test-model",
+            tokens_used={
+                "prompt_tokens": 500,
+                "completion_tokens": 100,
+                "total_tokens": 600,
+            },
+            duration_seconds=10.0,
+        )
+
+        # Create a NEW SessionManager (simulates app restart)
+        new_manager = SessionManager(base_dir=session_manager.base_dir)
+        info = new_manager.get_autosave_info()
+
+        assert info is not None
+        assert info["total_tokens"] == 600
+        assert info["total_tokens_input"] == 500
+        assert info["total_tokens_output"] == 100
+        assert info["total_duration_seconds"] == 10.0
+
+    def test_autosave_info_zero_tokens_when_no_usage(self, session_manager):
+        """autosave_info should have 0 tokens when no usage was tracked."""
+        session_manager.add_entry(
+            user_input="hello",
+            ai_response="world",
+            model_used="test-model",
+        )
+
+        info = session_manager.get_autosave_info()
+        assert info is not None
+        assert info["total_tokens"] == 0
+        assert info["total_tokens_input"] == 0
+        assert info["total_tokens_output"] == 0
+
+    def test_autosave_info_backward_compat_no_token_fields(self, session_dir):
+        """Old autosave files without token fields should return 0."""
+        sessions_dir = Path(session_dir) / "sessions"
+        sessions_dir.mkdir(parents=True, exist_ok=True)
+
+        old_autosave = {
+            "session_id": "old-session",
+            "created_at": "2025-01-01T00:00:00",
+            "last_updated": "2025-01-01T01:00:00",
+            "current_model": "claude-sonnet-4-5-20250929",
+            "current_directory": "/tmp",
+            "entries": [
+                {
+                    "timestamp": "2025-01-01T00:00:00",
+                    "user_input": "test",
+                    "ai_response": "response",
+                    "model_used": "claude-sonnet-4-5-20250929",
+                }
+            ],
+            "total_entries": 1,
+        }
+
+        autosave_file = sessions_dir / "autosave.json"
+        with open(autosave_file, "w") as f:
+            json.dump(old_autosave, f)
+
+        manager = SessionManager(base_dir=session_dir)
+        info = manager.get_autosave_info()
+
+        assert info is not None
+        assert info["total_tokens"] == 0
+        assert info["total_tokens_input"] == 0
+        assert info["total_tokens_output"] == 0
+        assert info["total_duration_seconds"] == 0.0

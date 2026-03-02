@@ -33,7 +33,7 @@ class Config:
         # NOTE: 正規のバージョン定義は cognix/__init__.py の __version__
         # ここはconfigファイルのデフォルト値。表示用には __version__ を使うこと。
         "version": "0.2.5",
-        "model": "claude-sonnet-4-5-20250929",
+        "model": "claude-sonnet-4-6-20260226",
         "temperature": 0.7,
         "max_tokens": 4000,
         "context_lines": 3,
@@ -80,12 +80,22 @@ class Config:
             "scala", "bash", "html", "css", "json", "yaml", "sql"
         ],
         "models": {
+            "claude-sonnet-4-6-20260226": {
+                "name": "claude-sonnet-4-6-20260226",
+                "provider": "Anthropic",
+                "display_name": "Sonnet 4.6",
+                "aliases": ["claude-sonnet-4.6", "sonnet-4.6", "sonnet4.6", "sonnet"],
+                "priority": 1,
+                "temperature": 0.7,
+                "max_tokens": 4000,
+                "context_window": 200000
+            },
             "claude-sonnet-4-5-20250929": {
                 "name": "claude-sonnet-4-5-20250929",
                 "provider": "Anthropic",
                 "display_name": "Sonnet 4.5",
-                "aliases": ["claude-sonnet-4.5", "sonnet-4.5", "sonnet4.5", "sonnet"],
-                "priority": 1,
+                "aliases": ["claude-sonnet-4.5", "sonnet-4.5", "sonnet4.5"],
+                "priority": 2,
                 "temperature": 0.7,
                 "max_tokens": 4000,
                 "context_window": 200000
@@ -95,7 +105,7 @@ class Config:
                 "provider": "Anthropic",
                 "display_name": "Opus 4.6",
                 "aliases": ["claude-opus-4.6", "opus-4.6", "opus4.6", "opus"],
-                "priority": 2,
+                "priority": 3,
                 "temperature": 0.7,
                 "max_tokens": 4000,
                 "context_window": 200000
@@ -105,7 +115,7 @@ class Config:
                 "provider": "Anthropic",
                 "display_name": "Opus 4.5",
                 "aliases": ["claude-opus-4.5", "opus-4.5", "opus4.5"],
-                "priority": 3,
+                "priority": 4,
                 "temperature": 0.7,
                 "max_tokens": 4000,
                 "context_window": 200000
@@ -115,7 +125,7 @@ class Config:
                 "provider": "OpenAI",
                 "display_name": "GPT-5.2",
                 "aliases": ["gpt5.2"],
-                "priority": 4,
+                "priority": 5,
                 "temperature": 0.7,
                 "max_tokens": 4000,
                 "context_window": 400000
@@ -125,7 +135,7 @@ class Config:
                 "provider": "OpenAI",
                 "display_name": "GPT-5.2 Codex",
                 "aliases": ["codex", "gpt-5.2-code"],
-                "priority": 5,
+                "priority": 6,
                 "temperature": 0.7,
                 "max_tokens": 4000,
                 "context_window": 400000

@@ -31,7 +31,7 @@ class TestDefaultModels:
     def test_anthropic_default_model(self, mock_anthropic_cls):
         from cognix.llm import AnthropicProvider
         provider = AnthropicProvider(api_key="fake-key")
-        assert provider.model == "claude-sonnet-4-5-20250929"
+        assert provider.model == "claude-sonnet-4-6-20260226"
 
 
 # ── Streaming Empty Choices Guard ────────────────────────────────
