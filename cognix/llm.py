@@ -504,7 +504,7 @@ class OpenAIProvider(LLMProvider):
 class AnthropicProvider(LLMProvider):
     """Anthropic API provider"""
     
-    def __init__(self, api_key: str, model: str = "claude-sonnet-4-6-20260226"):
+    def __init__(self, api_key: str, model: str = "claude-sonnet-4-6"):
         """Initialize Anthropic provider"""
         self.api_key = api_key
         self.model = model
@@ -716,7 +716,7 @@ class LLMManager:
             self.config = Config()
         
         # Get current model from config
-        self.current_model = self.config.get("model", "claude-sonnet-4-6-20260226")
+        self.current_model = self.config.get("model", "claude-sonnet-4-6")
         
         self._initialize_providers()
     
