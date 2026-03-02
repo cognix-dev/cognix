@@ -33,7 +33,7 @@ class Config:
         # NOTE: 正規のバージョン定義は cognix/__init__.py の __version__
         # ここはconfigファイルのデフォルト値。表示用には __version__ を使うこと。
         "version": "0.2.5",
-        "model": "claude-sonnet-4-6-20260226",
+        "model": "claude-sonnet-4-6",
         "temperature": 0.7,
         "max_tokens": 4000,
         "context_lines": 3,
@@ -80,8 +80,8 @@ class Config:
             "scala", "bash", "html", "css", "json", "yaml", "sql"
         ],
         "models": {
-            "claude-sonnet-4-6-20260226": {
-                "name": "claude-sonnet-4-6-20260226",
+            "claude-sonnet-4-6": {
+                "name": "claude-sonnet-4-6",
                 "provider": "Anthropic",
                 "display_name": "Sonnet 4.6",
                 "aliases": ["claude-sonnet-4.6", "sonnet-4.6", "sonnet4.6", "sonnet"],
