@@ -109,7 +109,7 @@ class LinterIntegration:
         '2416',  # Property 'xxx' in type 'yyy' is not assignable to the same property in base type 'zzz'
         '2559',  # Type 'xxx' has no properties in common with type 'yyy'
         '2571',  # Object is of type 'unknown'
-        
+
         # 暗黙のany関連 (JSでは無意味)
         '7005',  # Variable 'xxx' implicitly has an 'any' type
         '7006',  # Parameter 'xxx' implicitly has an 'any' type
@@ -125,7 +125,7 @@ class LinterIntegration:
         '7024',  # Function implicitly has return type 'any'
         '7031',  # Binding element 'xxx' implicitly has an 'any' type
         '7034',  # Variable 'xxx' implicitly has type 'any' in some locations
-        
+
         # null/undefined関連 (strict: falseで無効化済みだが念のため)
         '2531',  # Object is possibly 'null'
         '2532',  # Object is possibly 'undefined'
@@ -134,16 +134,50 @@ class LinterIntegration:
         '18047', # 'xxx' is possibly 'null'
         '18048', # 'xxx' is possibly 'undefined'
         '18049', # 'xxx' is possibly 'null' or 'undefined'
-        
+
         # this関連
         '2683',  # 'this' implicitly has type 'any' because it does not have a type annotation
         '2684',  # The 'this' context of type 'xxx' is not assignable to method's 'this' of type 'yyy'
-        
+
         # その他のノイズ
         '2307',  # Cannot find module 'xxx' or its corresponding type declarations
         '2349',  # This expression is not callable
         '2488',  # Type 'xxx' must have a '[Symbol.iterator]()' method
         '2769',  # No overload matches this call
+    }
+
+    # TypeScriptファイル (.ts/.tsx) で有意義な型エラーコード
+    # JSでは無視するが、TSではコードの品質問題として警告で報告
+    TS_TYPE_ERROR_CODES_FOR_TS = {
+        '2322',  # Type 'X' is not assignable to type 'Y'
+        '2345',  # Argument of type 'X' is not assignable to parameter of type 'Y'
+        '2349',  # This expression is not callable
+        '2355',  # A function must return a value of declared type
+        '2365',  # Operator cannot be applied to types
+        '2416',  # Property in type is not assignable to same property in base type
+        '2551',  # Property does not exist (with suggestion)
+        '2559',  # Type has no properties in common with type
+        '2741',  # Property is missing in type
+        '2769',  # No overload matches this call
+    }
+
+    # TypeScriptでも無視するコード（環境依存ノイズ）
+    TS_ALWAYS_IGNORABLE_CODES = {
+        '2307',  # Cannot find module (node_modules not in temp dir)
+        '7016',  # Could not find declaration file for module
+        '7005',  # Variable implicitly has 'any' type
+        '7006',  # Parameter implicitly has 'any' type
+        '7008',  # Member implicitly has 'any' type
+        '7010',  # Lacks return-type annotation
+        '7015',  # Element implicitly has 'any' type
+        '7017',  # Element implicitly has 'any' type (no index signature)
+        '7019',  # Rest parameter implicitly has 'any[]' type
+        '7022',  # Implicitly has type 'any'
+        '7023',  # Implicitly has return type 'any'
+        '7024',  # Function implicitly has return type 'any'
+        '7031',  # Binding element implicitly has 'any' type
+        '7034',  # Variable implicitly has type 'any' in some locations
+        '2683',  # 'this' implicitly has type 'any'
     }
     
     def __init__(self):
@@ -214,8 +248,16 @@ class LinterIntegration:
             '.css': 'css',
             '.scss': 'css',
             '.sass': 'css',
+            '.go': 'go',
+            '.java': 'java',
+            '.rs': 'rust',
+            '.rb': 'ruby',
+            '.php': 'php',
+            '.cs': 'csharp',
+            '.kt': 'kotlin',
+            '.swift': 'swift',
         }
-        
+
         ext = Path(filename).suffix.lower()
         return ext_map.get(ext)
     
@@ -258,7 +300,7 @@ class LinterIntegration:
                 logger.debug(f"[Linter] Running additional TypeScript type check for {filename}")
                 try:
                     tsc_result = self.run_typescript_type_check(filename, code)
-                    
+
                     if not tsc_result.get('skipped'):
                         if tsc_result['has_errors']:
                             all_errors.extend(tsc_result['errors'])
@@ -268,6 +310,21 @@ class LinterIntegration:
                             all_warnings.extend(tsc_result['warnings'])
                 except Exception as e:
                     logger.debug(f"[Linter] Error during TypeScript type check: {e}")
+
+            # ★ Pythonファイルの場合、追加でmypy型チェックも実行
+            if filename.endswith('.py'):
+                try:
+                    mypy_result = self.run_mypy_check(filename, code)
+
+                    if not mypy_result.get('skipped'):
+                        if mypy_result['has_errors']:
+                            all_errors.extend(mypy_result['errors'])
+                            if 'mypy' not in linters_used:
+                                linters_used.append('mypy')
+                        if mypy_result.get('has_warnings'):
+                            all_warnings.extend(mypy_result['warnings'])
+                except Exception as e:
+                    logger.debug(f"[Linter] Error during mypy type check: {e}")
         
         return {
             'has_errors': len(all_errors) > 0,
@@ -396,22 +453,40 @@ class LinterIntegration:
             # tsc形式: filename(line,col): error/warning TS code: message
             match = re.match(r'.*?\((\d+),(\d+)\):\s+(error|warning)\s+TS(\d+):\s+(.+)', line)
             if match:
+                ts_code = match.group(4)
+
+                # TypeScriptファイルの場合: スマートフィルタリング適用
+                is_ts_file = filename.endswith(('.ts', '.tsx'))
+                if is_ts_file:
+                    # 常に無視するコード（環境依存ノイズ）
+                    if ts_code in self.TS_ALWAYS_IGNORABLE_CODES:
+                        continue
+                else:
+                    # JSファイルの場合: 既存の無視リスト適用
+                    if ts_code in self.TS_IGNORABLE_ERROR_CODES:
+                        continue
+
                 item = {
                     'file': filename,
                     'line': int(match.group(1)),
                     'column': int(match.group(2)),
                     'severity': match.group(3),
-                    'code': f'TS{match.group(4)}',
+                    'code': f'TS{ts_code}',
                     'message': match.group(5).strip(),
                     'linter': linter_name
                 }
-                
+
                 if match.group(3) == 'error':
-                    errors.append(item)
+                    # TSファイルの型エラーは警告として扱う（ブロッキングにしない）
+                    if is_ts_file and ts_code in self.TS_TYPE_ERROR_CODES_FOR_TS:
+                        item['severity'] = 'warning'
+                        warnings.append(item)
+                    else:
+                        errors.append(item)
                 else:
                     warnings.append(item)
                 continue
-        
+
         return errors, warnings
     
     def _check_auto_fixable(self, errors: List[Dict]) -> bool:
@@ -425,6 +500,132 @@ class LinterIntegration:
         """
         return True
     
+    def run_mypy_check(self, filename: str, code: str) -> Dict[str, Any]:
+        """
+        Pythonファイルに対してmypy型チェックを実行
+
+        Args:
+            filename: チェック対象ファイル名 (.py)
+            code: ファイルのコード内容
+
+        Returns:
+            {
+                'has_errors': bool,
+                'errors': List[Dict],
+                'warnings': List[Dict],
+                'skipped': bool
+            }
+        """
+        errors = []
+        warnings = []
+
+        mypy_cmd = self._get_available_command('mypy')
+        if not mypy_cmd:
+            return {
+                'has_errors': False,
+                'errors': [],
+                'warnings': [],
+                'skipped': True
+            }
+
+        with tempfile.NamedTemporaryFile(
+            mode='w', suffix='.py', delete=False, encoding='utf-8'
+        ) as f:
+            f.write(code)
+            temp_path = f.name
+
+        try:
+            result = subprocess.run(
+                [
+                    mypy_cmd,
+                    '--no-error-summary',
+                    '--show-error-codes',
+                    '--ignore-missing-imports',
+                    '--no-color-output',
+                    '--no-pretty',
+                    temp_path,
+                ],
+                capture_output=True,
+                encoding='utf-8',
+                errors='replace',
+                timeout=30,
+            )
+
+            if result.returncode != 0 or result.stdout:
+                parsed_errors, parsed_warnings = self._parse_mypy_output(
+                    result.stdout, filename
+                )
+                errors.extend(parsed_errors)
+                warnings.extend(parsed_warnings)
+
+        except subprocess.TimeoutExpired:
+            logger.debug("[mypy] Type check timeout")
+        except Exception as e:
+            logger.debug(f"[mypy] Type check error: {e}")
+        finally:
+            try:
+                os.unlink(temp_path)
+            except OSError:
+                pass
+
+        return {
+            'has_errors': len(errors) > 0,
+            'has_warnings': len(warnings) > 0,
+            'errors': errors,
+            'warnings': warnings,
+            'skipped': False,
+        }
+
+    def _parse_mypy_output(self, output: str, filename: str) -> Tuple[List[Dict], List[Dict]]:
+        """
+        mypy出力をパース
+
+        Format: filepath:line: severity: message  [error-code]
+        Example: temp.py:10: error: Incompatible types in assignment  [assignment]
+        """
+        errors = []
+        warnings = []
+
+        for line in output.split('\n'):
+            if not line.strip():
+                continue
+
+            # mypy形式: filepath:line: error/warning/note: message  [code]
+            match = re.match(
+                r'.*?:(\d+):\s+(error|warning|note):\s+(.+?)(?:\s+\[(\S+)\])?\s*$',
+                line
+            )
+            if not match:
+                continue
+
+            severity = match.group(2)
+            error_code = match.group(4) or ''
+
+            # noteはスキップ（情報のみ）
+            if severity == 'note':
+                continue
+
+            # import関連エラーはスキップ（一時ファイルのため誤検出が多い）
+            if error_code in ('import', 'import-untyped', 'import-not-found'):
+                continue
+
+            item = {
+                'file': filename,
+                'line': int(match.group(1)),
+                'column': 0,
+                'severity': severity,
+                'code': f'mypy:{error_code}' if error_code else 'mypy',
+                'message': match.group(3).strip(),
+                'linter': 'mypy',
+            }
+
+            if severity == 'error':
+                errors.append(item)
+            else:
+                warnings.append(item)
+
+        return errors, warnings
+
     def run_typescript_type_check(self, filename: str, code: str) -> Dict[str, Any]:
         """
         JavaScriptファイルに対してTypeScript型チェックを実行
@@ -528,42 +729,53 @@ class LinterIntegration:
             'warnings': warnings
         }
     
-    def _parse_tsc_output(self, output: str, filename: str) -> Tuple[List[Dict], List[Dict]]:
+    def _parse_tsc_output(self, output: str, filename: str, is_typescript: bool = False) -> Tuple[List[Dict], List[Dict]]:
         """
         TypeScript Compiler出力をパース（フィルタリング機能付き）
-        
+
         Format: filename(line,col): error/warning TS code: message
         Example: calculator.js(220,5): error TS2345: Argument of type '"÷"' is not assignable...
-        
-        修正: 2025-12-29
-        - 純粋なJavaScriptファイルに対して、致命的エラーのみを報告
-        - 型関連のノイズ（暗黙のany、型不一致等）をフィルタリング
+
+        Args:
+            output: tsc stdout
+            filename: 対象ファイル名
+            is_typescript: True=.ts/.tsxファイル（型エラーを警告として報告）
+                          False=.js/.jsxファイル（型エラーをスキップ）
         """
         errors = []
         warnings = []
         skipped_count = 0
-        
+
         for line in output.split('\n'):
             if not line.strip():
                 continue
-            
+
             # tsc形式: filename(line,col): error/warning TS code: message
             match = re.match(r'.*?\((\d+),(\d+)\):\s+(error|warning)\s+TS(\d+):\s+(.+)', line)
             if match:
                 ts_code = match.group(4)  # TSエラーコード（数字部分のみ）
-                
-                # フィルタリング: 無視すべきエラーコードはスキップ
-                if ts_code in self.TS_IGNORABLE_ERROR_CODES:
+
+                # 常に無視するコード（環境依存ノイズ: モジュール解決、暗黙のany等）
+                if ts_code in self.TS_ALWAYS_IGNORABLE_CODES:
                     skipped_count += 1
                     continue
-                
+
+                if is_typescript:
+                    # TSファイル: 型エラーは警告として報告
+                    pass  # フィルタリングなし（ALWAYS_IGNORABLEのみ除外済み）
+                else:
+                    # JSファイル: 旧来のフィルタリング適用
+                    if ts_code in self.TS_IGNORABLE_ERROR_CODES:
+                        skipped_count += 1
+                        continue
+
                 # 重要なエラーコードかチェック
                 is_critical = ts_code in self.TS_CRITICAL_ERROR_CODES
-                
+
                 # 構文エラー（TS1xxx）は全て重要
                 if ts_code.startswith('1'):
                     is_critical = True
-                
+
                 item = {
                     'file': filename,
                     'line': int(match.group(1)),
@@ -572,24 +784,24 @@ class LinterIntegration:
                     'code': f'TS{ts_code}',
                     'message': match.group(5).strip(),
                     'linter': 'tsc',
-                    'is_critical': is_critical  # 重要度フラグを追加
+                    'is_critical': is_critical
                 }
-                
+
                 if match.group(3) == 'error':
-                    # 重要なエラーのみerrorsに追加、それ以外はwarningsに降格
                     if is_critical:
                         errors.append(item)
+                    elif is_typescript and ts_code in self.TS_TYPE_ERROR_CODES_FOR_TS:
+                        # TSファイルの型エラー → 警告として報告（ブロッキングにしない）
+                        item['severity'] = 'warning'
+                        warnings.append(item)
                     else:
-                        # 重要でないエラーは警告として扱う（オプション）
-                        # ここではスキップする
                         skipped_count += 1
                 else:
                     warnings.append(item)
-        
-        # フィルタリング結果をログ出力
+
         if skipped_count > 0:
             logger.debug(f"[TSC] Filtered out {skipped_count} non-critical errors for {filename}")
-        
+
         return errors, warnings
 
 

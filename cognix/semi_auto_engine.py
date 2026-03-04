@@ -603,9 +603,9 @@ class TestDetectionResult:
     """テストフレームワーク検出結果"""
     has_tests: bool
     test_files: List[str]
-    framework: str          # "pytest" | "unittest" | "none"
+    framework: str          # "pytest" | "unittest" | "jest" | "vitest" | "mocha" | "none"
     run_command: List[str]
-    language: str            # "python" | "none"
+    language: str            # "python" | "javascript" | "typescript" | "none"
 
 
 @dataclass
@@ -2722,6 +2722,193 @@ class PostGenerationValidator:
             except:
                 pass
 
+    # ==========================================
+    # Additional Language Syntax Validators
+    # ==========================================
+
+    def _check_compiler_available(self, cmd: str, version_flag: str = '--version') -> Optional[str]:
+        """コンパイラの利用可能性を確認。利用可能ならコマンド名を返す"""
+        import platform
+        candidates = [cmd]
+        if platform.system() == 'Windows':
+            candidates.extend([f'{cmd}.exe', f'{cmd}.cmd', f'{cmd}.bat'])
+
+        for c in candidates:
+            try:
+                result = subprocess.run(
+                    [c, version_flag],
+                    capture_output=True, timeout=5, shell=False
+                )
+                if result.returncode == 0:
+                    return c
+            except (FileNotFoundError, subprocess.TimeoutExpired, OSError):
+                continue
+        return None
+
+    def _validate_with_compiler(
+        self,
+        filepath: str,
+        content: str,
+        compiler_cmd: str,
+        compiler_args: List[str],
+        suffix: str,
+        version_flag: str = '--version',
+    ) -> Tuple[bool, Optional[str]]:
+        """汎用コンパイラベース構文検証"""
+        cmd = self._check_compiler_available(compiler_cmd, version_flag)
+        if not cmd:
+            self.logger.debug(f"[Syntax Check] {compiler_cmd} not available, skipping {filepath}")
+            return True, None
+
+        import tempfile as _tempfile
+        with _tempfile.NamedTemporaryFile(
+            mode='w', suffix=suffix, delete=False, encoding='utf-8'
+        ) as f:
+            f.write(content)
+            temp_path = f.name
+
+        try:
+            full_cmd = [cmd] + compiler_args + [temp_path]
+            result = subprocess.run(
+                full_cmd,
+                capture_output=True, timeout=30,
+                encoding='utf-8', errors='replace'
+            )
+
+            if result.returncode != 0:
+                error_output = (result.stderr or result.stdout or '').strip()
+                # 最初の5行のみ
+                error_lines = error_output.split('\n')[:5]
+                error_message = '\n'.join(error_lines)
+                self.logger.debug(f"[Syntax Check] Syntax error in {filepath}")
+                return False, error_message
+
+            self.logger.debug(f"[Syntax Check] Valid syntax: {filepath}")
+            return True, None
+
+        except subprocess.TimeoutExpired:
+            self.logger.debug(f"[Syntax Check] Timeout: {filepath}")
+            return True, None
+        finally:
+            try:
+                os.unlink(temp_path)
+            except OSError:
+                pass
+
+    def _validate_go_syntax(self, filepath: str, content: str) -> Tuple[bool, Optional[str]]:
+        """Go構文チェック (go vet or go build)"""
+        cmd = self._check_compiler_available('go', 'version')
+        if not cmd:
+            self.logger.debug(f"[Syntax Check] go not available, skipping {filepath}")
+            return True, None
+
+        import tempfile as _tempfile
+        # Go はモジュールが必要な場合がある。単一ファイルを一時ディレクトリに配置
+        tmp_dir = _tempfile.mkdtemp(prefix="cognix_go_")
+        try:
+            go_file = Path(tmp_dir) / Path(filepath).name
+            go_file.write_text(content, encoding='utf-8')
+
+            # go.mod がなければ作成
+            go_mod = Path(tmp_dir) / 'go.mod'
+            if not go_mod.exists():
+                go_mod.write_text('module temp\n\ngo 1.21\n', encoding='utf-8')
+
+            result = subprocess.run(
+                [cmd, 'build', '-o', os.devnull if os.name != 'nt' else 'NUL', '.'],
+                capture_output=True, timeout=30,
+                encoding='utf-8', errors='replace',
+                cwd=tmp_dir
+            )
+
+            if result.returncode != 0:
+                error_output = (result.stderr or result.stdout or '').strip()
+                error_lines = error_output.split('\n')[:5]
+                self.logger.debug(f"[Syntax Check] Go syntax error in {filepath}")
+                return False, '\n'.join(error_lines)
+
+            self.logger.debug(f"[Syntax Check] Valid Go syntax: {filepath}")
+            return True, None
+
+        except subprocess.TimeoutExpired:
+            return True, None
+        finally:
+            import shutil
+            shutil.rmtree(tmp_dir, ignore_errors=True)
+
+    def _validate_java_syntax(self, filepath: str, content: str) -> Tuple[bool, Optional[str]]:
+        """Java構文チェック (javac)"""
+        return self._validate_with_compiler(
+            filepath, content,
+            compiler_cmd='javac',
+            compiler_args=['-d', tempfile.gettempdir(), '-proc:none', '-nowarn', '-Xmaxerrs', '5'],
+            suffix='.java',
+            version_flag='-version',
+        )
+
+    def _validate_rust_syntax(self, filepath: str, content: str) -> Tuple[bool, Optional[str]]:
+        """Rust構文チェック (rustc)"""
+        cmd = self._check_compiler_available('rustc', '--version')
+        if not cmd:
+            self.logger.debug(f"[Syntax Check] rustc not available, skipping {filepath}")
+            return True, None
+
+        import tempfile as _tempfile
+        with _tempfile.NamedTemporaryFile(
+            mode='w', suffix='.rs', delete=False, encoding='utf-8'
+        ) as f:
+            f.write(content)
+            temp_path = f.name
+
+        try:
+            # --error-format=short で簡潔なエラー出力
+            # --crate-type lib でmain関数不要
+            result = subprocess.run(
+                [cmd, '--edition', '2021', '--crate-type', 'lib',
+                 '--error-format', 'short', '-o', os.devnull if os.name != 'nt' else 'NUL',
+                 temp_path],
+                capture_output=True, timeout=30,
+                encoding='utf-8', errors='replace'
+            )
+
+            if result.returncode != 0:
+                error_output = (result.stderr or result.stdout or '').strip()
+                # "error[E" で始まる行のみ抽出
+                error_lines = [l for l in error_output.split('\n') if 'error' in l.lower()][:5]
+                if not error_lines:
+                    error_lines = error_output.split('\n')[:5]
+                self.logger.debug(f"[Syntax Check] Rust syntax error in {filepath}")
+                return False, '\n'.join(error_lines)
+
+            self.logger.debug(f"[Syntax Check] Valid Rust syntax: {filepath}")
+            return True, None
+
+        except subprocess.TimeoutExpired:
+            return True, None
+        finally:
+            try:
+                os.unlink(temp_path)
+            except OSError:
+                pass
+
+    def _validate_ruby_syntax(self, filepath: str, content: str) -> Tuple[bool, Optional[str]]:
+        """Ruby構文チェック (ruby -c)"""
+        return self._validate_with_compiler(
+            filepath, content,
+            compiler_cmd='ruby',
+            compiler_args=['-c'],
+            suffix='.rb',
+        )
+
+    def _validate_php_syntax(self, filepath: str, content: str) -> Tuple[bool, Optional[str]]:
+        """PHP構文チェック (php -l)"""
+        return self._validate_with_compiler(
+            filepath, content,
+            compiler_cmd='php',
+            compiler_args=['-l'],
+            suffix='.php',
+        )
+
     def _generate_missing_files(
         self,
         generated_files: Dict[str, str],
@@ -2951,7 +3138,22 @@ MANDATORY REACT STRUCTURE:
                     # CSS構文チェック
                     elif filepath.endswith('.css'):
                         syntax_valid, syntax_error = self._validate_css_syntax(filepath, file_code)
-                    
+                    # Go構文チェック
+                    elif filepath.endswith('.go'):
+                        syntax_valid, syntax_error = self._validate_go_syntax(filepath, file_code)
+                    # Java構文チェック
+                    elif filepath.endswith('.java'):
+                        syntax_valid, syntax_error = self._validate_java_syntax(filepath, file_code)
+                    # Rust構文チェック
+                    elif filepath.endswith('.rs'):
+                        syntax_valid, syntax_error = self._validate_rust_syntax(filepath, file_code)
+                    # Ruby構文チェック
+                    elif filepath.endswith('.rb'):
+                        syntax_valid, syntax_error = self._validate_ruby_syntax(filepath, file_code)
+                    # PHP構文チェック
+                    elif filepath.endswith('.php'):
+                        syntax_valid, syntax_error = self._validate_php_syntax(filepath, file_code)
+
                     # 対策5-C: 完全性チェック
                     complete_valid, completeness_errors = self._validate_code_completeness(filepath, file_code)
                     
@@ -4862,14 +5064,41 @@ Flask + React Fullstack:
                             
                             # 自動修正可能な場合はLLMに修正依頼
                             if lint_result['can_auto_fix']:
-                                logger.debug("[Linter] Attempting auto-fix with LLM...")
-                                logger.debug("[Linter] Auto-fix attempt started")
-                                
-                                fixed_files = self._fix_linter_errors_with_llm(
-                                    generated_code,
-                                    lint_result['errors'],
-                                    lint_result.get('file_languages', {})
-                                )
+                                # Phase 1: 決定論的修正（LLM不要、確実な修正のみ）
+                                remaining_errors = lint_result['errors']
+                                det_fixed_count = 0
+                                for det_filename in list(generated_code.keys()):
+                                    file_errors = [e for e in remaining_errors if e.get('file') == det_filename]
+                                    if file_errors and det_filename in generated_code:
+                                        fixed_code, leftover = self._apply_deterministic_fixes(
+                                            generated_code[det_filename], file_errors
+                                        )
+                                        fixed_count = len(file_errors) - len(leftover)
+                                        if fixed_count > 0:
+                                            generated_code[det_filename] = fixed_code
+                                            det_fixed_count += fixed_count
+                                            # remaining_errors を更新
+                                            remaining_errors = [
+                                                e for e in remaining_errors
+                                                if e.get('file') != det_filename
+                                            ] + leftover
+
+                                if det_fixed_count > 0:
+                                    logger.debug(f"[Linter] Deterministic fix: resolved {det_fixed_count} issue(s)")
+
+                                # Phase 2: 残りのエラーをLLMで修正
+                                if not remaining_errors:
+                                    logger.debug("[Linter] All errors resolved by deterministic fixes")
+                                    fixed_files = generated_code
+                                else:
+                                    logger.debug("[Linter] Attempting auto-fix with LLM...")
+                                    logger.debug("[Linter] Auto-fix attempt started")
+
+                                    fixed_files = self._fix_linter_errors_with_llm(
+                                        generated_code,
+                                        remaining_errors,
+                                        lint_result.get('file_languages', {})
+                                    )
                                 
                                 if fixed_files:
                                     logger.debug("[Linter] Auto-fix successful")
@@ -10883,6 +11112,134 @@ Return ONLY the fixed code in this format:
             logger.debug(f"[Import Fix] Error during LLM fix: {e}")
             return None
 
+    # ==========================================
+    # Deterministic Auto-fix (LLM不要)
+    # ==========================================
+
+    def _apply_deterministic_fixes(
+        self,
+        code: str,
+        errors: List[Dict[str, Any]]
+    ) -> Tuple[str, List[Dict[str, Any]]]:
+        """確実に安全な修正のみ適用。LLM呼び出し不要。
+
+        Args:
+            code: ソースコード文字列
+            errors: このファイルに関するlintエラーリスト
+
+        Returns:
+            (修正後コード, 残りのエラーリスト)
+        """
+        lines = code.split('\n')
+        remaining = []
+        lines_to_remove = set()
+
+        for error in errors:
+            err_code = error.get('code', '')
+            line_num = error.get('line', 0)
+
+            if err_code == 'F401' and 1 <= line_num <= len(lines):
+                # 未使用import削除
+                line = lines[line_num - 1]
+                # 単純な import 文のみ（from x import a, b は危険なのでスキップ）
+                if re.match(r'^\s*import\s+\S+\s*$', line) or \
+                   re.match(r'^\s*from\s+\S+\s+import\s+\S+\s*$', line):
+                    lines_to_remove.add(line_num - 1)
+                    continue
+
+            elif err_code in ('W291', 'W293') and 1 <= line_num <= len(lines):
+                # 末尾の空白を削除
+                lines[line_num - 1] = lines[line_num - 1].rstrip()
+                continue
+
+            elif err_code == 'W292':
+                # ファイル末尾の改行がない
+                if not code.endswith('\n'):
+                    lines.append('')
+                continue
+
+            elif err_code == 'W391':
+                # ファイル末尾の空行が多すぎる
+                while len(lines) > 1 and lines[-1].strip() == '' and lines[-2].strip() == '':
+                    lines.pop()
+                continue
+
+            # 修正できなかったエラーは残りに追加
+            remaining.append(error)
+
+        # 行削除（逆順で削除してインデックスがずれないようにする）
+        for idx in sorted(lines_to_remove, reverse=True):
+            del lines[idx]
+
+        return '\n'.join(lines), remaining
+
+    def _apply_secret_auto_fix(
+        self,
+        code: str,
+        secret_issues: List[Dict],
+        filepath: str,
+    ) -> str:
+        """ハードコードされたシークレットを環境変数に自動置換
+
+        Args:
+            code: ソースコード
+            secret_issues: SecretScanner.scan() の結果（このファイルのみ）
+            filepath: ファイルパス（言語判定用）
+
+        Returns:
+            修正後のコード
+        """
+        if not secret_issues:
+            return code
+
+        lines = code.split('\n')
+        needs_os_import = False
+
+        for issue in secret_issues:
+            line_num = issue.get('line', 0)
+            if not (1 <= line_num <= len(lines)):
+                continue
+
+            line = lines[line_num - 1]
+            pattern_name = issue.get('pattern_name', '')
+
+            # Hardcoded Password / API Key パターンのみ自動修正
+            if pattern_name not in ('Hardcoded Password', 'Hardcoded API Key'):
+                continue
+
+            # 変数名 = "値" のパターンを検出
+            match = re.match(
+                r'^(\s*(?:const|let|var|export\s+(?:const|let))?\s*)(\w+)(\s*[=:]\s*)["\']([^"\']+)["\'](.*)$',
+                line
+            )
+            if not match:
+                continue
+
+            prefix = match.group(1)
+            var_name = match.group(2)
+            assign_op = match.group(3)
+            suffix = match.group(5)
+
+            # 環境変数名
+            env_name = re.sub(r'([a-z])([A-Z])', r'\1_\2', var_name).upper()
+
+            if filepath.endswith('.py'):
+                new_value = f'os.environ.get("{env_name}", "")'
+                needs_os_import = True
+            elif filepath.endswith(('.js', '.jsx', '.ts', '.tsx', '.mjs', '.cjs')):
+                new_value = f'process.env.{env_name} || ""'
+            else:
+                continue
+
+            lines[line_num - 1] = f'{prefix}{var_name}{assign_op}{new_value}{suffix}'
+
+        # Pythonの場合、os import を追加
+        if needs_os_import and filepath.endswith('.py'):
+            if 'import os' not in code and 'from os ' not in code:
+                lines.insert(0, 'import os')
+
+        return '\n'.join(lines)
+
     # 行3258-3263: 関数定義（インデント: 4スペース）- 変更なし
     def _fix_linter_errors_with_llm(
         self,
@@ -14221,16 +14578,40 @@ IMPORTANT RULES:
                 if len(file_errors) > 0 or len(file_warnings) > 0:
                     all_issues.append(f"{filename}: {len(file_errors)} errors, {len(file_warnings)} warnings")
             
-            # 実行可能性チェック(新規追加)
+            # 実行可能性チェック（全言語対応）
             executable_score = 1.0
             if ext == 'py':
                 try:
                     import ast
                     ast.parse(code)
                     executable_score = 1.0
+
+                    # mypy型エラーによる軽微な減点（構文は通るが型が不正）
+                    if lint_result and lint_result.get('errors'):
+                        mypy_errors = [
+                            e for e in lint_result['errors']
+                            if e.get('file') == filename and e.get('linter') == 'mypy'
+                        ]
+                        if mypy_errors:
+                            type_penalty = len(mypy_errors) * 0.05
+                            executable_score = max(0.5, 1.0 - type_penalty)
+                            all_issues.append(
+                                f"{filename}: {len(mypy_errors)} type error(s) (mypy)"
+                            )
                 except SyntaxError:
                     executable_score = 0.3
                     all_issues.append(f"{filename}: Syntax error detected")
+            elif ext in ('go', 'java', 'rs', 'rb', 'php'):
+                # コンパイラベース構文検証の結果を反映
+                # lint_resultのエラーにこのファイルの構文エラーが含まれていれば減点
+                if lint_result and lint_result.get('errors'):
+                    syntax_errors_for_file = [
+                        e for e in lint_result['errors']
+                        if e.get('file') == filename and 'syntax' in e.get('message', '').lower()
+                    ]
+                    if syntax_errors_for_file:
+                        executable_score = 0.3
+                        all_issues.append(f"{filename}: Syntax error detected ({ext})")
             
             # コード複雑度スコア（新規追加 - McCabe複雑度）
             complexity_score = 1.0
@@ -22504,9 +22885,37 @@ Return ONLY the fixed JavaScript code wrapped in ```javascript``` blocks.
         for attempt in range(MAX_REVIEW_ATTEMPTS):
             # ============================================================
             # 🆕 改修: 検出2レイヤ化
+            # Layer 0: 決定論的Secret Scanner（LLM不要、正規表現ベース）
             # Layer 1: Blocking issues（ランタイムエラー、セキュリティ）のみ修正対象
             # Layer 2: Quality issues は最終報告のみ（自動修正しない）
             # ============================================================
+
+            # Layer 0: Secret Scanner (deterministic, no LLM needed)
+            try:
+                from cognix.secret_scanner import SecretScanner
+                secret_scanner = SecretScanner()
+                secret_issues = secret_scanner.scan(all_files)
+                if secret_issues:
+                    logger.debug(f"[Secret Scanner] Found {len(secret_issues)} hardcoded secret(s)")
+                    for si in secret_issues[:5]:
+                        logger.debug(f"  - {si['file']}:{si['line']} {si['pattern_name']} ({si['severity']})")
+
+                    # 自動修正可能なシークレットを修正
+                    for filepath in list(all_files.keys()):
+                        file_secrets = [s for s in secret_issues if s['file'] == filepath]
+                        if file_secrets:
+                            all_files[filepath] = self._apply_secret_auto_fix(
+                                all_files[filepath], file_secrets, filepath
+                            )
+                    # 修正後に再スキャン（修正できなかった分のみ残る）
+                    secret_issues = secret_scanner.scan(all_files)
+                    if secret_issues:
+                        logger.debug(f"[Secret Scanner] {len(secret_issues)} secret(s) remain after auto-fix")
+            except Exception as e:
+                logger.debug(f"[Secret Scanner] Skipped: {e}")
+                secret_issues = []
+
+            # Layer 1: LLM-based blocking issue detection
             detection_result = self._detect_blocking_issues(all_files, goal)
             
             # エラー発生時は処理を中断（誤判定防止）
@@ -22517,8 +22926,16 @@ Return ONLY the fixed JavaScript code wrapped in ```javascript``` blocks.
                 break
             
             issues = detection_result.get('issues', [])
+
+            # Merge secret scanner results into blocking issues (avoid duplicates)
+            if secret_issues:
+                existing_keys = {(i.get('file'), i.get('line')) for i in issues}
+                for si in secret_issues:
+                    if (si['file'], si['line']) not in existing_keys:
+                        issues.append(si)
+
             current_issue_count = len(issues)
-            
+
             if not issues:
                 logger.debug(f"[Blocking Detection] ✅ No blocking issues found (attempt {attempt + 1})")
                 break
@@ -27154,51 +27571,80 @@ Identify what structural changes you made, and undo them while keeping only the 
 
     def _should_run_tests(self, generated_files: Dict[str, str]) -> bool:
         """テスト実行が必要か判定"""
-        # Python以外のプロジェクト → スキップ
-        has_python = any(f.endswith('.py') for f in generated_files.keys())
-        if not has_python:
+        # Python または JS/TS プロジェクトのみ対象
+        supported_exts = ('.py', '.js', '.jsx', '.ts', '.tsx', '.mjs', '.cjs')
+        has_supported = any(
+            f.endswith(supported_exts) for f in generated_files.keys()
+        )
+        if not has_supported:
             return False
-        
+
         # 生成ファイルにテストファイルが含まれるか
         has_generated_tests = any(
             self._is_test_file(f) for f in generated_files.keys()
         )
-        
+
         # workspace_pathにテストファイルが存在するか
         has_existing_tests = False
         if self.workspace_path and self.workspace_path.exists():
-            has_existing_tests = any(
-                self._is_test_file(f.name)
-                for f in self.workspace_path.rglob('*.py')
-                if f.is_file()
-            )
-        
+            test_globs = ['*.py', '*.js', '*.jsx', '*.ts', '*.tsx', '*.mjs']
+            for pattern in test_globs:
+                for f in self.workspace_path.rglob(pattern):
+                    if f.is_file() and self._is_test_file(f.name):
+                        has_existing_tests = True
+                        break
+                if has_existing_tests:
+                    break
+
         return has_generated_tests or has_existing_tests
 
     def _detect_test_framework(self, generated_files: Dict[str, str]) -> 'TestDetectionResult':
         """テストフレームワークと実行方法を検出"""
-        
+
         # テストファイル特定（生成ファイル + workspace既存ファイル）
         test_files = []
         for f in generated_files.keys():
             if self._is_test_file(f):
                 test_files.append(f)
-        
+
         if self.workspace_path and self.workspace_path.exists():
-            for pattern in ['test_*.py', '*_test.py']:
+            test_patterns = ['test_*.py', '*_test.py', '*.test.js', '*.spec.js',
+                             '*.test.ts', '*.spec.ts', '*.test.jsx', '*.spec.jsx',
+                             '*.test.tsx', '*.spec.tsx']
+            for pattern in test_patterns:
                 for f in self.workspace_path.rglob(pattern):
-                    rel = str(f.relative_to(self.workspace_path))
+                    rel = str(f.relative_to(self.workspace_path)).replace('\\', '/')
                     if rel not in test_files:
                         test_files.append(rel)
-        
+
         if not test_files:
             return TestDetectionResult(
                 has_tests=False, test_files=[], framework="none",
                 run_command=[], language="none"
             )
-        
-        # フレームワーク検出（テストファイルの中身から判定）
-        framework = "pytest"  # デフォルト（pytestはunittestも実行可能）
+
+        # 言語判定
+        py_tests = [f for f in test_files if f.endswith('.py')]
+        js_ts_tests = [f for f in test_files if f.endswith(('.js', '.jsx', '.ts', '.tsx', '.mjs'))]
+
+        # 両方ある場合はPythonを優先（既存の動作を維持）
+        if py_tests:
+            return self._detect_python_test_framework(generated_files, py_tests)
+
+        # JS/TS テストのみの場合
+        if js_ts_tests:
+            return self._detect_js_test_framework(generated_files, js_ts_tests)
+
+        return TestDetectionResult(
+            has_tests=False, test_files=[], framework="none",
+            run_command=[], language="none"
+        )
+
+    def _detect_python_test_framework(
+        self, generated_files: Dict[str, str], test_files: List[str]
+    ) -> 'TestDetectionResult':
+        """Python テストフレームワーク検出"""
+        framework = "pytest"
         for tf in test_files:
             content = generated_files.get(tf, "")
             if not content and self.workspace_path:
@@ -27209,36 +27655,149 @@ Identify what structural changes you made, and undo them while keeping only the 
             if "import pytest" in content or "from pytest" in content:
                 framework = "pytest"
                 break
-        
-        # 実行コマンド決定
+
         if self._check_pytest_available():
             run_command = [sys.executable, "-m", "pytest", "-v", "--tb=long", "--no-header"]
             run_command.extend(test_files)
         else:
-            # pytestが使えない場合 → unittest discover
             run_command = [sys.executable, "-m", "unittest", "discover", "-v", "-s", "."]
             framework = "unittest"
-        
-        logger.debug(f"[Test Detect] Found {len(test_files)} test file(s), framework: {framework}")
-        
+
+        logger.debug(f"[Test Detect] Found {len(test_files)} Python test file(s), framework: {framework}")
+
         return TestDetectionResult(
             has_tests=True, test_files=test_files, framework=framework,
             run_command=run_command, language="python"
         )
 
+    def _detect_js_test_framework(
+        self, generated_files: Dict[str, str], test_files: List[str]
+    ) -> 'TestDetectionResult':
+        """JS/TS テストフレームワーク検出 (jest/vitest/mocha)"""
+        framework = "jest"  # デフォルト
+        language = "javascript"
+        run_command = []
+
+        # TypeScriptテストがあれば language を更新
+        if any(f.endswith(('.ts', '.tsx')) for f in test_files):
+            language = "typescript"
+
+        # package.json から判定
+        pkg_json = self._read_package_json(generated_files)
+        if pkg_json:
+            scripts = pkg_json.get('scripts', {})
+            test_script = scripts.get('test', '')
+            dev_deps = pkg_json.get('devDependencies', {})
+            deps = pkg_json.get('dependencies', {})
+            all_deps = {**deps, **dev_deps}
+
+            if 'vitest' in test_script or 'vitest' in all_deps:
+                framework = "vitest"
+            elif 'mocha' in test_script or 'mocha' in all_deps:
+                framework = "mocha"
+            elif 'jest' in test_script or 'jest' in all_deps:
+                framework = "jest"
+
+        # 設定ファイルからの判定（package.json がない場合のフォールバック）
+        if framework == "jest":
+            config_patterns = {
+                'vitest': ['vitest.config.ts', 'vitest.config.js', 'vitest.config.mts'],
+                'jest': ['jest.config.js', 'jest.config.ts', 'jest.config.mjs'],
+                'mocha': ['.mocharc.yml', '.mocharc.yaml', '.mocharc.json', '.mocharc.js'],
+            }
+            detected = False
+            for fw, patterns in config_patterns.items():
+                if detected:
+                    break
+                for p in patterns:
+                    if p in generated_files or (self.workspace_path and (self.workspace_path / p).exists()):
+                        framework = fw
+                        detected = True
+                        break
+
+        # npx の存在確認
+        npx_cmd = self._get_npx_command()
+        if not npx_cmd:
+            logger.debug("[Test Detect] npx not available, cannot run JS/TS tests")
+            return TestDetectionResult(
+                has_tests=True, test_files=test_files, framework="none",
+                run_command=[], language=language
+            )
+
+        # 実行コマンド構築
+        if framework == "jest":
+            run_command = [npx_cmd, "jest", "--verbose", "--forceExit"]
+            run_command.extend(test_files)
+        elif framework == "vitest":
+            run_command = [npx_cmd, "vitest", "run", "--reporter=verbose"]
+            run_command.extend(test_files)
+        elif framework == "mocha":
+            run_command = [npx_cmd, "mocha", "--reporter", "spec"]
+            run_command.extend(test_files)
+
+        logger.debug(f"[Test Detect] Found {len(test_files)} JS/TS test file(s), framework: {framework}")
+
+        return TestDetectionResult(
+            has_tests=True, test_files=test_files, framework=framework,
+            run_command=run_command, language=language
+        )
+
+    def _read_package_json(self, generated_files: Dict[str, str]) -> Optional[Dict]:
+        """package.json を読み込む（生成ファイル or workspace）"""
+        import json as json_mod
+
+        # 生成ファイルから
+        if 'package.json' in generated_files:
+            try:
+                return json_mod.loads(generated_files['package.json'])
+            except (json_mod.JSONDecodeError, Exception):
+                pass
+
+        # workspace から
+        if self.workspace_path:
+            pkg_path = self.workspace_path / 'package.json'
+            if pkg_path.exists():
+                try:
+                    return json_mod.loads(pkg_path.read_text(encoding='utf-8'))
+                except (json_mod.JSONDecodeError, Exception):
+                    pass
+
+        return None
+
+    def _get_npx_command(self) -> Optional[str]:
+        """npx が利用可能か確認し、コマンド名を返す"""
+        import platform
+        candidates = ['npx']
+        if platform.system() == 'Windows':
+            candidates.extend(['npx.cmd', 'npx.bat'])
+
+        for cmd in candidates:
+            try:
+                result = subprocess.run(
+                    [cmd, '--version'],
+                    capture_output=True, timeout=10,
+                    shell=False
+                )
+                if result.returncode == 0:
+                    return cmd
+            except (FileNotFoundError, subprocess.TimeoutExpired, OSError):
+                continue
+        return None
+
     def _prepare_test_environment(self, generated_files: Dict[str, str]) -> Path:
         """テスト実行用の隔離環境を準備
-        
+
         workspace全体をコピーしてからgenerated_filesで上書き。
         data/ディレクトリ等のサブディレクトリ構造が保持される。
+        node_modulesはシンボリックリンクで参照（コピーは巨大すぎる）。
         """
         temp_dir = Path(tempfile.mkdtemp(prefix="cognix_test_"))
-        
+
         skip_dirs = {
             '__pycache__', '.git', 'node_modules', 'venv', '.venv',
             '.cognix', '.pytest_cache', '.mypy_cache', '.tox'
         }
-        
+
         # Step 1: workspace_pathの全ファイルをコピー（ディレクトリ構造含む）
         if self.workspace_path and self.workspace_path.exists():
             import shutil
@@ -27247,19 +27806,32 @@ Identify what structural changes you made, and undo them while keeping only the 
                     rel = item.relative_to(self.workspace_path)
                     if any(part in skip_dirs for part in rel.parts):
                         continue
-                    # _bench_で始まるファイルはベンチマーク用なのでスキップ
                     if rel.name.startswith('_bench_'):
                         continue
                     dest = temp_dir / rel
                     dest.parent.mkdir(parents=True, exist_ok=True)
                     shutil.copy2(item, dest)
-        
+
+            # node_modules をシンボリックリンクで参照（JS/TSテスト用）
+            node_modules_src = self.workspace_path / 'node_modules'
+            if node_modules_src.exists() and node_modules_src.is_dir():
+                node_modules_dest = temp_dir / 'node_modules'
+                try:
+                    os.symlink(
+                        str(node_modules_src),
+                        str(node_modules_dest),
+                        target_is_directory=True
+                    )
+                    logger.debug("[Test Env] Symlinked node_modules")
+                except (OSError, NotImplementedError) as e:
+                    logger.debug(f"[Test Env] Failed to symlink node_modules: {e}")
+
         # Step 2: generated_filesで上書き（ディレクトリ自動作成含む）
         for filename, code in generated_files.items():
             dest = temp_dir / filename
             dest.parent.mkdir(parents=True, exist_ok=True)
             dest.write_text(code, encoding='utf-8')
-        
+
         return temp_dir
 
     def _execute_tests(
@@ -27285,6 +27857,11 @@ Identify what structural changes you made, and undo them while keeping only the 
             if test_detection.framework == "unittest":
                 return self._parse_unittest_output(
                     result.stdout, result.stderr, result.returncode, elapsed
+                )
+            elif test_detection.framework in ("jest", "vitest", "mocha"):
+                return self._parse_js_test_output(
+                    result.stdout, result.stderr, result.returncode, elapsed,
+                    test_detection.framework
                 )
             return self._parse_pytest_output(
                 result.stdout, result.stderr, result.returncode, elapsed
@@ -27516,6 +28093,131 @@ Identify what structural changes you made, and undo them while keeping only the 
         if match:
             return f"{match.group(1)}: {match.group(2)}"
         return text[:500]
+
+    def _parse_js_test_output(
+        self, stdout: str, stderr: str, returncode: int, elapsed: float,
+        framework: str
+    ) -> 'TestExecutionResult':
+        """jest/vitest/mocha の出力をパース
+
+        各フレームワークのverbose出力を汎用的にパースする。
+        共通パターン: PASS/FAIL行、テスト結果サマリー行。
+        """
+        combined = stdout + "\n" + stderr
+
+        # 実行エラー（コマンド自体が失敗）
+        combined_lower = combined.lower()
+        if returncode != 0 and (
+            "command not found" in combined_lower
+            or ("cannot find module" in combined_lower and "node_modules" in combined_lower)
+        ):
+            return TestExecutionResult(
+                success=False, total_tests=0, passed=0, failed=0, errors=1,
+                failure_details=[{
+                    "test_name": "SETUP_ERROR",
+                    "error_type": "SetupError",
+                    "message": f"{framework} execution failed. Ensure dependencies are installed.",
+                    "traceback": combined[:3000]
+                }],
+                stdout=stdout, stderr=stderr, execution_time=elapsed,
+                collection_error=True
+            )
+
+        passed = 0
+        failed = 0
+        errors = 0
+        failure_details = []
+
+        if framework == "jest":
+            # jest verbose format:
+            #   Tests:       2 failed, 5 passed, 7 total
+            #   Test Suites: 1 failed, 2 passed, 3 total
+            m_tests = re.search(r'Tests:\s+(?:(\d+)\s+failed,?\s*)?(?:\d+\s+(?:skipped|pending|todo),?\s*)*(?:(\d+)\s+passed,?\s*)?(\d+)\s+total', combined)
+            if m_tests:
+                failed = int(m_tests.group(1) or 0)
+                passed = int(m_tests.group(2) or 0)
+
+            # FAIL行からテスト名抽出
+            # jest format: "FAIL src/utils.test.js" or "  x test name (Xms)"
+            for m in re.finditer(r'^\s+[x\u2715]\s+(.+?)(?:\s+\(\d+\s*m?s\))?\s*$', combined, re.MULTILINE):
+                failure_details.append({
+                    "test_name": m.group(1).strip(),
+                    "error_type": "TestFailure",
+                    "message": "",
+                    "traceback": ""
+                })
+
+        elif framework == "vitest":
+            # vitest format:
+            #   Test Files  1 failed | 2 passed (3)
+            #   Tests  3 failed | 10 passed (13)
+            m_tests = re.search(r'Tests\s+(?:(\d+)\s+failed\s*\|?\s*)?(?:(\d+)\s+passed)?', combined)
+            if m_tests:
+                failed = int(m_tests.group(1) or 0)
+                passed = int(m_tests.group(2) or 0)
+
+            # vitest FAIL lines: "x test name 123ms"
+            for m in re.finditer(r'^\s+[x\u2715]\s+(.+?)(?:\s+\d+\s*m?s)?\s*$', combined, re.MULTILINE):
+                failure_details.append({
+                    "test_name": m.group(1).strip(),
+                    "error_type": "TestFailure",
+                    "message": "",
+                    "traceback": ""
+                })
+
+        elif framework == "mocha":
+            # mocha spec reporter:
+            #   N passing (Xms)
+            #   M failing
+            m_pass = re.search(r'(\d+)\s+passing', combined)
+            m_fail = re.search(r'(\d+)\s+failing', combined)
+            if m_pass:
+                passed = int(m_pass.group(1))
+            if m_fail:
+                failed = int(m_fail.group(1))
+
+            # mocha failure format: "  N) test name:\n    error message"
+            for m in re.finditer(r'^\s+\d+\)\s+(.+?):\s*\n\s+(.+?)$', combined, re.MULTILINE):
+                failure_details.append({
+                    "test_name": m.group(1).strip(),
+                    "error_type": "TestFailure",
+                    "message": m.group(2).strip(),
+                    "traceback": ""
+                })
+
+        total = passed + failed + errors
+
+        # フォールバック: パースできなかった場合、returncode で判定
+        if total == 0:
+            if returncode == 0:
+                return TestExecutionResult(
+                    success=True, total_tests=0, passed=0, failed=0, errors=0,
+                    failure_details=[], stdout=stdout, stderr=stderr,
+                    execution_time=elapsed, skipped=True,
+                    skip_reason=f"No test results parsed from {framework} output"
+                )
+            else:
+                return TestExecutionResult(
+                    success=False, total_tests=0, passed=0, failed=0, errors=1,
+                    failure_details=[{
+                        "test_name": "PARSE_ERROR",
+                        "error_type": "ParseError",
+                        "message": f"Failed to parse {framework} output (exit code {returncode})",
+                        "traceback": combined[:3000]
+                    }],
+                    stdout=stdout, stderr=stderr, execution_time=elapsed
+                )
+
+        return TestExecutionResult(
+            success=(failed == 0 and errors == 0),
+            total_tests=total,
+            passed=passed,
+            failed=failed,
+            errors=errors,
+            failure_details=failure_details,
+            stdout=stdout, stderr=stderr,
+            execution_time=elapsed
+        )
 
     def _extract_error_files_from_traceback(
         self,
