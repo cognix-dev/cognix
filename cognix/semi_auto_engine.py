@@ -5913,6 +5913,18 @@ Flask + React Fullstack:
                 actually_updated = 0
                 for filename, code in fixed_files.items():
                     if filename in generated_code:
+                        # Python ファイルの場合、構文チェックで検証
+                        if filename.endswith('.py'):
+                            try:
+                                import ast
+                                ast.parse(code)
+                            except SyntaxError as syn_err:
+                                logger.warning(
+                                    f"[Quality Fix] Rejected {filename}: syntax error "
+                                    f"at line {syn_err.lineno} ({syn_err.msg}) — "
+                                    f"keeping original code"
+                                )
+                                continue  # このファイルの修正をスキップ
                         updated_code[filename] = code
                         actually_updated += 1
                         logger.debug(f"[Quality Fix] Updated {filename}")
@@ -25956,10 +25968,12 @@ File: {filepath} ({content_lines} lines)
                 diff_content = diff_match.group(1).strip()
                 diff_lines = diff_content.split('\n')
                 
-                # 差分行数チェック（30行指示、50行受け入れ - バッファ付き制限 v2.1）
-                if len(diff_lines) > 50:
-                    logger.debug(f"[DESIGN CHANGE v2.1] {filepath}: Diff too large ({len(diff_lines)} lines, limit=50)")
-                    return f"SOFT_ABORT:Diff exceeded limit ({len(diff_lines)} lines, limit=50)"
+                # 差分行数チェック（ファイルサイズ比例 - 動的制限 v2.2）
+                file_line_count = len(content.splitlines()) if content else 0
+                diff_limit = max(50, min(file_line_count // 10, 120))
+                if len(diff_lines) > diff_limit:
+                    logger.debug(f"[DESIGN CHANGE v2.2] {filepath}: Diff too large ({len(diff_lines)} lines, limit={diff_limit})")
+                    return f"SOFT_ABORT:Diff exceeded limit ({len(diff_lines)} lines, limit={diff_limit})"
                 
                 # 差分を元のコードに適用（SIC検証付き）
                 try:

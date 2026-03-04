@@ -392,3 +392,152 @@ class TestQualityFixDynamicMaxTokens:
         total_code_chars = sum(len(v) for v in generated_code.values())
         quality_max_tokens = max(8000, min(total_code_chars // 3 + 2000, 32000))
         assert quality_max_tokens == 13666  # 35000 // 3 + 2000
+
+
+# ── Fix G: Quality Fix Syntax Validation ─────────────────────
+
+
+class TestQualityFixSyntaxValidation:
+    """Verify quality fix rejects code with syntax errors."""
+
+    def test_reject_syntax_error_python(self):
+        """Quality fix should reject .py files that fail ast.parse()."""
+        import ast
+
+        # Simulate the validation logic from _fix_quality_issues_with_llm
+        generated_code = {"main.py": "print('original')"}
+        fixed_files = {"main.py": "def broken(\n    # missing closing paren and colon"}
+
+        updated_code = generated_code.copy()
+        actually_updated = 0
+        for filename, code in fixed_files.items():
+            if filename in generated_code:
+                if filename.endswith('.py'):
+                    try:
+                        ast.parse(code)
+                    except SyntaxError:
+                        continue  # Skip this file
+                updated_code[filename] = code
+                actually_updated += 1
+
+        # Should have skipped the broken file
+        assert actually_updated == 0
+        assert updated_code["main.py"] == "print('original')"  # Original preserved
+
+    def test_accept_valid_python(self):
+        """Quality fix should accept .py files that pass ast.parse()."""
+        import ast
+
+        generated_code = {"main.py": "# TODO: implement\npass"}
+        fixed_files = {"main.py": "def real_impl():\n    return 42\n"}
+
+        updated_code = generated_code.copy()
+        actually_updated = 0
+        for filename, code in fixed_files.items():
+            if filename in generated_code:
+                if filename.endswith('.py'):
+                    try:
+                        ast.parse(code)
+                    except SyntaxError:
+                        continue
+                updated_code[filename] = code
+                actually_updated += 1
+
+        assert actually_updated == 1
+        assert "def real_impl" in updated_code["main.py"]
+
+    def test_non_python_skips_ast_check(self):
+        """Non-Python files should skip ast.parse() validation."""
+        import ast
+
+        generated_code = {"app.js": "// original"}
+        # Invalid Python but valid JS-like content
+        fixed_files = {"app.js": "const x = () => { return 42; }"}
+
+        updated_code = generated_code.copy()
+        actually_updated = 0
+        for filename, code in fixed_files.items():
+            if filename in generated_code:
+                if filename.endswith('.py'):
+                    try:
+                        ast.parse(code)
+                    except SyntaxError:
+                        continue
+                updated_code[filename] = code
+                actually_updated += 1
+
+        assert actually_updated == 1
+        assert "const x" in updated_code["app.js"]
+
+    def test_truncated_code_rejected(self):
+        """Truncated code from XML recovery should be rejected if it has syntax errors."""
+        import ast
+
+        # Simulate truncation recovery producing incomplete code
+        original = "import os\nimport flask\n\napp = flask.Flask(__name__)\n"
+        truncated_fix = (
+            "import os\nimport flask\n\napp = flask.Flask(__name__)\n\n"
+            "def handle_payment():\n"
+            "    amount = request.json.get('amount')\n"
+            "    if amount > 0:\n"
+            "        stripe.PaymentIntent.create(\n"
+            "            amount=amount,\n"
+            # Truncated here - missing closing paren and rest of function
+        )
+
+        generated_code = {"main.py": original}
+        fixed_files = {"main.py": truncated_fix}
+
+        updated_code = generated_code.copy()
+        actually_updated = 0
+        for filename, code in fixed_files.items():
+            if filename in generated_code:
+                if filename.endswith('.py'):
+                    try:
+                        ast.parse(code)
+                    except SyntaxError:
+                        continue
+                updated_code[filename] = code
+                actually_updated += 1
+
+        # Truncated code should be rejected
+        assert actually_updated == 0
+        assert updated_code["main.py"] == original  # Original preserved
+
+
+# ── Fix H: Dynamic Diff Limit ────────────────────────────────
+
+
+class TestDynamicDiffLimit:
+    """Verify diff limit scales with file size."""
+
+    def test_small_file_gets_floor(self):
+        """Files under 500 lines should get the 50-line floor."""
+        file_line_count = 100
+        diff_limit = max(50, min(file_line_count // 10, 120))
+        assert diff_limit == 50
+
+    def test_medium_file_scales(self):
+        """500-line file should get 50-line limit (500//10=50)."""
+        file_line_count = 500
+        diff_limit = max(50, min(file_line_count // 10, 120))
+        assert diff_limit == 50
+
+    def test_large_file_scales(self):
+        """1148-line file (Stripe test) should get 114-line limit."""
+        file_line_count = 1148
+        diff_limit = max(50, min(file_line_count // 10, 120))
+        assert diff_limit == 114
+        assert 59 <= diff_limit  # 59-line diff should now be accepted
+
+    def test_very_large_file_gets_ceiling(self):
+        """Files over 1200 lines should get the 120-line ceiling."""
+        file_line_count = 2000
+        diff_limit = max(50, min(file_line_count // 10, 120))
+        assert diff_limit == 120
+
+    def test_empty_file_gets_floor(self):
+        """Empty file should get the 50-line floor."""
+        file_line_count = 0
+        diff_limit = max(50, min(file_line_count // 10, 120))
+        assert diff_limit == 50
