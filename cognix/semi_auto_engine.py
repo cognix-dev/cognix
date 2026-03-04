@@ -5159,23 +5159,6 @@ Flask + React Fullstack:
                                         errors_fixed = error_count_before - error_count_after
                                         if error_count_after == 0 and warning_count_after == 0:
                                             logger.debug(f"  ✓ All linter errors resolved!")
-                                            # 0でないカテゴリのみ表示（簡潔化）
-                                            error_parts = []
-                                            if breakdown['critical'] > 0:
-                                                error_parts.append(f"Critical={breakdown['critical']}")
-                                            if breakdown['high'] > 0:
-                                                error_parts.append(f"High={breakdown['high']}")
-                                            if breakdown['medium'] > 0:
-                                                error_parts.append(f"Medium={breakdown['medium']}")
-                                            if breakdown['low'] > 0:
-                                                error_parts.append(f"Low={breakdown['low']} (style issues)")
-                                            if breakdown['env'] > 0:
-                                                error_parts.append(f"Env={breakdown['env']}")
-                                            if breakdown['warnings'] > 0:
-                                                error_parts.append(f"Warnings={breakdown['warnings']}")
-                                            
-                                            if error_parts:
-                                                logger.debug(f"  Error Types: {', '.join(error_parts)}")
 
                                         
                                     except Exception as e:
@@ -5889,11 +5872,14 @@ Flask + React Fullstack:
                 logger.debug("[Quality Fix] LLM manager not available")
                 return None
             
-            logger.debug("[Quality Fix] Sending fix request to LLM...")
+            # ファイルサイズに基づく動的 max_tokens 計算
+            total_code_chars = sum(len(v) for v in generated_code.values())
+            quality_max_tokens = max(8000, min(total_code_chars // 3 + 2000, 32000))
+            logger.debug(f"[Quality Fix] Sending fix request to LLM... (max_tokens={quality_max_tokens}, code_chars={total_code_chars})")
             response = self.llm_manager.generate_response(
                 prompt=prompt,
                 system_prompt="You are a code quality improvement expert. Fix placeholder code with proper implementations.",
-                max_tokens=8000
+                max_tokens=quality_max_tokens
             )
             
             # レスポンス解析
@@ -6031,19 +6017,35 @@ Generate complete, production-ready implementations. No placeholders or TODO com
             # <file path='...'>...</file> パターンを抽出
             file_pattern = r"<file\s+path=['\"]([^'\"]+)['\"]>(.*?)</file>"
             matches = re.findall(file_pattern, full_text, re.DOTALL)
-            
-            if not matches:
-                logger.debug("[Parse Response] No <file> tags found")
-                return None
-            
+
             files = {}
             for filename, code in matches:
                 # コードの前後の空白を削除
                 code = code.strip()
                 files[filename] = code
                 logger.debug(f"[Parse Response] Extracted {filename} ({len(code)} chars)")
-            
-            return files if files else None
+
+            # 切り詰め回復: 最後の </file> 以降に <file path='...'> が残っている場合
+            last_close_pos = full_text.rfind('</file>')
+            search_start = last_close_pos + len('</file>') if last_close_pos >= 0 else 0
+            remaining = full_text[search_start:]
+            truncated_pattern = r"<file\s+path=['\"]([^'\"]+)['\"]>(.*)"
+            truncated_match = re.search(truncated_pattern, remaining, re.DOTALL)
+            if truncated_match:
+                t_filename = truncated_match.group(1)
+                t_code = truncated_match.group(2).strip()
+                if t_code and len(t_code) >= 10:
+                    files[t_filename] = t_code
+                    logger.warning(
+                        f"[Parse Response] Truncation recovery: extracted {t_filename} "
+                        f"({len(t_code)} chars, no closing </file>)"
+                    )
+
+            if not files:
+                logger.debug("[Parse Response] No <file> tags found")
+                return None
+
+            return files
             
         except Exception as e:
             logger.error(f"[Parse Response] Error: {e}")

@@ -6,6 +6,8 @@ Covers:
 - Fix B2: Step 2.5 truncated code block detection
 - Fix B3: __code__ key mapping to error file
 - Fix C: Quality fix markdown fallback parsing
+- Fix D: Truncated XML <file> tag recovery in _parse_llm_response
+- Fix F: Quality fix dynamic max_tokens calculation
 """
 
 import pytest
@@ -22,6 +24,7 @@ def _make_engine_stub():
     engine._clean_generated_code = SemiAutoEngine._clean_generated_code.__get__(engine)
     engine._aggressive_markdown_removal = SemiAutoEngine._aggressive_markdown_removal.__get__(engine)
     engine._verify_and_fix_markdown_markers = SemiAutoEngine._verify_and_fix_markdown_markers.__get__(engine)
+    engine._parse_llm_response = SemiAutoEngine._parse_llm_response.__get__(engine)
     engine._no_framework_mode = True
     engine.logger = MagicMock()
     engine.extractor = None
@@ -265,3 +268,127 @@ class TestQualityFixFallback:
 
         assert 'main.py' in fixed_files
         assert fixed_files['main.py'] == 'def real(): return 42'
+
+
+# ── Fix D: Truncated XML <file> Tag Recovery ─────────────────
+
+
+class TestTruncatedXMLRecovery:
+    """Verify _parse_llm_response recovers from truncated <file> tags."""
+
+    def test_truncated_file_tag_recovery(self, engine):
+        """<file path='...'> with NO closing </file> should still extract code."""
+        response = (
+            "Here is the fixed code:\n\n"
+            "<file path='main.py'>\n"
+            "#!/usr/bin/env python3\n"
+            "import os\n"
+            "import flask\n"
+            "\n"
+            "app = flask.Flask(__name__)\n"
+            "# rest of code truncated by max_tokens"
+        )
+        result = engine._parse_llm_response(response)
+        assert result is not None
+        assert "main.py" in result
+        assert "import os" in result["main.py"]
+        assert "import flask" in result["main.py"]
+
+    def test_truncated_large_file(self, engine):
+        """Large truncated <file> block should be recovered."""
+        code_lines = [f"line_{i} = {i}" for i in range(200)]
+        code_text = "\n".join(code_lines)
+        response = f"<file path='app.py'>\n{code_text}"
+        result = engine._parse_llm_response(response)
+        assert result is not None
+        assert "app.py" in result
+        assert "line_0 = 0" in result["app.py"]
+        assert "line_199 = 199" in result["app.py"]
+
+    def test_complete_file_tag_still_works(self, engine):
+        """Normal response with closing </file> should work as before."""
+        response = (
+            "<file path='main.py'>\n"
+            "print('hello')\n"
+            "</file>\n"
+        )
+        result = engine._parse_llm_response(response)
+        assert result is not None
+        assert "main.py" in result
+        assert "print('hello')" in result["main.py"]
+
+    def test_truncated_too_short_skipped(self, engine):
+        """Truncated code under 10 chars should be skipped."""
+        response = "<file path='main.py'>\nhi"
+        result = engine._parse_llm_response(response)
+        assert result is None
+
+    def test_multiple_files_one_truncated(self, engine):
+        """First file complete, second file truncated → both extracted."""
+        response = (
+            "<file path='a.py'>\nprint('a')\n</file>\n"
+            "<file path='b.py'>\n"
+            "import os\n"
+            "import sys\n"
+            "# truncated here"
+        )
+        result = engine._parse_llm_response(response)
+        assert result is not None
+        assert "a.py" in result
+        assert "print('a')" in result["a.py"]
+        assert "b.py" in result
+        assert "import os" in result["b.py"]
+
+    def test_no_file_tags_returns_none(self, engine):
+        """Response with no <file> tags should return None."""
+        response = "Just some text with no file tags."
+        result = engine._parse_llm_response(response)
+        assert result is None
+
+    def test_double_quote_path(self, engine):
+        """<file path="..."> with double quotes should also work for truncation."""
+        response = (
+            '<file path="main.py">\n'
+            "def hello():\n"
+            "    return 'world'\n"
+            "# truncated"
+        )
+        result = engine._parse_llm_response(response)
+        assert result is not None
+        assert "main.py" in result
+
+
+# ── Fix F: Quality Fix Dynamic max_tokens ─────────────────────
+
+
+class TestQualityFixDynamicMaxTokens:
+    """Verify quality fix uses dynamic max_tokens based on code size."""
+
+    def test_small_code_gets_floor(self):
+        """Small code files should get 8000 floor."""
+        generated_code = {"main.py": "x" * 5000}
+        total_code_chars = sum(len(v) for v in generated_code.values())
+        quality_max_tokens = max(8000, min(total_code_chars // 3 + 2000, 32000))
+        assert quality_max_tokens == 8000
+
+    def test_medium_code_scales(self):
+        """978-line Stripe file (~35K chars) should get ~13K tokens."""
+        generated_code = {"main.py": "x" * 35000}
+        total_code_chars = sum(len(v) for v in generated_code.values())
+        quality_max_tokens = max(8000, min(total_code_chars // 3 + 2000, 32000))
+        assert quality_max_tokens == 13666
+        assert quality_max_tokens > 8000  # Must exceed old hardcoded value
+
+    def test_large_code_gets_ceiling(self):
+        """Very large code should cap at 32000."""
+        generated_code = {"main.py": "x" * 100000}
+        total_code_chars = sum(len(v) for v in generated_code.values())
+        quality_max_tokens = max(8000, min(total_code_chars // 3 + 2000, 32000))
+        assert quality_max_tokens == 32000
+
+    def test_multi_file_code_summed(self):
+        """Multiple files' sizes should be summed."""
+        generated_code = {"a.py": "x" * 20000, "b.py": "x" * 15000}
+        total_code_chars = sum(len(v) for v in generated_code.values())
+        quality_max_tokens = max(8000, min(total_code_chars // 3 + 2000, 32000))
+        assert quality_max_tokens == 13666  # 35000 // 3 + 2000
