@@ -14516,8 +14516,9 @@ IMPORTANT RULES:
             placeholder_count, detected_lines = self._detect_placeholders_in_comments(code, ext)
             
             if placeholder_count > 0:
-                # プレースホルダーがあると大幅減点
-                placeholder_score = max(0.1, 1.0 - (placeholder_count * 0.3))
+                # プレースホルダーペナルティ（段階的減点）
+                # 1件: 0.85, 2件: 0.70, 3件: 0.55, 5件+: 0.30（最低値）
+                placeholder_score = max(0.3, 1.0 - (placeholder_count * 0.15))
                 all_issues.append(f"{filename}: {placeholder_count} placeholder(s) detected")
                 logger.debug(f"[Quality] {filename}: Found {placeholder_count} placeholders in comments, score={placeholder_score}")
                 # 検出されたコメント行を詳細ログに出力
@@ -22897,6 +22898,8 @@ Return ONLY the fixed JavaScript code wrapped in ```javascript``` blocks.
                 secret_issues = secret_scanner.scan(all_files)
                 if secret_issues:
                     logger.debug(f"[Secret Scanner] Found {len(secret_issues)} hardcoded secret(s)")
+                else:
+                    logger.debug(f"[Secret Scanner] Scanned {len(all_files)} file(s), 0 secret(s) found")
                     for si in secret_issues[:5]:
                         logger.debug(f"  - {si['file']}:{si['line']} {si['pattern_name']} ({si['severity']})")
 
