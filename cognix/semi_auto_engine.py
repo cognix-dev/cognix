@@ -23557,6 +23557,15 @@ Return ONLY the JSON array, no other text."""
                 return {'issues': [], 'error': False}
             
             logger.debug(f"[Comprehensive Review] Detected {len(issues)} issue(s)")
+
+            # Per-issue detail logging for debuggability
+            for i, issue in enumerate(issues):
+                issue_file = issue.get('file', 'unknown')
+                issue_type = issue.get('type', '?')
+                issue_line = issue.get('line', '?')
+                issue_desc = issue.get('description', 'No description')[:80]
+                logger.debug(f"  [{issue_type}] {issue_file}:{issue_line} - {issue_desc}")
+
             return {'issues': issues, 'error': False}
             
         except json.JSONDecodeError as e:

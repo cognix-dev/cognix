@@ -541,3 +541,88 @@ class TestDynamicDiffLimit:
         file_line_count = 0
         diff_limit = max(50, min(file_line_count // 10, 120))
         assert diff_limit == 50
+
+
+# -- Fix I: File Score When No Files Required ------------------
+
+
+class TestFileScoreNoRequiredFiles:
+    """_calculate_file_score の required_count=0 時の動作検証。
+
+    Bug: required_count=0 時に min(1.0, generated_count/3.0) で
+    1ファイルプロジェクトを不当にペナルティ (0.33)。
+    Fix: return 1.0 （_calculate_feature_score と同じ方針）。
+    """
+
+    def _make_validator(self):
+        """Create a RequirementValidator instance for testing."""
+        from cognix.requirement_validator import RequirementValidator
+        return RequirementValidator()
+
+    def test_no_required_single_generated(self):
+        """required_count=0, generated_count=1 should return 1.0 (was 0.33)."""
+        v = self._make_validator()
+        score = v._calculate_file_score(
+            required_count=0, generated_count=1, missing_count=0
+        )
+        assert score == 1.0
+
+    def test_no_required_multiple_generated(self):
+        """required_count=0, generated_count=3 should return 1.0."""
+        v = self._make_validator()
+        score = v._calculate_file_score(
+            required_count=0, generated_count=3, missing_count=0
+        )
+        assert score == 1.0
+
+    def test_no_required_zero_generated(self):
+        """required_count=0, generated_count=0 should return 1.0."""
+        v = self._make_validator()
+        score = v._calculate_file_score(
+            required_count=0, generated_count=0, missing_count=0
+        )
+        assert score == 1.0
+
+    def test_required_all_present(self):
+        """required_count=3, missing=0 should return 1.0 (no regression)."""
+        v = self._make_validator()
+        score = v._calculate_file_score(
+            required_count=3, generated_count=3, missing_count=0
+        )
+        assert score == 1.0
+
+    def test_required_some_missing(self):
+        """required_count=3, missing=1 should return ~0.667 (no regression)."""
+        v = self._make_validator()
+        score = v._calculate_file_score(
+            required_count=3, generated_count=2, missing_count=1
+        )
+        assert abs(score - 0.6667) < 0.01
+
+    def test_required_all_missing(self):
+        """required_count=3, missing=3 should return 0.0 (no regression)."""
+        v = self._make_validator()
+        score = v._calculate_file_score(
+            required_count=3, generated_count=0, missing_count=3
+        )
+        assert score == 0.0
+
+    def test_end_to_end_stripe_goal(self):
+        """Stripe API goal with 1 file → fulfillment_score=1.0, is_complete=True.
+
+        Test code must contain 'api' keyword to satisfy feature matching
+        (_check_implemented_features uses substring matching).
+        """
+        v = self._make_validator()
+        result = v.validate_requirements(
+            goal="Create a Python script using the Stripe payment API",
+            generated_files={"main.py": (
+                "import stripe\n\n"
+                "def create_payment_api():\n"
+                "    \"\"\"Stripe payment API integration.\"\"\"\n"
+                "    stripe.api_key = 'sk_test_xxx'\n"
+                "    return stripe.PaymentIntent.create(amount=1000, currency='usd')\n"
+            )}
+        )
+        assert result['is_complete'] is True
+        assert result['fulfillment_score'] == 1.0

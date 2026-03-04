@@ -840,7 +840,7 @@ class RequirementValidator:
     ) -> float:
         """ファイル充足度スコアを計算"""
         if required_count == 0:
-            return min(1.0, generated_count / 3.0)
+            return 1.0  # 要件なし → ペナルティなし（_calculate_feature_score と同じ方針）
         
         fulfillment_rate = (required_count - missing_count) / required_count
         
