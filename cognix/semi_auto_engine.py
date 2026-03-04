@@ -5903,7 +5903,18 @@ Flask + React Fullstack:
             else:
                 response_text = str(response)
             fixed_files = self._parse_llm_response(response_text)
-            
+
+            # Fallback: XMLパースに失敗した場合、Markdownコードブロック抽出を試行
+            if not fixed_files:
+                logger.debug("[Quality Fix] XML parsing failed, trying code block extraction")
+                fixed_files = self._extract_code_blocks(response_text)
+                # __code__ を対象ファイルにマッピング
+                if fixed_files and '__code__' in fixed_files and len(fixed_files) == 1:
+                    issue_filenames = list(set(i['filename'] for i in placeholder_issues))
+                    if len(issue_filenames) == 1:
+                        fixed_files[issue_filenames[0]] = fixed_files.pop('__code__')
+                        logger.debug(f"[Quality Fix] Mapped __code__ to: {issue_filenames[0]}")
+
             if fixed_files:
                 # 修正されたファイルのみ更新
                 updated_code = generated_code.copy()
@@ -5913,13 +5924,13 @@ Flask + React Fullstack:
                         updated_code[filename] = code
                         actually_updated += 1
                         logger.debug(f"[Quality Fix] Updated {filename}")
-                
+
                 if actually_updated > 0:
                     return updated_code
                 else:
                     logger.debug("[Quality Fix] All fixes were skipped (no matching files)")
                     return None
-            
+
             logger.debug("[Quality Fix] No files returned from LLM")
             return None
             
@@ -10379,11 +10390,20 @@ IMPORTANT:
                 last_fence_pos = section.rfind('```')
             
             if last_fence_pos <= code_start:
+                # 切り詰め回復: 閉じ ``` がない場合、セクション末尾まで取得
+                # LLMレスポンスがmax_tokensで切断された場合に発生
+                code = section[code_start:].strip()
+                if code and len(code) >= 10:
+                    files[filename] = code
+                    logger.warning(
+                        f"[Extract:Pattern1-Truncated] Extracted {filename}: {len(code)} chars "
+                        f"(no closing ``` - response may be truncated)"
+                    )
                 continue
-            
+
             # 6. コードを抽出（最初の```の後から最後の```の前まで）
             code = section[code_start:last_fence_pos].strip()
-            
+
             if code and len(code) >= 10:
                 files[filename] = code
                 logger.debug(f"[Extract:Pattern1-SectionBased] Extracted {filename}: {len(code)} chars")
@@ -10669,6 +10689,23 @@ IMPORTANT:
             else:
                 logger.debug(f"[_extract_code_blocks] Step2: Code became empty after cleaning")
         
+        # ==========================================
+        # ステップ2.5: 切り詰め対策 - 閉じ```なしのコードブロック
+        # ==========================================
+        # LLMレスポンスがmax_tokensで切断され、閉じ```が欠落した場合の回復
+        truncated_pattern = r'```(?:[a-zA-Z0-9]+)?\s*\n(.+)$'
+        truncated_match = re.search(truncated_pattern, response, re.DOTALL)
+        if truncated_match:
+            truncated_code = truncated_match.group(1).strip()
+            if truncated_code and len(truncated_code) >= 10:
+                logger.warning(
+                    f"[_extract_code_blocks] Step2.5: Truncated code block recovery, "
+                    f"{len(truncated_code)} chars"
+                )
+                cleaned_code = self._clean_generated_code(truncated_code)
+                if cleaned_code.strip():
+                    return {'__code__': cleaned_code.strip()}
+
         # ==========================================
         # ステップ3: コードブロックがない場合
         # ==========================================
@@ -11392,19 +11429,19 @@ Return ONLY the fixed code in this format:
         try:
             logger.debug("[LLM Fix] Requesting error fixes from LLM...")
             
-            # 修正: 2025-12-29
-            # 問題: max_tokens未指定でデフォルト値（4096）が使用され、
-            #       大きなファイルの修正結果が途切れる
-            # 対策: max_tokens=16000 を明示的に指定
-            #
-            # また、エラーファイル数に応じてmax_tokensを調整
+            # 修正: 2025-12-29 → 2026-03-04 動的max_tokens計算
+            # 問題: 大きなファイル(952行~43K chars)でmax_tokens=8000は不足、
+            #       LLMレスポンスが切り詰められ閉じ```が欠落→コード抽出失敗
+            # 対策: ファイルサイズから必要トークン数を推定し動的に設定
             error_file_count = len(set(err['file'] for err in errors))
-            if error_file_count >= 3:
-                fix_max_tokens = 16000
-            elif error_file_count == 2:
-                fix_max_tokens = 16000
-            else:
-                fix_max_tokens = 8000
+            total_code_chars = sum(
+                len(generated_files.get(f, ''))
+                for f in set(err['file'] for err in errors)
+                if f in generated_files
+            )
+            # ~3 chars/token + 2000 tokens buffer (LLM説明・ヘッダー等)
+            # Floor: 8000, Ceiling: 32000
+            fix_max_tokens = max(8000, min(total_code_chars // 3 + 2000, 32000))
             
             logger.debug(f"[LLM Fix] Using max_tokens={fix_max_tokens} for {error_file_count} file(s)")
             
@@ -11423,10 +11460,20 @@ Return ONLY the fixed code in this format:
                 response_text = str(response)
             
             logger.debug(f"[LLM Fix] Response received, length: {len(response_text)}")
-            
+
             # 修正されたコードを抽出
             fixed_files = self._extract_code_blocks(response_text)
-            
+
+            # __code__ キーの自動マッピング: 単一ファイル/単一コードブロックの場合、
+            # エラー対象ファイルに自動的に紐付ける
+            if '__code__' in fixed_files and len(fixed_files) == 1:
+                error_filenames = list(set(
+                    err['file'] for err in errors if err['file'] in generated_files
+                ))
+                if len(error_filenames) == 1:
+                    fixed_files[error_filenames[0]] = fixed_files.pop('__code__')
+                    logger.debug(f"[LLM Fix] Mapped __code__ to: {error_filenames[0]}")
+
             if fixed_files:
                 # 🆕 新規ファイル除外: 元のファイルセットにないファイルは捨てる
                 original_filenames = set(generated_files.keys())
