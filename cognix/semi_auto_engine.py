@@ -5111,7 +5111,10 @@ Flask + React Fullstack:
                                     try:
                                         logger.debug("[Linter] Re-running linter after auto-fix...")
                                         recheck_result = linter.lint_generated_code(generated_code)
-                                        
+                                        if not recheck_result or not isinstance(recheck_result, dict):
+                                            logger.warning("[Linter] Re-check returned invalid result, skipping")
+                                            raise ValueError("lint_generated_code returned invalid result")
+
                                         # 修正前後のエラー数を比較
                                         error_count_before = len(lint_result.get('errors', []))
                                         warning_count_before = len(lint_result.get('warnings', []))
@@ -5162,7 +5165,7 @@ Flask + React Fullstack:
 
                                         
                                     except Exception as e:
-                                        logger.debug(f"[Linter] Re-check failed: {e}")
+                                        logger.warning(f"[Linter] Re-check failed: {e}")
                                         # lint_resultはAuto-fix前のままにする（fallback）
 
                                 else:
@@ -5630,7 +5633,10 @@ Flask + React Fullstack:
                         try:
                             logger.debug("[Linter Retry] Re-running linter after auto-fix...")
                             recheck_result = linter.lint_generated_code(generated_code)
-                            
+                            if not recheck_result or not isinstance(recheck_result, dict):
+                                logger.warning("[Linter Retry] Re-check returned invalid result, skipping")
+                                raise ValueError("lint_generated_code returned invalid result")
+
                             error_count_after = len(recheck_result.get('errors', []))
                             warning_count_after = len(recheck_result.get('warnings', []))
                             
@@ -5678,8 +5684,8 @@ Flask + React Fullstack:
                                     logger.debug("  These are minor style issues that can be safely ignored.")
                         
                         except Exception as e:
-                            logger.debug(f"[Linter Retry] Re-check failed: {e}")
-                    
+                            logger.warning(f"[Linter Retry] Re-check failed: {e}")
+
                     else:
                         logger.debug("[Linter Retry] Auto-fix failed")
                         logger.debug("  ⚠  Auto-fix failed. Manual review required.")
@@ -8588,7 +8594,10 @@ Generate complete, production-ready code for {missing_file}.
                                 try:
                                     logger.debug("[Linter] Re-running linter after auto-fix...")
                                     recheck_result = linter.lint_generated_code(all_files)
-                                    
+                                    if not recheck_result or not isinstance(recheck_result, dict):
+                                        logger.warning("[Linter] Re-check returned invalid result, skipping")
+                                        raise ValueError("lint_generated_code returned invalid result")
+
                                     error_count_before = len(lint_result.get('errors', []))
                                     warning_count_before = len(lint_result.get('warnings', []))
                                     error_count_after = len(recheck_result.get('errors', []))
@@ -8637,8 +8646,8 @@ Generate complete, production-ready code for {missing_file}.
                                     logger.debug(f"[Linter] Re-check complete: {error_count_after} errors, {warning_count_after} warnings")
                                     
                                 except Exception as e:
-                                    logger.debug(f"[Linter] Re-check failed: {e}")
-                            
+                                    logger.warning(f"[Linter] Re-check failed: {e}")
+
                             else:
                                 logger.debug("[Linter] Auto-fix failed")
                                 logger.debug("  ⚠  Auto-fix failed. Manual review required.")
