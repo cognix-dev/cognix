@@ -3255,58 +3255,60 @@ MANDATORY REACT STRUCTURE:
     
     def _check_unimplemented_methods(self, files: Dict[str, str]) -> List[str]:
         """
-        ⭐ 修正B: 未実装メソッド（pass only）を検出
-        
-        def method_name(...):
-            pass
-        
-        または
-        
-        def method_name(...):
-            '''docstring'''
-            pass
-        
-        のパターンを検出し、警告を返す。
-        
+        未実装メソッド（pass only）をAST解析で検出。
+
+        以下のパターンを検出:
+          - def method(): pass
+          - def method(): '''docstring''' ; pass
+
         Args:
             files: {filename: code}
-        
+
         Returns:
             未実装メソッドの警告リスト
         """
         issues = []
-        
+
         for filename, code in files.items():
             if not filename.endswith('.py'):
                 continue
-            
-            # パターン1: def xxx(...): の後に pass のみ（docstringなし）
-            # パターン2: def xxx(...): の後に docstring + pass
-            # 
-            # 正規表現で検出:
-            # def メソッド名(引数): 
-            #     (オプション: """docstring""" または '''docstring''')
-            #     pass
-            
-            pattern = re.compile(
-                r'def\s+(\w+)\s*\([^)]*\)\s*(?:->\s*[^:]+)?\s*:\s*\n'  # def xxx(...) -> type:
-                r'(?:\s*(?:"""[\s\S]*?"""|\'\'\'[\s\S]*?\'\'\')\s*\n)?'  # optional docstring
-                r'\s*pass\s*(?:\n|$)',  # pass
-                re.MULTILINE
-            )
-            
-            matches = pattern.findall(code)
-            
-            for method_name in matches:
+
+            try:
+                tree = ast.parse(code)
+            except SyntaxError:
+                continue
+
+            for node in ast.walk(tree):
+                if not isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+                    continue
+
+                method_name = node.name
+
                 # __init__ や __repr__ などの特殊メソッドで pass のみは許容
                 if method_name.startswith('__') and method_name.endswith('__'):
                     continue
-                
-                issues.append(
-                    f"{filename}: Method '{method_name}()' is not implemented (pass only)"
-                )
-                logger.debug(f"[Consistency] Unimplemented method detected: {filename}:{method_name}()")
-        
+
+                body = node.body
+                is_pass_only = False
+
+                if len(body) == 1 and isinstance(body[0], ast.Pass):
+                    # def foo(): pass
+                    is_pass_only = True
+                elif len(body) == 2:
+                    # def foo(): """docstring""" ; pass
+                    first_is_docstring = (
+                        isinstance(body[0], ast.Expr)
+                        and isinstance(body[0].value, (ast.Constant, ast.Str))
+                    )
+                    if first_is_docstring and isinstance(body[1], ast.Pass):
+                        is_pass_only = True
+
+                if is_pass_only:
+                    issues.append(
+                        f"{filename}: Method '{method_name}()' is not implemented (pass only)"
+                    )
+                    logger.debug(f"[Consistency] Unimplemented method detected: {filename}:{method_name}()")
+
         return issues
 
 
@@ -4946,6 +4948,7 @@ Flask + React Fullstack:
                     
                     # LLMで自動修正を試行
                     MAX_IMPORT_FIX_ATTEMPTS = 2
+                    original_code_before_import_fix = generated_code  # Rollback point
                     for attempt in range(MAX_IMPORT_FIX_ATTEMPTS):
                         logger.debug(f"[Runtime Import] Fix attempt {attempt + 1}/{MAX_IMPORT_FIX_ATTEMPTS}")
                         
@@ -4978,9 +4981,10 @@ Flask + React Fullstack:
                         else:
                             logger.debug(f"[Runtime Import] Fix attempt {attempt + 1} failed")
                     else:
-                        # 全ての試行が失敗
-                        logger.debug(f"   ⚠ Could not auto-fix. Manual review required.")
-                        logger.debug("[Runtime Import] All fix attempts failed")
+                        # 全ての試行が失敗 → 元のコードに復元
+                        generated_code = original_code_before_import_fix
+                        logger.debug(f"   ⚠ Could not auto-fix. Rolled back to original code.")
+                        logger.debug("[Runtime Import] All fix attempts failed, restored original")
 
                 # ==========================================
                 # 🛡️ Near-Identical File Preservation
@@ -5103,8 +5107,9 @@ Flask + React Fullstack:
                                 if fixed_files:
                                     logger.debug("[Linter] Auto-fix successful")
                                     logger.debug(f"{Icon.GEAR.value} Linter errors have been auto-fixed")
+                                    original_code_before_lint_fix = generated_code  # Rollback point for regression
                                     generated_code = fixed_files
-                                    
+
                                     # ==========================================
                                     # Auto-fix後に再度Lintを実行
                                     # ==========================================
@@ -5120,50 +5125,57 @@ Flask + React Fullstack:
                                         warning_count_before = len(lint_result.get('warnings', []))
                                         error_count_after = len(recheck_result.get('errors', []))
                                         warning_count_after = len(recheck_result.get('warnings', []))
-                                        
-                                        # 修正効果を表示
-                                        logger.debug("")  # 空行
-                                        logger.debug("  After auto-fix:")
-                                        logger.debug(hud_comp.lint_summary_line(0, warning_count_after, error_count_after))
-                                        
-                                        # エラー内訳を表示（Option A: 簡潔版）
-                                        if error_count_after > 0 or warning_count_after > 0:
-                                            breakdown = self._get_error_breakdown(
-                                                recheck_result.get('errors', []),
-                                                recheck_result.get('warnings', [])
-                                            )
-                                            # 0でないカテゴリのみ表示（簡潔化）
-                                            error_parts = []
-                                            if breakdown['critical'] > 0:
-                                                error_parts.append(f"Critical={breakdown['critical']}")
-                                            if breakdown['high'] > 0:
-                                                error_parts.append(f"High={breakdown['high']}")
-                                            if breakdown['medium'] > 0:
-                                                error_parts.append(f"Medium={breakdown['medium']}")
-                                            if breakdown['low'] > 0:
-                                                error_parts.append(f"Low={breakdown['low']} (style issues)")
-                                            if breakdown['env'] > 0:
-                                                error_parts.append(f"Env={breakdown['env']}")
-                                            if breakdown['warnings'] > 0:
-                                                error_parts.append(f"Warnings={breakdown['warnings']}")
-                                            
-                                            if error_parts:
-                                                logger.debug(f"  Error Types: {', '.join(error_parts)}")
 
-                                        
-                                        # Quality評価用にlint_resultを更新（重要！）
-                                        lint_result = recheck_result
-                                        
-                                        # ⭐ Zen HUD: Auto-fix後のLintエラー数を記録
-                                        self._zen_summary["lint"]["final"] = error_count_after
-                                        self._zen_summary["lint"]["fixed"] = (error_count_after < error_count_before)
-                                        
-                                        # 修正効果のメッセージ
-                                        errors_fixed = error_count_before - error_count_after
-                                        if error_count_after == 0 and warning_count_after == 0:
-                                            logger.debug(f"  ✓ All linter errors resolved!")
+                                        # Regression check: auto-fixでエラーが増加した場合、元のコードに戻す
+                                        if error_count_after > error_count_before:
+                                            logger.debug(f"  ⚠ Auto-fix REGRESSION: {error_count_before} → {error_count_after} errors")
+                                            logger.debug("[Linter] Rolling back auto-fix due to regression")
+                                            generated_code = original_code_before_lint_fix
+                                            # lint_resultは変更しない（Auto-fix前のまま）
+                                        else:
+                                            # 修正効果を表示
+                                            logger.debug("")  # 空行
+                                            logger.debug("  After auto-fix:")
+                                            logger.debug(hud_comp.lint_summary_line(0, warning_count_after, error_count_after))
 
-                                        
+                                            # エラー内訳を表示（Option A: 簡潔版）
+                                            if error_count_after > 0 or warning_count_after > 0:
+                                                breakdown = self._get_error_breakdown(
+                                                    recheck_result.get('errors', []),
+                                                    recheck_result.get('warnings', [])
+                                                )
+                                                # 0でないカテゴリのみ表示（簡潔化）
+                                                error_parts = []
+                                                if breakdown['critical'] > 0:
+                                                    error_parts.append(f"Critical={breakdown['critical']}")
+                                                if breakdown['high'] > 0:
+                                                    error_parts.append(f"High={breakdown['high']}")
+                                                if breakdown['medium'] > 0:
+                                                    error_parts.append(f"Medium={breakdown['medium']}")
+                                                if breakdown['low'] > 0:
+                                                    error_parts.append(f"Low={breakdown['low']} (style issues)")
+                                                if breakdown['env'] > 0:
+                                                    error_parts.append(f"Env={breakdown['env']}")
+                                                if breakdown['warnings'] > 0:
+                                                    error_parts.append(f"Warnings={breakdown['warnings']}")
+
+                                                if error_parts:
+                                                    logger.debug(f"  Error Types: {', '.join(error_parts)}")
+
+
+                                            # Quality評価用にlint_resultを更新（重要！）
+                                            lint_result = recheck_result
+
+                                            # ⭐ Zen HUD: Auto-fix後のLintエラー数を記録
+                                            self._zen_summary["lint"]["final"] = error_count_after
+                                            self._zen_summary["lint"]["fixed"] = (error_count_after < error_count_before)
+
+                                            # 修正効果のメッセージ
+                                            errors_fixed = error_count_before - error_count_after
+                                            if error_count_after == 0 and warning_count_after == 0:
+                                                logger.debug(f"  ✓ All linter errors resolved!")
+
+
                                     except Exception as e:
                                         logger.warning(f"[Linter] Re-check failed: {e}")
                                         # lint_resultはAuto-fix前のままにする（fallback）
@@ -8522,19 +8534,20 @@ Generate complete, production-ready code for {missing_file}.
                 
                 # LLMで自動修正を試行
                 MAX_IMPORT_FIX_ATTEMPTS = 2
+                original_files_before_import_fix = dict(all_files) if isinstance(all_files, dict) else all_files  # Rollback point
                 for attempt in range(MAX_IMPORT_FIX_ATTEMPTS):
                     logger.debug(f"[Runtime Import] Fix attempt {attempt + 1}/{MAX_IMPORT_FIX_ATTEMPTS}")
-                    
+
                     fixed_code = self._fix_import_error_with_llm(
                         all_files,
                         import_error,
                         failing_file
                     )
-                    
+
                     if fixed_code:
                         # 修正後に再テスト
                         retry_success, retry_error, retry_file = self._validate_runtime_import(fixed_code)
-                        
+
                         # 外部パッケージ不足になった場合もOK
                         if retry_success:
                             if retry_error and retry_error.startswith("EXTERNAL_PACKAGE:"):
@@ -8554,10 +8567,11 @@ Generate complete, production-ready code for {missing_file}.
                     else:
                         logger.debug(f"[Runtime Import] Fix attempt {attempt + 1} failed")
                 else:
-                    # 全ての試行が失敗
-                    logger.debug(f"   ⚠ Could not auto-fix. Manual review required.")
-                    logger.debug("[Runtime Import] All fix attempts failed")
-            
+                    # 全ての試行が失敗 → 元のコードに復元
+                    all_files = original_files_before_import_fix
+                    logger.debug(f"   ⚠ Could not auto-fix. Rolled back to original code.")
+                    logger.debug("[Runtime Import] All fix attempts failed, restored original")
+
             # Step 8: Lint & Auto-fix
             hud.mark("Lint & Auto-fix")
             
@@ -8601,8 +8615,9 @@ Generate complete, production-ready code for {missing_file}.
                             if fixed_files:
                                 logger.debug("[Linter] Auto-fix successful")
                                 logger.debug(f"{Icon.GEAR.value} Linter errors have been auto-fixed")
+                                original_files_before_lint_fix = dict(all_files) if isinstance(all_files, dict) else all_files  # Rollback point
                                 all_files = fixed_files
-                                
+
                                 try:
                                     logger.debug("[Linter] Re-running linter after auto-fix...")
                                     recheck_result = linter.lint_generated_code(all_files)
@@ -8614,49 +8629,56 @@ Generate complete, production-ready code for {missing_file}.
                                     warning_count_before = len(lint_result.get('warnings', []))
                                     error_count_after = len(recheck_result.get('errors', []))
                                     warning_count_after = len(recheck_result.get('warnings', []))
-                                    
-                                    logger.debug("")
-                                    logger.debug("  After auto-fix:")
-                                    logger.debug(hud_comp.lint_summary_line(0, warning_count_after, error_count_after))
-                                    
-                                    if error_count_after > 0 or warning_count_after > 0:
-                                        breakdown = self._get_error_breakdown(
-                                            recheck_result.get('errors', []),
-                                            recheck_result.get('warnings', [])
-                                        )
-                                        error_parts = []
-                                        if breakdown['critical'] > 0:
-                                            error_parts.append(f"Critical={breakdown['critical']}")
-                                        if breakdown['high'] > 0:
-                                            error_parts.append(f"High={breakdown['high']}")
-                                        if breakdown['medium'] > 0:
-                                            error_parts.append(f"Medium={breakdown['medium']}")
-                                        if breakdown['low'] > 0:
-                                            error_parts.append(f"Low={breakdown['low']} (style issues)")
-                                        if breakdown['env'] > 0:
-                                            error_parts.append(f"Env={breakdown['env']}")
-                                        if breakdown['warnings'] > 0:
-                                            error_parts.append(f"Warnings={breakdown['warnings']}")
-                                        
-                                        if error_parts:
-                                            logger.debug(f"  Error Types: {', '.join(error_parts)}")
-                                    
-                                    lint_result = recheck_result
-                                    
-                                    # ⭐ Zen HUD: Multi-stage Auto-fix後のLintエラー数を記録
-                                    self._zen_summary["lint"]["final"] = error_count_after
-                                    self._zen_summary["lint"]["fixed"] = (error_count_after < error_count_before)
-                                    
-                                    errors_fixed = error_count_before - error_count_after
-                                    if error_count_after == 0 and warning_count_after == 0:
-                                        logger.debug(f"  ✓ All linter errors resolved!")
-                                    elif errors_fixed > 0:
-                                        logger.debug(f"  ✓ {errors_fixed} errors fixed, {error_count_after} remaining")
+
+                                    # Regression check: auto-fixでエラーが増加した場合、元のコードに戻す
+                                    if error_count_after > error_count_before:
+                                        logger.debug(f"  ⚠ Auto-fix REGRESSION: {error_count_before} → {error_count_after} errors")
+                                        logger.debug("[Linter] Rolling back auto-fix due to regression")
+                                        all_files = original_files_before_lint_fix
+                                        # lint_resultは変更しない（Auto-fix前のまま）
                                     else:
-                                        logger.debug(f"  ⚠ No errors were fixed automatically")
-                                    
-                                    logger.debug(f"[Linter] Re-check complete: {error_count_after} errors, {warning_count_after} warnings")
-                                    
+                                        logger.debug("")
+                                        logger.debug("  After auto-fix:")
+                                        logger.debug(hud_comp.lint_summary_line(0, warning_count_after, error_count_after))
+
+                                        if error_count_after > 0 or warning_count_after > 0:
+                                            breakdown = self._get_error_breakdown(
+                                                recheck_result.get('errors', []),
+                                                recheck_result.get('warnings', [])
+                                            )
+                                            error_parts = []
+                                            if breakdown['critical'] > 0:
+                                                error_parts.append(f"Critical={breakdown['critical']}")
+                                            if breakdown['high'] > 0:
+                                                error_parts.append(f"High={breakdown['high']}")
+                                            if breakdown['medium'] > 0:
+                                                error_parts.append(f"Medium={breakdown['medium']}")
+                                            if breakdown['low'] > 0:
+                                                error_parts.append(f"Low={breakdown['low']} (style issues)")
+                                            if breakdown['env'] > 0:
+                                                error_parts.append(f"Env={breakdown['env']}")
+                                            if breakdown['warnings'] > 0:
+                                                error_parts.append(f"Warnings={breakdown['warnings']}")
+
+                                            if error_parts:
+                                                logger.debug(f"  Error Types: {', '.join(error_parts)}")
+
+                                        lint_result = recheck_result
+
+                                        # ⭐ Zen HUD: Multi-stage Auto-fix後のLintエラー数を記録
+                                        self._zen_summary["lint"]["final"] = error_count_after
+                                        self._zen_summary["lint"]["fixed"] = (error_count_after < error_count_before)
+
+                                        errors_fixed = error_count_before - error_count_after
+                                        if error_count_after == 0 and warning_count_after == 0:
+                                            logger.debug(f"  ✓ All linter errors resolved!")
+                                        elif errors_fixed > 0:
+                                            logger.debug(f"  ✓ {errors_fixed} errors fixed, {error_count_after} remaining")
+                                        else:
+                                            logger.debug(f"  ⚠ No errors were fixed automatically")
+
+                                        logger.debug(f"[Linter] Re-check complete: {error_count_after} errors, {warning_count_after} warnings")
+
                                 except Exception as e:
                                     logger.warning(f"[Linter] Re-check failed: {e}")
 
@@ -10055,51 +10077,60 @@ IMPORTANT:
     
     def _check_unimplemented_methods(self, files: Dict[str, str]) -> List[str]:
         """
-        ⭐ 修正B: 未実装メソッド（pass only）を検出
-        
-        def method_name(...):
-            pass
-        
-        または
-        
-        def method_name(...):
-            '''docstring'''
-            pass
-        
-        のパターンを検出し、警告を返す。
-        
+        未実装メソッド（pass only）をAST解析で検出。
+
+        以下のパターンを検出:
+          - def method(): pass
+          - def method(): '''docstring''' ; pass
+
         Args:
             files: {filename: code}
-        
+
         Returns:
             未実装メソッドの警告リスト
         """
         issues = []
-        
+
         for filename, code in files.items():
             if not filename.endswith('.py'):
                 continue
-            
-            # パターン: def xxx(...): の後に pass のみ（docstringあり/なし）
-            pattern = re.compile(
-                r'def\s+(\w+)\s*\([^)]*\)\s*(?:->\s*[^:]+)?\s*:\s*\n'  # def xxx(...) -> type:
-                r'(?:\s*(?:"""[\s\S]*?"""|\'\'\'[\s\S]*?\'\'\')\s*\n)?'  # optional docstring
-                r'\s*pass\s*(?:\n|$)',  # pass
-                re.MULTILINE
-            )
-            
-            matches = pattern.findall(code)
-            
-            for method_name in matches:
+
+            try:
+                tree = ast.parse(code)
+            except SyntaxError:
+                continue
+
+            for node in ast.walk(tree):
+                if not isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+                    continue
+
+                method_name = node.name
+
                 # __init__ や __repr__ などの特殊メソッドで pass のみは許容
                 if method_name.startswith('__') and method_name.endswith('__'):
                     continue
-                
-                issues.append(
-                    f"{filename}: Method '{method_name}()' is not implemented (pass only)"
-                )
-                logger.debug(f"[Consistency] Unimplemented method detected: {filename}:{method_name}()")
-        
+
+                body = node.body
+                is_pass_only = False
+
+                if len(body) == 1 and isinstance(body[0], ast.Pass):
+                    # def foo(): pass
+                    is_pass_only = True
+                elif len(body) == 2:
+                    # def foo(): """docstring""" ; pass
+                    first_is_docstring = (
+                        isinstance(body[0], ast.Expr)
+                        and isinstance(body[0].value, (ast.Constant, ast.Str))
+                    )
+                    if first_is_docstring and isinstance(body[1], ast.Pass):
+                        is_pass_only = True
+
+                if is_pass_only:
+                    issues.append(
+                        f"{filename}: Method '{method_name}()' is not implemented (pass only)"
+                    )
+                    logger.debug(f"[Consistency] Unimplemented method detected: {filename}:{method_name}()")
+
         return issues
 
 
@@ -10837,8 +10868,6 @@ IMPORTANT:
                 - failing_file: エラーが発生したファイル（成功時はNone）
         """
         import tempfile
-        import importlib.util
-        import traceback
         
         # エントリーポイントを特定（優先度順）
         ENTRY_POINT_CANDIDATES = [
@@ -10904,93 +10933,107 @@ IMPORTANT:
                                 with open(init_file, 'w', encoding='utf-8') as f:
                                     f.write('# Auto-generated __init__.py\n')
                 
-                # sys.pathに一時ディレクトリを追加
-                original_sys_path = sys.path.copy()
-                sys.path.insert(0, tmpdir)
-                
-                # 既存モジュールのキャッシュをクリア（汚染防止）
-                # 生成ファイルのモジュール名 + 既知のモジュール名をクリア
+                # Fix O: subprocess分離によるインポートテスト
+                # exec_module の代わりに subprocess.run を使用し、
+                # sys.exit()/os._exit()/segfault/infinite loop に安全に対応
+                import subprocess as _subprocess
+                import re as _re
+
+                # generated_module_names: ModuleNotFoundError の内部/外部分類に使用
                 generated_module_names = set()
                 for f in generated_files.keys():
                     if f.endswith('.py'):
                         mod_name = f.replace('.py', '').replace('/', '.').replace('\\', '.')
                         generated_module_names.add(mod_name)
-                        # トップレベルモジュール名も追加（例: backend.main → backend）
                         parts = mod_name.split('.')
                         for i in range(len(parts)):
                             generated_module_names.add('.'.join(parts[:i+1]))
-                
-                known_prefixes = ('config', 'models', 'views', 'schemas', 'database',
-                                  'backend', 'src', 'app', 'api', 'routes', 'services')
-                modules_to_remove = [m for m in sys.modules.keys() 
-                                    if m in generated_module_names 
-                                    or m.startswith(known_prefixes)]
-                for m in modules_to_remove:
-                    del sys.modules[m]
-                
-                try:
-                    # 全ターゲットを順にimportテスト
-                    for target_file in import_targets:
-                        module_name = target_file.replace('.py', '').replace('/', '.').replace('\\', '.')
-                        spec = importlib.util.spec_from_file_location(
-                            module_name,
-                            os.path.join(tmpdir, target_file)
+
+                env = os.environ.copy()
+                env['PYTHONPATH'] = tmpdir + os.pathsep + env.get('PYTHONPATH', '')
+
+                for target_file in import_targets:
+                    module_name = target_file.replace('.py', '').replace('/', '.').replace('\\', '.')
+
+                    try:
+                        result = _subprocess.run(
+                            [sys.executable, "-c", f"import {module_name}"],
+                            capture_output=True,
+                            text=True,
+                            timeout=30,
+                            cwd=tmpdir,
+                            env=env
                         )
-                        
-                        if spec and spec.loader:
-                            module = importlib.util.module_from_spec(spec)
-                            spec.loader.exec_module(module)
-                            logger.debug(f"[Runtime Import] ✅ Successfully imported {target_file}")
+                    except _subprocess.TimeoutExpired:
+                        logger.debug(f"[Runtime Import] ⚠ Import timed out after 30s: {target_file}")
+                        return (False, f"Import timed out (possible infinite loop in {target_file})", target_file)
+
+                    if result.returncode == 0:
+                        logger.debug(f"[Runtime Import] ✅ Successfully imported {target_file}")
+                        continue
+
+                    # Import failed — stderr解析で原因分類
+                    stderr = result.stderr.strip() if result.stderr else ""
+                    stdout = result.stdout.strip() if result.stdout else ""
+
+                    if stdout:
+                        logger.debug(f"[Runtime Import] Module stdout: {stdout[:200]}")
+
+                    # ModuleNotFoundError チェック
+                    mnf_match = _re.search(r"ModuleNotFoundError: No module named '([^']+)'", stderr)
+                    if mnf_match:
+                        missing_module = mnf_match.group(1)
+                        if missing_module in generated_module_names or any(
+                            missing_module.startswith(gm + '.') for gm in generated_module_names
+                        ):
+                            failing_file = self._extract_failing_file_from_traceback(stderr, tmpdir, generated_files)
+                            logger.debug(f"[Runtime Import] ❌ Internal module not found: {missing_module}")
+                            logger.debug(f"[Runtime Import]    Failing file: {failing_file}")
+                            return (False, f"No module named '{missing_module}'", failing_file)
                         else:
-                            return (False, f"Could not create module spec for {target_file}", target_file)
-                    
-                    # 全モジュールのimport成功
-                    logger.debug(f"[Runtime Import] ✅ All {len(import_targets)} module(s) imported successfully")
-                    return (True, None, None)
-                
-                except ModuleNotFoundError as e:
-                    # 外部パッケージ不足はコードのバグではないのでスキップ
-                    module_name = str(e).replace("No module named ", "").strip("'\"")
-                    # 生成ファイルに含まれるモジュールの場合はコードバグの可能性あり
-                    if module_name in generated_module_names or any(
-                        module_name.startswith(gm + '.') for gm in generated_module_names
-                    ):
-                        tb = traceback.format_exc()
-                        failing_file = self._extract_failing_file_from_traceback(tb, tmpdir, generated_files)
-                        logger.debug(f"[Runtime Import] ❌ Internal module not found: {module_name}")
-                        logger.debug(f"[Runtime Import]    Failing file: {failing_file}")
-                        return (False, str(e), failing_file)
-                    else:
-                        logger.debug(f"[Runtime Import] ⚠ External package not found: {module_name}")
-                        logger.debug(f"[Runtime Import] This is not a code bug. Skipping test.")
-                        return (True, f"EXTERNAL_PACKAGE:{module_name}", None)
-                        
-                except Exception as e:
-                    # エラー発生 - 詳細情報を抽出
-                    tb = traceback.format_exc()
-                    error_message = str(e)
-                    
-                    # エラーが発生したファイルを特定
-                    failing_file = self._extract_failing_file_from_traceback(tb, tmpdir, generated_files)
-                    
+                            logger.debug(f"[Runtime Import] ⚠ External package not found: {missing_module}")
+                            logger.debug(f"[Runtime Import] This is not a code bug. Skipping test.")
+                            return (True, f"EXTERNAL_PACKAGE:{missing_module}", None)
+
+                    # Fix R-2: stdout経由のパッケージ不足検出
+                    # Generated code may catch ImportError internally and print to stdout
+                    # (e.g., try: import stripe except ImportError: print("Missing..."); sys.exit(1))
+                    # In this case stderr is empty, but stdout contains the missing package info
+                    if not stderr and stdout and result.returncode != 0:
+                        stdout_pkg_match = _re.search(
+                            r'(?:Missing required (?:packages?|modules?|dependencies?)|'
+                            r'(?:Please |pip )?install)[:\s]+([a-zA-Z0-9_][a-zA-Z0-9_,\s-]*)',
+                            stdout, _re.IGNORECASE
+                        )
+                        if stdout_pkg_match:
+                            pkg_list = _re.split(r'[,\s]+', stdout_pkg_match.group(1).strip())
+                            pkg_list = [p for p in pkg_list if p and not p.startswith('-') and len(p) > 1]
+                            if pkg_list:
+                                first_pkg = pkg_list[0]
+                                if first_pkg not in generated_module_names and not any(
+                                    first_pkg.startswith(gm + '.') for gm in generated_module_names
+                                ):
+                                    logger.debug(f"[Runtime Import] ⚠ External package detected from stdout: {first_pkg}")
+                                    logger.debug(f"[Runtime Import] This is not a code bug. Skipping test.")
+                                    return (True, f"EXTERNAL_PACKAGE:{first_pkg}", None)
+
+                    # その他のエラー（SystemExit, segfault, syntax error, etc.）
+                    error_lines = stderr.split('\n') if stderr else []
+                    error_message = error_lines[-1] if error_lines else f"Import failed (exit code {result.returncode})"
+                    failing_file = self._extract_failing_file_from_traceback(stderr, tmpdir, generated_files)
+
                     logger.debug(f"[Runtime Import] ❌ Import failed: {error_message}")
+                    logger.debug(f"[Runtime Import]    Exit code: {result.returncode}")
                     logger.debug(f"[Runtime Import]    Failing file: {failing_file}")
-                    logger.debug(f"[Runtime Import]    Traceback:\n{tb}")
-                    
+                    if stderr:
+                        logger.debug(f"[Runtime Import]    Stderr (last 500 chars):\n{stderr[-500:]}")
+
                     return (False, error_message, failing_file)
-                    
-                finally:
-                    # sys.pathを復元
-                    sys.path = original_sys_path
-                    
-                    # インポートしたモジュールをクリーンアップ
-                    modules_to_remove = [m for m in sys.modules.keys() 
-                                        if m in generated_module_names
-                                        or m.startswith(known_prefixes)]
-                    for m in modules_to_remove:
-                        if m in sys.modules:
-                            del sys.modules[m]
-                            
+
+                # 全モジュールのimport成功
+                logger.debug(f"[Runtime Import] ✅ All {len(import_targets)} module(s) imported successfully")
+                return (True, None, None)
+
             except Exception as e:
                 logger.debug(f"[Runtime Import] Error during test setup: {e}")
                 return (False, str(e), None)
@@ -11130,11 +11173,17 @@ Return ONLY the fixed code in this format:
 {code_fence}
 """
         
+        # 動的max_tokens計算（lint auto-fixと同じパターン）
+        # 問題: 大きなファイル(120K chars)でmax_tokens=8000は不足、LLMレスポンスが切り詰め
+        total_code_chars = sum(len(v) for v in generated_files.values()) if generated_files else 0
+        import_fix_max_tokens = max(8000, min(total_code_chars // 3 + 2000, 32000))
+        logger.debug(f"[Import Fix] Using max_tokens={import_fix_max_tokens} (code={total_code_chars} chars)")
+
         try:
             response = self.llm_manager.generate_response(
                 prompt=prompt,
                 system_prompt="You are a Python expert. Fix the import/runtime error. Return only the fixed code.",
-                max_tokens=8000
+                max_tokens=import_fix_max_tokens
             )
             
             if hasattr(response, 'content'):
@@ -14767,20 +14816,24 @@ IMPORTANT RULES:
                 f"  - {raw_file_score:.4f} (before) × {placeholder_score:.4f} × {comment_ratio_score:.4f} = {file_score:.4f} (after)"
             )
             
-            # Review issuesペナルティ（ファイル単位）
+            # Review issuesペナルティ（ファイル単位、同一typeはグループ化）
             review_penalty = 0.0
             if hasattr(self, '_zen_summary') and self._zen_summary:
                 review_issues_list = self._zen_summary.get("review", {}).get("issues", [])
                 if review_issues_list:
-                    # このファイルに該当するissueをカウント
+                    # このファイルに該当するissueを取得
                     file_review_issues = [i for i in review_issues_list if i.get('file', '') == filename]
-                    file_review_count = len(file_review_issues)
+                    # 同一typeの重複をグループ化（同パターン問題を1件としてカウント）
+                    seen_types = set()
+                    for issue in file_review_issues:
+                        seen_types.add(issue.get('type', 0))
+                    file_review_count = len(seen_types)
                     if file_review_count > 0:
-                        review_penalty = min(file_review_count * 0.02, 0.40)  # 1issue=2%, 最大40%
+                        review_penalty = min(file_review_count * 0.01, 0.20)  # 1 unique type=1%, 最大20%
                         file_score = file_score * (1.0 - review_penalty)
                         logger.debug(
                             f"[Quality] {filename}: Review penalty:\n"
-                            f"  - review_issues: {file_review_count}\n"
+                            f"  - review_issues: {len(file_review_issues)} (unique types: {file_review_count})\n"
                             f"  - review_penalty: {review_penalty:.2f} ({int(review_penalty * 100)}%)\n"
                             f"  - FINAL after review: {round(file_score, 2)} ({int(file_score * 100)}%)"
                         )
@@ -22968,8 +23021,6 @@ Return ONLY the fixed JavaScript code wrapped in ```javascript``` blocks.
                 secret_issues = secret_scanner.scan(all_files)
                 if secret_issues:
                     logger.debug(f"[Secret Scanner] Found {len(secret_issues)} hardcoded secret(s)")
-                else:
-                    logger.debug(f"[Secret Scanner] Scanned {len(all_files)} file(s), 0 secret(s) found")
                     for si in secret_issues[:5]:
                         logger.debug(f"  - {si['file']}:{si['line']} {si['pattern_name']} ({si['severity']})")
 
@@ -22984,6 +23035,8 @@ Return ONLY the fixed JavaScript code wrapped in ```javascript``` blocks.
                     secret_issues = secret_scanner.scan(all_files)
                     if secret_issues:
                         logger.debug(f"[Secret Scanner] {len(secret_issues)} secret(s) remain after auto-fix")
+                else:
+                    logger.debug(f"[Secret Scanner] Scanned {len(all_files)} file(s), 0 secret(s) found")
             except Exception as e:
                 logger.debug(f"[Secret Scanner] Skipped: {e}")
                 secret_issues = []
@@ -23137,7 +23190,11 @@ Return ONLY the fixed JavaScript code wrapped in ```javascript``` blocks.
                                 logger.debug(f"[Regression Check] ✅ Improved: {current_issue_count} -> {post_fix_count} (-{improvement})")
                             else:
                                 logger.debug(f"[Regression Check] ✅ No change: {current_issue_count} -> {post_fix_count}")
-                
+
+                        # Fix P-3: フルスキャン後もキャッシュを更新（次回から差分スキャン可能に）
+                        if apply_fix and self._differential_scan_enabled:
+                            self._issue_cache = self._cache_issues(post_fix_result.get('issues', []), fixed_files)
+
                 if apply_fix:
                     all_files = fixed_files
                     logger.debug(f"[Comprehensive Review] Applied fixes (attempt {attempt + 1})")
@@ -23148,9 +23205,10 @@ Return ONLY the fixed JavaScript code wrapped in ```javascript``` blocks.
                     logger.debug(f"    {Icon.WARNING.value} Fix rejected - would worsen issues")
                     break
             else:
-                logger.debug(f"[Comprehensive Review] Fix failed (attempt {attempt + 1})")
-                logger.debug(f"    {Icon.WARNING.value} Could not fix all issues (attempt {attempt + 1}/{MAX_REVIEW_ATTEMPTS})")
-                break
+                # Fix Q-5: Fix生成失敗はissue増加と異なる → リトライの機会を与える
+                logger.debug(f"[Comprehensive Review] Fix generation failed (attempt {attempt + 1}), will retry")
+                logger.debug(f"    {Icon.WARNING.value} Could not fix issues (attempt {attempt + 1}/{MAX_REVIEW_ATTEMPTS}), retrying...")
+                continue
         
         # ⭐ Zen HUD: 最終Review issue数を記録
         # 差分スキャン対応: キャッシュが存在する場合はキャッシュを使用
@@ -23514,6 +23572,38 @@ If no issues found, return an empty array: []
 - Any logging inside try/catch blocks
 - HUD rendering code that displays game state
 
+### Backend/API Patterns (NOT issues):
+
+**Python Logging (type 23 exclusion):**
+- logger.info(), logger.debug(), logger.warning(), logger.error() are standard Python logging, NOT debug code
+- ONLY report logging if clearly temporary: logger.debug(f"x={{x}}") with no context
+
+**Application Factory (type 14 exclusion):**
+- If create_app() factory exists and calls init functions, the WSGI initialization IS handled
+- Module-level os.getenv('VAR', default) with defaults are NOT "non-existent" config vars
+
+### Library-specific API (type 17 exclusion):
+
+**General rule for type 17:**
+- Only report type 17 if you are CERTAIN the API call will raise an exception at runtime
+- If unsure whether a library accepts specific **kwargs or has specific attributes, do NOT report
+- Many Python libraries (stripe, requests, boto3, etc.) accept **kwargs forwarded to underlying APIs
+
+**stripe-python patterns (NOT issues):**
+- stripe.PaymentIntent.create(), stripe.Refund.create(), stripe.Customer.create() etc. accept **kwargs including idempotency_key — this is STANDARD stripe-python usage
+- stripe.api_version is a valid module-level attribute for setting the Stripe API version
+- stripe.error.CardError and other StripeError subclasses have .error attribute with .code, .decline_code, .message
+- stripe.error.StripeError subclasses have .http_status, .code, .user_message, .param attributes
+
+**requests/urllib3 patterns (NOT issues):**
+- requests.get/post/put/delete accept **kwargs forwarded to Session.request()
+- Response objects have .json(), .text, .status_code, .headers, .content
+
+**SQLAlchemy patterns (NOT issues):**
+- session.query().filter() with multiple args or kwargs is valid
+- session.query().join() with multiple arguments is valid
+- Column types with keyword arguments are valid
+
 Return ONLY the JSON array, no other text."""
 
         import json
@@ -23555,7 +23645,115 @@ Return ONLY the JSON array, no other text."""
             if not isinstance(issues, list):
                 logger.debug("[Comprehensive Review] Response is not a list")
                 return {'issues': [], 'error': False}
-            
+
+            # Fix N-1: Issue deduplication — 同じtype+description冒頭50文字の重複を除去
+            seen_keys = set()
+            unique_issues = []
+            for issue in issues:
+                dedup_key = (issue.get('type'), issue.get('description', '')[:50])
+                if dedup_key not in seen_keys:
+                    seen_keys.add(dedup_key)
+                    unique_issues.append(issue)
+                else:
+                    logger.debug(f"[Comprehensive Review] Deduplicated: [{issue.get('type')}] {issue.get('description', '')[:60]}")
+            dedup_count = len(issues) - len(unique_issues)
+            if dedup_count > 0:
+                logger.debug(f"[Comprehensive Review] Removed {dedup_count} duplicate issue(s)")
+            issues = unique_issues
+
+            # Fix N-2: AST-based false positive filter — Type 23 inside docstrings
+            import ast as _ast
+            docstring_ranges = {}  # file -> [(start_line, end_line), ...]
+            for filepath, code in all_files.items():
+                if filepath.endswith('.py'):
+                    try:
+                        tree = _ast.parse(code)
+                        ranges = []
+                        for node in _ast.walk(tree):
+                            if isinstance(node, (_ast.FunctionDef, _ast.AsyncFunctionDef, _ast.ClassDef, _ast.Module)):
+                                if (node.body and isinstance(node.body[0], _ast.Expr)
+                                        and isinstance(node.body[0].value, _ast.Constant)
+                                        and isinstance(node.body[0].value.value, str)):
+                                    ds = node.body[0]
+                                    ranges.append((ds.lineno, ds.end_lineno))
+                        docstring_ranges[filepath] = ranges
+                    except SyntaxError:
+                        pass  # Non-Python or broken file, skip
+
+            filtered_issues = []
+            suppressed_count = 0
+            for issue in issues:
+                if issue.get('type') == 23:
+                    ifile = issue.get('file', '')
+                    iline = issue.get('line')
+                    if ifile in docstring_ranges and iline:
+                        in_docstring = any(start <= iline <= end for start, end in docstring_ranges[ifile])
+                        if in_docstring:
+                            logger.debug(f"[Comprehensive Review] Suppressed: Type 23 at {ifile}:{iline} (inside docstring)")
+                            suppressed_count += 1
+                            continue
+                filtered_issues.append(issue)
+
+            if suppressed_count > 0:
+                logger.debug(f"[Comprehensive Review] Suppressed {suppressed_count} docstring false positive(s)")
+            issues = filtered_issues
+
+            # Fix N-3: Static verification filter for type [4] and [20] false positives
+            import re as _re
+            static_verified = []
+            static_suppressed = 0
+
+            for issue in issues:
+                issue_type = issue.get('type')
+                issue_file = issue.get('file', '')
+                issue_line = issue.get('line')
+                suppress = False
+
+                if issue_file in all_files and issue_file.endswith('.py'):
+                    code = all_files[issue_file]
+
+                    # Type 4: Unused variable/import — verify symbol is actually unused
+                    if issue_type == 4:
+                        desc = issue.get('description', '')
+                        match = _re.search(r"'(\w+)'", desc)
+                        if match:
+                            var_name = match.group(1)
+                            lines = code.split('\n')
+                            usage_count = 0
+                            for idx, line in enumerate(lines):
+                                if var_name in line:
+                                    if issue_line and (idx + 1) == issue_line:
+                                        continue
+                                    usage_count += 1
+                            if usage_count >= 2:
+                                suppress = True
+                                logger.debug(
+                                    f"[Static Verify] Suppressed: [{issue_type}] "
+                                    f"'{var_name}' found {usage_count} times in {issue_file}"
+                                )
+
+                    # Type 20: Resource leak — verify 'with' statement exists nearby
+                    if issue_type == 20 and issue_line:
+                        lines = code.split('\n')
+                        start = max(0, issue_line - 6)
+                        end = min(len(lines), issue_line + 5)
+                        nearby = '\n'.join(lines[start:end])
+                        if 'with open(' in nearby or 'with ' in nearby:
+                            suppress = True
+                            logger.debug(
+                                f"[Static Verify] Suppressed: [{issue_type}] "
+                                f"'with' statement found near {issue_file}:{issue_line}"
+                            )
+
+                if suppress:
+                    static_suppressed += 1
+                else:
+                    static_verified.append(issue)
+
+            if static_suppressed > 0:
+                logger.debug(f"[Static Verify] Suppressed {static_suppressed} false positive(s)")
+            issues = static_verified
+
             logger.debug(f"[Comprehensive Review] Detected {len(issues)} issue(s)")
 
             # Per-issue detail logging for debuggability
@@ -25369,11 +25567,13 @@ complete fixed code here
 </file>"""
 
         try:
-            # ファイルサイズに応じてmax_tokensを調整
+            # ファイルサイズに応じてmax_tokensを動的に調整
             content_lines = len(content.split('\n'))
-            max_tokens = 8000 if content_lines < 300 else 12000 if content_lines < 500 else 16000
-            
-            logger.debug(f"[Comprehensive Review] Sending fix request for {filepath} ({len(issues)} issues, {content_lines} lines, max_tokens={max_tokens})...")
+            content_chars = len(content)
+            estimated_tokens = int(content_chars / 3.5) + 500  # 3.5 chars/token + overhead for tags
+            max_tokens = max(8000, min(estimated_tokens, 64000))
+
+            logger.debug(f"[Comprehensive Review] Sending fix request for {filepath} ({len(issues)} issues, {content_lines} lines, {content_chars} chars, max_tokens={max_tokens})...")
             
             response = self.llm_manager.generate_response(
                 prompt=prompt,
@@ -25523,16 +25723,17 @@ DO NOT write any code in this response. Only provide analysis and decision.
 To approve MINIMAL CHANGE, you must PROVE all of the following:
 
 1. LOCALITY PROOF: Can each issue be fixed by modifying ≤5 lines?
-   - Count the minimum lines that must change for each issue
-   - If total > 5 lines: FAIL
+   - Count the minimum lines that must change for EACH INDIVIDUAL issue
+   - If ANY SINGLE issue requires > 5 lines: FAIL
+   - Multiple issues each requiring ≤5 lines = PASS (even if total > 5)
 
 2. ISOLATION PROOF: Will changing these lines affect other files?
    - Check if any dependent files use the functions/variables being changed
    - If cross-file impact exists: FAIL
 
-3. PATTERN PROOF: Is this a one-off bug or a systemic pattern?
-   - Could the same bug exist in similar code elsewhere?
-   - If systemic pattern: FAIL
+3. PATTERN PROOF: Does this require an architectural redesign?
+   - If the same minimal fix can be applied to each occurrence independently: PASS
+   - If fixing requires changing interfaces, data flow, or module structure: FAIL
 
 **Output format (EXACTLY this structure):**
 <review>
@@ -25684,17 +25885,18 @@ Smaller changes = fewer side effects = no whack-a-mole.
 Before writing ANY code, you must PROVE all of the following.
 If you CANNOT prove ANY of these, you MUST output <escalate> and STOP.
 
-1. LOCALITY PROOF: This bug can be fixed by modifying ≤5 lines in this file only
-   → List the exact line numbers that need to change
-   → If more than 5 lines needed: FAIL → escalate
+1. LOCALITY PROOF: Each issue can be fixed by modifying ≤5 lines in this file only
+   → List the exact line numbers that need to change for EACH issue
+   → If ANY SINGLE issue requires more than 5 lines: FAIL → escalate
+   → Multiple issues each ≤5 lines = PASS (even if total > 5)
 
 2. ISOLATION PROOF: No other file imports, calls, or depends on the lines being changed
    → Check imports/exports affected by your change
    → If cross-file impact exists: FAIL → escalate
 
-3. NON-RECURRENCE PROOF: This exact bug pattern does not exist elsewhere in the codebase
-   → Is this a one-off mistake or a systemic pattern?
-   → If systemic pattern: FAIL → escalate
+3. NON-RECURRENCE PROOF: Does this require an architectural redesign?
+   → If the same minimal fix can be applied to each occurrence independently: PASS
+   → If fixing requires changing interfaces, data flow, or module structure: FAIL → escalate
 
 **CRITICAL:** If ANY proof fails, output ONLY this and STOP:
 <escalate reason="[WHICH proof failed: LOCALITY/ISOLATION/NON-RECURRENCE] - [specific reason]">
@@ -25745,9 +25947,11 @@ COMPLETE fixed code here (entire file content)
 </file>"""
 
         try:
-            max_tokens = 8000 if content_lines < 300 else 12000 if content_lines < 500 else 16000
-            
-            logger.debug(f"[Comprehensive Review] Sending minimal-change fix for {filepath} ({len(issues)} issues, {content_lines} lines)")
+            content_chars = len(content)
+            estimated_tokens = int(content_chars / 3.5) + 500  # 3.5 chars/token + overhead for tags
+            max_tokens = max(8000, min(estimated_tokens, 64000))
+
+            logger.debug(f"[Comprehensive Review] Sending minimal-change fix for {filepath} ({len(issues)} issues, {content_lines} lines, {content_chars} chars, max_tokens={max_tokens})")
             
             response = self.llm_manager.generate_response(
                 prompt=prompt,
@@ -26590,7 +26794,8 @@ You MUST use this exact format (the system parses <file> tags):
                     "NEVER reorganize, refactor, or 'improve' code beyond the specific fix requested. "
                     "Pay EXTREME attention to Python indentation - it determines code structure."
                 ),
-                max_tokens=8000
+                # Fix Q-4: ファイルサイズに比例（1文字≈0.33トークン + バッファ2000）
+                max_tokens=max(8000, len(original_code) // 3 + 2000)
             )
             
             response_text = response.content if hasattr(response, 'content') else str(response)
@@ -27279,6 +27484,7 @@ Identify what structural changes you made, and undo them while keeping only the 
             else:
                 logger.debug(f"  {Icon.WARNING.value} Import error: {import_error}")
                 # 自動修正を試行
+                original_code_before_import_fix = generated_code  # Rollback point
                 for attempt in range(2):
                     fixed_code = self._fix_import_error_with_llm(generated_code, import_error, failing_file)
                     if fixed_code:
@@ -27290,7 +27496,11 @@ Identify what structural changes you made, and undo them while keeping only the 
                         import_error = retry_error
                         failing_file = retry_file
                         generated_code = fixed_code
-            
+                else:
+                    # 全試行失敗 → 元のコードに復元
+                    generated_code = original_code_before_import_fix
+                    logger.debug(f"  {Icon.WARNING.value} Import fix failed, restored original code")
+
             if hud:
                 hud.complete("Import validation")
             
