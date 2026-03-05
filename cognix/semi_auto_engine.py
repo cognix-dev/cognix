@@ -28703,8 +28703,18 @@ Identify what structural changes you made, and undo them while keeping only the 
             
             # 修正されたコードを抽出
             fixed_files = self._extract_code_blocks(response_text)
-            
+
             if fixed_files:
+                # __code__ を実際のソースファイル名にリマップ
+                # （LLMがファイルヘッダーを省略した場合のフォールバック）
+                if '__code__' in fixed_files and len(fixed_files) == 1:
+                    if len(source_files) == 1:
+                        actual_name = list(source_files.keys())[0]
+                        fixed_files[actual_name] = fixed_files.pop('__code__')
+                        logger.debug(f"[Test Fix] Mapped __code__ to: {actual_name}")
+                    else:
+                        logger.debug(f"[Test Fix] Cannot map __code__: {len(source_files)} source files (need exactly 1)")
+
                 # テストファイル・無効なキーを除外
                 for tf in list(fixed_files.keys()):
                     if self._is_test_file(tf):
@@ -28847,16 +28857,26 @@ Fix the error now."""
         
         # ソースファイル名→モジュール名のマッピング
         source_modules = {}  # module_name → filename
+        js_ts_extensions = ('.ts', '.js', '.tsx', '.jsx', '.mjs', '.cjs')
         for sf in source_files.keys():
             if sf.endswith('.py'):
                 basename_module = Path(sf).stem
                 source_modules[basename_module] = sf
-        
+            elif sf.endswith(js_ts_extensions):
+                stem = Path(sf).stem
+                no_ext = str(Path(sf).with_suffix(''))
+                # 複数キーで検索可能にする:
+                # "src/main.ts" → "main", "src/main", "./src/main"
+                source_modules[stem] = sf
+                source_modules[no_ext] = sf
+                source_modules['./' + no_ext] = sf
+
         # テストファイルのimport文から、インポートされた名前→ソースモジュールの対応を構築
         # 例: "from models import RecurringRule" → RecurringRule → models.py
+        # 例: import { truncate } from "./main" → truncate → src/main.ts
         imported_names = {}  # imported_name → source_filename
         for tf_name, tf_code in test_files.items():
-            # from X import A, B, C パターン
+            # ── Python: from X import A, B, C パターン ──
             from_imports = re.findall(
                 r'from\s+(\S+)\s+import\s+(.+?)(?:\n|$)',
                 tf_code
@@ -28869,37 +28889,95 @@ Fix the error now."""
                         name = name.strip()
                         if name and name != '\\':
                             imported_names[name] = sf
-            
-            # import X パターン
+
+            # ── Python: import X パターン ──
             direct_imports = re.findall(r'^import\s+(\S+)', tf_code, re.MULTILINE)
             for module_ref in direct_imports:
                 top_module = module_ref.split('.')[0]
                 if top_module in source_modules:
                     imported_names[top_module] = source_modules[top_module]
-        
+
+            # ── JS/TS: import { A, B } from "module" パターン ──
+            # import { truncate, padString } from "./main"
+            # import type { TruncateResult } from "./main"
+            # import X from "./main"
+            # import * as utils from "./main"
+            es_named_imports = re.findall(
+                r'''import\s+(?:type\s+)?\{([^}]*)\}\s+from\s+['"](\.{0,2}/[^'"]+|[^'"]+)['"]''',
+                tf_code
+            )
+            for names_str, module_path in es_named_imports:
+                # module_path を source_modules のキーにマッチ
+                clean_path = module_path.lstrip('./')
+                matched_sf = None
+                for key in [module_path, clean_path, Path(clean_path).stem]:
+                    if key in source_modules:
+                        matched_sf = source_modules[key]
+                        break
+                if matched_sf:
+                    for name in re.split(r'\s*,\s*', names_str.strip()):
+                        name = name.strip()
+                        # "type X" の type prefix を除去
+                        if name.startswith('type '):
+                            name = name[5:].strip()
+                        if name and name != '\\':
+                            imported_names[name] = matched_sf
+
+            # import X from "module" / import * as X from "module"
+            es_default_imports = re.findall(
+                r'''import\s+(?:(\w+)|\*\s+as\s+(\w+))\s+from\s+['"](\.{0,2}/[^'"]+|[^'"]+)['"]''',
+                tf_code
+            )
+            for default_name, star_name, module_path in es_default_imports:
+                name = default_name or star_name
+                clean_path = module_path.lstrip('./')
+                for key in [module_path, clean_path, Path(clean_path).stem]:
+                    if key in source_modules:
+                        imported_names[name] = source_modules[key]
+                        break
+
         if not imported_names:
             logger.debug("[Test Fix] No source imports found in test files")
             return None
-        
+
+        logger.debug(f"[Test Fix] Found source imports: {list(imported_names.keys())[:20]}")
+
         # 失敗テスト関数のコードを抽出し、参照されるソースファイルを特定
         target_files = set()
+        is_js_ts = any(sf.endswith(js_ts_extensions) for sf in source_files.keys())
+
         for detail in test_result.failure_details[:10]:
             test_name = detail.get('test_name', '')
-            # test_name例: "test_recurring_rule_creation" or "TestRecurring::test_creation"
-            func_name = test_name.split('::')[-1] if '::' in test_name else test_name
-            
-            # テストファイルから該当関数のコードを抽出
-            for tf_name, tf_code in test_files.items():
-                func_pattern = rf'def\s+{re.escape(func_name)}\s*\(.*?\).*?(?=\n    def |\ndef |\nclass |\Z)'
-                match = re.search(func_pattern, tf_code, re.DOTALL)
-                if match:
-                    func_code = match.group(0)
-                    # 関数内で参照されている名前を検索
-                    for name, sf in imported_names.items():
-                        if name in func_code:
-                            target_files.add(sf)
-                    break
-        
+
+            if is_js_ts:
+                # JS/TS: テスト名は "describe > describe > test name" 形式
+                # テスト名に含まれるインポート名から対象ファイルを特定
+                for name, sf in imported_names.items():
+                    if name.lower() in test_name.lower():
+                        target_files.add(sf)
+
+                # テスト名だけでは特定できない場合、テストファイル全体から検索
+                if not target_files:
+                    for tf_name, tf_code in test_files.items():
+                        for name, sf in imported_names.items():
+                            if name in tf_code:
+                                target_files.add(sf)
+            else:
+                # Python: test_name例: "test_recurring_rule_creation" or "TestRecurring::test_creation"
+                func_name = test_name.split('::')[-1] if '::' in test_name else test_name
+
+                # テストファイルから該当関数のコードを抽出
+                for tf_name, tf_code in test_files.items():
+                    func_pattern = rf'def\s+{re.escape(func_name)}\s*\(.*?\).*?(?=\n    def |\ndef |\nclass |\Z)'
+                    match = re.search(func_pattern, tf_code, re.DOTALL)
+                    if match:
+                        func_code = match.group(0)
+                        # 関数内で参照されている名前を検索
+                        for name, sf in imported_names.items():
+                            if name in func_code:
+                                target_files.add(sf)
+                        break
+
         if not target_files:
             logger.debug("[Test Fix] Could not infer target files from failed test functions")
             return None
