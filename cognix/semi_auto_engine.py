@@ -2860,12 +2860,15 @@ class PostGenerationValidator:
             f.write(content)
             temp_path = f.name
 
+        # 出力先: Windowsでは -o NUL が .rlib のリネーム操作で失敗するため
+        # 一時ファイルに出力して削除する
+        out_path = os.path.join(os.path.dirname(temp_path), f'cognix_rustc_{os.getpid()}')
         try:
             # --error-format=short で簡潔なエラー出力
             # --crate-type lib でmain関数不要
             result = subprocess.run(
                 [cmd, '--edition', '2021', '--crate-type', 'lib',
-                 '--error-format', 'short', '-o', os.devnull if os.name != 'nt' else 'NUL',
+                 '--error-format', 'short', '-o', out_path,
                  temp_path],
                 capture_output=True, timeout=30,
                 encoding='utf-8', errors='replace'
@@ -2890,6 +2893,13 @@ class PostGenerationValidator:
                 os.unlink(temp_path)
             except OSError:
                 pass
+            # rustc が生成した出力ファイルを削除
+            import glob as _glob
+            for f in _glob.glob(out_path + '*'):
+                try:
+                    os.unlink(f)
+                except OSError:
+                    pass
 
     def _validate_ruby_syntax(self, filepath: str, content: str) -> Tuple[bool, Optional[str]]:
         """Ruby構文チェック (ruby -c)"""
