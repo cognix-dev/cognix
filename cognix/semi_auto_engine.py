@@ -9553,7 +9553,40 @@ MANDATORY SVELTE REQUIREMENTS:
                             priority="required"
                         ))
                         logger.debug("[Prompt Construction] Auto-added index.html for web project")
-                    
+
+                    # テスト関連キーワードがgoalに含まれる場合、テストファイルを追加
+                    test_keywords = ['test', 'spec', 'vitest', 'jest', 'mocha', 'pytest', 'unittest']
+                    has_test_requirement = any(kw in goal_lower for kw in test_keywords)
+
+                    if has_test_requirement and expected_files:
+                        existing_paths = {f.filepath for f in expected_files}
+                        test_files_to_add = []
+                        for req in expected_files:
+                            fp = req.filepath
+                            stem = Path(fp).stem
+                            ext = Path(fp).suffix
+                            parent = str(Path(fp).parent)
+                            # テストファイルパス生成
+                            if ext in ('.ts', '.tsx'):
+                                test_path = f"{parent}/{stem}.test{ext}" if parent != '.' else f"{stem}.test{ext}"
+                            elif ext in ('.js', '.jsx'):
+                                test_path = f"{parent}/{stem}.test{ext}" if parent != '.' else f"{stem}.test{ext}"
+                            elif ext == '.py':
+                                test_path = f"test_{stem}.py"
+                            else:
+                                continue
+                            # 重複チェック
+                            if test_path not in existing_paths:
+                                test_files_to_add.append(FileRequirement(
+                                    filepath=test_path,
+                                    file_type=req.file_type,
+                                    reason=f"Test file for {fp} (detected test requirement in goal)",
+                                    priority="required"
+                                ))
+                        expected_files.extend(test_files_to_add)
+                        if test_files_to_add:
+                            logger.debug(f"[Prompt Construction] Added test files: {[f.filepath for f in test_files_to_add]}")
+
                     logger.debug(f"[Prompt Construction] Constructed expected_files: {[f.filepath for f in expected_files]}")
                 else:
                     expected_files = None
@@ -28647,9 +28680,14 @@ Identify what structural changes you made, and undo them while keeping only the 
                     if self._is_test_file(tf):
                         logger.debug(f"[Test Fix] Rejected test file modification: {tf}")
                         del fixed_files[tf]
-                    elif tf == '__code__' or not tf.endswith('.py'):
-                        logger.debug(f"[Test Fix] Rejected invalid file key: {tf}")
-                        del fixed_files[tf]
+                    else:
+                        valid_source_extensions = (
+                            '.py', '.js', '.jsx', '.ts', '.tsx', '.mjs', '.cjs',
+                            '.go', '.java', '.rs', '.rb', '.php',
+                        )
+                        if tf == '__code__' or not any(tf.endswith(ext) for ext in valid_source_extensions):
+                            logger.debug(f"[Test Fix] Rejected invalid file key: {tf}")
+                            del fixed_files[tf]
                 
                 if not fixed_files:
                     logger.debug("[Test Fix] No valid fixes after filtering out test files")

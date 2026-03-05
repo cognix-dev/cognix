@@ -450,8 +450,16 @@ class RequirementValidator:
             
             # 両方が検出され、かつ不一致の場合
             if expected_lang and actual_lang and expected_lang != actual_lang:
+                # JS/TSは上位互換関係のため、ミスマッチ扱いしない
+                compatible_pairs = {
+                    ('typescript', 'javascript'),
+                    ('javascript', 'typescript'),
+                }
+                if (expected_lang, actual_lang) in compatible_pairs:
+                    continue
+
                 suggested_filename = f"{Path(filename).stem}.{self._get_extension_for_language(actual_lang)}"
-                
+
                 mismatches.append({
                     'file': filename,
                     'content_language': actual_lang,
