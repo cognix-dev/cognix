@@ -28494,9 +28494,9 @@ Identify what structural changes you made, and undo them while keeping only the 
                 failed = int(m_tests.group(1) or 0)
                 passed = int(m_tests.group(2) or 0)
 
-            # FAIL行からテスト名抽出
+            # FAIL行からテスト名抽出（x, ✕, ×, ✗ の各マーカーに対応）
             # jest format: "FAIL src/utils.test.js" or "  x test name (Xms)"
-            for m in re.finditer(r'^\s+[x\u2715]\s+(.+?)(?:\s+\(\d+\s*m?s\))?\s*$', combined, re.MULTILINE):
+            for m in re.finditer(r'^\s+[x\u2715\u00d7\u2717]\s+(.+?)(?:\s+\(\d+\s*m?s\))?\s*$', combined, re.MULTILINE):
                 failure_details.append({
                     "test_name": m.group(1).strip(),
                     "error_type": "TestFailure",
@@ -28513,8 +28513,8 @@ Identify what structural changes you made, and undo them while keeping only the 
                 failed = int(m_tests.group(1) or 0)
                 passed = int(m_tests.group(2) or 0)
 
-            # vitest FAIL lines: "x test name 123ms"
-            for m in re.finditer(r'^\s+[x\u2715]\s+(.+?)(?:\s+\d+\s*m?s)?\s*$', combined, re.MULTILINE):
+            # vitest FAIL lines: "× test name 123ms"（×=U+00D7, ✗=U+2717, ✕=U+2715, x=ASCII）
+            for m in re.finditer(r'^\s+[x\u2715\u00d7\u2717]\s+(.+?)(?:\s+\d+\s*m?s)?\s*$', combined, re.MULTILINE):
                 failure_details.append({
                     "test_name": m.group(1).strip(),
                     "error_type": "TestFailure",
