@@ -28042,6 +28042,28 @@ Identify what structural changes you made, and undo them while keeping only the 
                         detected = True
                         break
 
+        # テストファイルの import文 からの判定（最終フォールバック）
+        if framework == "jest":  # まだデフォルトのまま → import文を確認
+            for tf in test_files:
+                content = generated_files.get(tf, '')
+                if not content and self.workspace_path:
+                    tf_path = self.workspace_path / tf
+                    if tf_path.exists():
+                        try:
+                            content = tf_path.read_text(encoding='utf-8')
+                        except Exception:
+                            continue
+                if not content:
+                    continue
+                if re.search(r'''from\s+['"]vitest['"]''', content):
+                    framework = "vitest"
+                    logger.debug(f"[Test Detect] Detected vitest from import in {tf}")
+                    break
+                if re.search(r'''(?:from\s+['"]mocha['"]|require\s*\(\s*['"](?:mocha|chai)['"]\s*\))''', content):
+                    framework = "mocha"
+                    logger.debug(f"[Test Detect] Detected mocha from import in {tf}")
+                    break
+
         # npx の存在確認
         npx_cmd = self._get_npx_command()
         if not npx_cmd:
@@ -28051,15 +28073,15 @@ Identify what structural changes you made, and undo them while keeping only the 
                 run_command=[], language=language
             )
 
-        # 実行コマンド構築
+        # 実行コマンド構築（--yes: パッケージ未インストール時の対話プロンプトを抑制）
         if framework == "jest":
-            run_command = [npx_cmd, "jest", "--verbose", "--forceExit"]
+            run_command = [npx_cmd, "--yes", "jest", "--verbose", "--forceExit"]
             run_command.extend(test_files)
         elif framework == "vitest":
-            run_command = [npx_cmd, "vitest", "run", "--reporter=verbose"]
+            run_command = [npx_cmd, "--yes", "vitest", "run", "--reporter=verbose"]
             run_command.extend(test_files)
         elif framework == "mocha":
-            run_command = [npx_cmd, "mocha", "--reporter", "spec"]
+            run_command = [npx_cmd, "--yes", "mocha", "--reporter", "spec"]
             run_command.extend(test_files)
 
         logger.debug(f"[Test Detect] Found {len(test_files)} JS/TS test file(s), framework: {framework}")
@@ -29056,6 +29078,11 @@ Fix the error now."""
                         if tb_preview:
                             logger.debug(f"[Test Exec]   Traceback: {tb_preview}")
                 
+                # TIMEOUT は再試行しても無駄（同じコマンドで同じ結果になる）
+                if any(d.get('test_name') == 'TIMEOUT' for d in test_result.failure_details):
+                    logger.debug("[Test Exec] Timeout detected, retry would produce same result. Stopping.")
+                    break
+
                 if test_result.success:
                     logger.debug(f"[Test Exec] All {test_result.total_tests} tests passed!")
                     return current_files, {
