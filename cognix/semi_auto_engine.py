@@ -4359,6 +4359,7 @@ Flask + React Fullstack:
                     "Auto-completion",
                     "Lint check & Auto-fix",
                     "Quality assessment & Comprehensive Review",
+                    "Test execution & Auto-fix",
                 ]
                 hud = StepHUD(section_title="Code Generation", steps=steps)
                 logger.debug("[Flow] StepHUD initialized, calling hud.start()...")
@@ -5391,23 +5392,22 @@ Flask + React Fullstack:
                 # Quality assessment & Comprehensive Review 完了
                 hud.complete("Quality assessment & Comprehensive Review")
 
-                # HUD終了（Auto-completion完了後）
-                hud.finish(success=True)
-
             
             # ここから共通処理（both paths）
-            
+
             # 🆕 Test Execution & Auto-fix
             test_execution_result = None
+            if hud:
+                hud.mark("Test execution & Auto-fix")
             if self._should_run_tests(generated_code):
                 logger.normal(f"{Icon.GEAR.value} Running test verification...")
                 generated_code, test_execution_result = self._test_execution_loop(
                     generated_code, goal, max_attempts=3
                 )
-                
+
                 if test_execution_result:
                     self._zen_summary["test"] = test_execution_result
-                    
+
                     # 指摘A修正: テスト修正でコードが変わった場合、quality_scoresを再評価
                     if test_execution_result.get("fixed"):
                         logger.debug("[Test Exec] Code was modified by test fix, re-evaluating quality...")
@@ -5429,6 +5429,9 @@ Flask + React Fullstack:
                     "total": 0, "passed": 0, "failed_initial": 0, "failed_final": 0,
                     "fixed": False, "attempts": 0
                 }
+            if hud:
+                hud.complete("Test execution & Auto-fix")
+                hud.finish(success=True)
 
             # Step 4.7: Impact Analysis (既存コード - 変更なし)
             # 🆕 API Contract Validation（storage round-trip検証）
@@ -28452,6 +28455,11 @@ Identify what structural changes you made, and undo them while keeping only the 
         各フレームワークのverbose出力を汎用的にパースする。
         共通パターン: PASS/FAIL行、テスト結果サマリー行。
         """
+        # ANSIエスケープコードを除去（カラー出力がregexパースを妨害するため）
+        ansi_escape = re.compile(r'\x1b\[[0-9;]*m')
+        stdout = ansi_escape.sub('', stdout)
+        stderr = ansi_escape.sub('', stderr)
+
         combined = stdout + "\n" + stderr
 
         # 実行エラー（コマンド自体が失敗）
