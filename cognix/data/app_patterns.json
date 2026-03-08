@@ -727,11 +727,12 @@
           "implicit_keywords": {
             "enabled": true,
             "keywords": [
-              "login",
-              "signin",
-              "signup",
-              "register",
-              "auth"
+              "user login",
+              "user signin",
+              "user signup",
+              "user register",
+              "user auth",
+              "authentication"
             ],
             "confidence": "medium"
           }
@@ -1090,7 +1091,11 @@
           "implicit_keywords": {
             "enabled": true,
             "keywords": [
-              "flask"
+              "flask app",
+              "flask web",
+              "flask server",
+              "flask api",
+              "flask backend"
             ],
             "context_requirements": [
               "goal_mentions_web_or_app",

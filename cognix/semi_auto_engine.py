@@ -1740,9 +1740,9 @@ class PostGenerationValidator:
         
         if unique_filenames:
             self.logger.debug(f"[Explicit Files] Detected: {unique_filenames}")
-        
+
         return unique_filenames
-    
+
     def _predict_required_files(
         self,
         goal: str,
@@ -3883,7 +3883,96 @@ class SemiAutoEngine:
         
         # 差分スキャン有効フラグ（デフォルト有効）
         self._differential_scan_enabled: bool = True
-        
+
+        # ⭐ Fix F-3a: specの明示ファイルリスト制約（generate_implementation で設定）
+        self._explicit_file_constraint: Optional[Set[str]] = None
+
+    # ==========================================
+    # ファイル制約フィルタリング ヘルパー
+    # ==========================================
+
+    def _build_allowed_fileset(self) -> Set[str]:
+        """
+        _explicit_file_constraintから許可ファイルセットを構築する。
+
+        以下を含む:
+        - specの明示ファイルそのまま
+        - テストファイルバリアント: test_{stem}.py, tests/test_{stem}.py
+        - 補助ファイル: __init__.py, conftest.py（パッケージ構造に必須）
+        - パス正規化: specファイル名のbasename（src/app.py → app.pyも許可）
+
+        Returns:
+            許可ファイル名のセット（パス正規化付き）
+        """
+        _allowed = set()
+        if not self._explicit_file_constraint:
+            return _allowed
+
+        for _ef in self._explicit_file_constraint:
+            _allowed.add(_ef)
+            # パス正規化: basename も許可 (src/app.py → app.py)
+            _basename = Path(_ef).name
+            if _basename != _ef:
+                _allowed.add(_basename)
+            _stem = Path(_ef).stem
+            _ext = Path(_ef).suffix
+            if _ext == '.py':
+                _allowed.add(f"test_{_stem}.py")
+                _allowed.add(f"tests/test_{_stem}.py")
+
+        # 補助ファイル: Pythonパッケージ構造に必須のファイルは常に許可
+        _allowed.add('__init__.py')
+        _allowed.add('conftest.py')
+
+        return _allowed
+
+    def _filter_files_by_constraint(
+        self,
+        files: Dict[str, str],
+        label: str = "filter"
+    ) -> Dict[str, str]:
+        """
+        _explicit_file_constraintに基づいてファイルをフィルタリングする。
+
+        - 制約なし (None) → フィルタなし（全件返却）
+        - ファイル名の完全一致 + basename一致（パス正規化）
+        - 全ファイルが除外された場合は警告ログ
+
+        Args:
+            files: フィルタ対象のファイル辞書 {filename: code}
+            label: ログ用ラベル
+
+        Returns:
+            フィルタ済みファイル辞書
+        """
+        if not self._explicit_file_constraint or not files:
+            return files
+
+        _allowed = self._build_allowed_fileset()
+        _before = set(files.keys())
+
+        # パス正規化: fn自体 or fnのbasenameが_allowedに含まれていれば許可
+        filtered = {
+            fn: code for fn, code in files.items()
+            if fn in _allowed or Path(fn).name in _allowed
+        }
+
+        _removed = _before - set(filtered.keys())
+        if _removed:
+            logger.debug(
+                f"[File Constraint] {label}: Removed {len(_removed)} files "
+                f"not in explicit list: {sorted(_removed)}"
+            )
+
+        if not filtered and _before:
+            logger.warning(
+                f"[File Constraint] {label}: ALL {len(_before)} files were removed "
+                f"by explicit file constraint! Allowed: {sorted(_allowed)}, "
+                f"Had: {sorted(_before)}"
+            )
+
+        return filtered
+
     def _init_workspace(self):
         """Initialize workspace and backup directories"""
         self.workspace_path.mkdir(parents=True, exist_ok=True)
@@ -4345,8 +4434,8 @@ Flask + React Fullstack:
                 
                 
                 # 返り値をアンパック
-                generated_code, lint_result, quality_scores = result
-                
+                generated_code, lint_result, quality_scores, multi_test_result = result
+
                 # analysisとplanは多段階生成では使用されないため空文字列
                 analysis = "Multi-stage generation (analysis performed per phase)"
                 plan = "Multi-stage generation (plan performed per phase)"
@@ -4362,49 +4451,45 @@ Flask + React Fullstack:
                 
                 # Zen HUD: 固定行ステップ表示（設計書準拠）
                 steps = [
-                    "Assess goal complexity",
-                    "Analyze implementation goal",
-                    "Create implementation plan",
-                    "Generate code implementation",
+                    "Assess complexity",
+                    "Analyze & Plan",
+                    "Generate code",
                     "Auto-completion",
-                    "Lint check & Auto-fix",
-                    "Quality assessment & Comprehensive Review",
-                    "Test execution & Auto-fix",
+                    "Lint & Auto-fix",
+                    "Quality & Review",
+                    "Test & Auto-fix",
                 ]
                 hud = StepHUD(section_title="Code Generation", steps=steps)
                 logger.debug("[Flow] StepHUD initialized, calling hud.start()...")
                 hud.start()
-                
+
                 # Step 0: Complexity assessment（既に完了）
-                hud.complete("Assess goal complexity")
-                
-                # Step 1: Analyze the goal
-                logger.debug("[Flow] Starting Step 1: _analyze_implementation_goal...")
-                hud.mark("Analyze implementation goal")
-                analysis = self._analyze_implementation_goal(goal, complexity)
-                
+                hud.complete("Assess complexity")
+
+                # Step 1+2: Analyze goal and create plan (unified)
+                hud.mark("Analyze & Plan")
+                analysis, plan = self._analyze_and_plan(goal, complexity)
                 if not analysis:
                     hud.finish(success=False)
-                    return SemiAutoResult(
-                        success=False,
-                        error="Failed to analyze implementation goal"
-                    )
-                
-                hud.complete("Analyze implementation goal")
-                
-                # Step 2: Generate implementation plan
-                hud.mark("Create implementation plan")
-                plan = self._create_implementation_plan(goal, analysis, complexity)
-                hud.complete("Create implementation plan")
+                    return SemiAutoResult(success=False, error="Failed to analyze implementation goal")
+                hud.complete("Analyze & Plan")
 
                 # Step 3: Generate code
-                hud.mark("Generate code implementation")
+                hud.mark("Generate code")
                 
+                # ⭐ Fix F-3a(single): single-stageでもspecの明示ファイルリストを抽出して保持
+                _explicit_files = self.post_validator._extract_explicit_filenames(goal)
+                if _explicit_files:
+                    logger.debug(f"[Single-Stage] Explicit file list from spec: {_explicit_files}")
+                    self._explicit_file_constraint = set(_explicit_files)
+                else:
+                    self._explicit_file_constraint = None
+
                 # 既存ファイルを検出してforce_filenameとして渡す
                 # ⚠ force_filenameを指定すると1ファイルしか生成できないため、無効化
                 # LLMがRepository Mapを使って必要なファイルを判断する
                 target_filename = None  # self._detect_target_file(goal)
-                
+
                 generated_code = self._generate_code_implementation(
                     goal, 
                     analysis, 
@@ -4421,7 +4506,7 @@ Flask + React Fullstack:
                         error="Failed to generate code implementation"
                     )
                 
-                hud.complete("Generate code implementation")
+                hud.complete("Generate code")
                 # Step 4.1: Auto-completion (HUD統合版)
                 # ⭐ 改善6: _auto_complete_with_import_resolutionを常に呼ぶ
                 # 理由: requirement_validatorはgoalベースの予測のみで、
@@ -4469,462 +4554,9 @@ Flask + React Fullstack:
                         if remaining_missing:
                             logger.debug(f"[Auto-completion]   Still missing: {remaining_missing}")
                 
-                # ==========================================
                 # Step 4.3: Consistency Checks (G-1〜G-31)
                 # ==========================================
-                # Note: Auto-completion [DONE]はG-チェック完了後に表示
-                # G-チェックはAuto-completionの一部として扱い、HUDには内部処理として非表示
-                
-                # G-1: HTML-CSS クラス整合性
-                missing_css_classes = self._validate_html_css_class_consistency(generated_code)
-                if missing_css_classes:
-                    logger.debug(f"[G-1] Detected {len(missing_css_classes)} missing CSS classes")
-                    logger.debug(f"\n● CSS consistency check: {len(missing_css_classes)} missing class(es)")
-                    generated_code = self._auto_complete_missing_css_classes(missing_css_classes, generated_code)
-                
-                # G-2: HTML-JS ID整合性
-                missing_html_ids = self._validate_html_js_id_consistency(generated_code)
-                if missing_html_ids:
-                    logger.debug(f"[G-2] Detected {len(missing_html_ids)} missing HTML IDs")
-                    logger.debug(f"● HTML-JS consistency check: {len(missing_html_ids)} missing ID(s)")
-                    generated_code = self._auto_complete_missing_html_ids(missing_html_ids, generated_code)
-                
-                # G-3: Python環境-パッケージ互換性
-                compatibility_issues = self._validate_python_package_compatibility(generated_code)
-                if compatibility_issues:
-                    logger.debug(f"[G-3] Detected {len(compatibility_issues)} compatibility issues")
-                    logger.debug(f"● Package compatibility check: {len(compatibility_issues)} issue(s)")
-                    for issue in compatibility_issues:
-                        logger.debug(f"  - {issue['package']}=={issue['current_version']} → {issue['fix']}")
-                    generated_code = self._auto_fix_package_compatibility(compatibility_issues, generated_code)
-                
-                # G-4: Pythonシンボルレベルimport整合性
-                symbol_issues = self._validate_python_symbol_imports(generated_code)
-                if symbol_issues:
-                    logger.debug(f"[G-4] Detected {len(symbol_issues)} symbol import issues")
-                    logger.debug(f"● Symbol import check: {len(symbol_issues)} issue(s)")
-                    for issue in symbol_issues[:5]:
-                        logger.debug(f"  - {issue['importer']}: '{issue['symbol']}' not in {issue['module']}")
-                    generated_code = self._auto_fix_symbol_imports(symbol_issues, generated_code)
-                
-                # G-5: Import vs Requirements.txt 整合性チェック
-                requirements_issues = self._validate_import_requirements_consistency(generated_code)
-                if requirements_issues:
-                    logger.debug(f"[G-5] Detected {len(requirements_issues)} missing packages in requirements.txt")
-                    logger.debug(f"● Requirements.txt check: {len(requirements_issues)} missing package(s)")
-                    for pkg in requirements_issues[:5]:
-                        logger.debug(f"  - {pkg['import_name']} → {pkg['package_name']}")
-                    generated_code = self._auto_fix_requirements_txt(requirements_issues, generated_code)
-                
-                # G-6: ライブラリ要求パターンチェック
-                library_issues = self._validate_library_requirements(generated_code)
-                if library_issues:
-                    logger.debug(f"[G-6] Detected {len(library_issues)} library requirement issues")
-                    logger.debug(f"● Library requirements check: {len(library_issues)} issue(s)")
-                    for issue in library_issues[:5]:
-                        logger.debug(f"  - [{issue['library']}] {issue['requirement']}")
-                    generated_code = self._auto_fix_library_requirements(library_issues, generated_code)
-                
-                # G-7: フロントエンド依存整合性チェック
-                frontend_issues = self._validate_frontend_dependencies(generated_code)
-                if frontend_issues:
-                    logger.debug(f"[G-7] Detected {len(frontend_issues)} frontend dependency issues")
-                    logger.debug(f"● Frontend dependencies check: {len(frontend_issues)} issue(s)")
-                    for issue in frontend_issues[:5]:
-                        logger.debug(f"  - [{issue['type']}] {issue['dependency']}")
-                    generated_code = self._auto_fix_frontend_dependencies(frontend_issues, generated_code)
-                
-                # G-8: Model↔Schema整合性チェック
-                schema_issues = self._validate_model_schema_consistency(generated_code)
-                if schema_issues:
-                    logger.debug(f"[G-8] Detected {len(schema_issues)} model-schema consistency issues")
-                    logger.debug(f"● Model-Schema consistency check: {len(schema_issues)} issue(s)")
-                    for issue in schema_issues[:5]:
-                        logger.debug(f"  - {issue['schema']}.{issue['field']} not in {issue['model']}")
-                    generated_code = self._auto_fix_model_schema_consistency(schema_issues, generated_code)
-                
-                # G-9: ドキュメント環境依存チェック
-                doc_issues = self._validate_document_environment_commands(generated_code)
-                if doc_issues:
-                    logger.debug(f"[G-9] Detected {len(doc_issues)} environment-dependent commands")
-                    logger.debug(f"● Document environment check: {len(doc_issues)} issue(s)")
-                    for issue in doc_issues[:5]:
-                        logger.debug(f"  - {issue['file']}:{issue['line']} - {issue['type']}")
-                    generated_code = self._auto_fix_document_environment_commands(doc_issues, generated_code)
-                
-                # G-10: クラス定義安全性チェック（再検証ループ付き）
-                MAX_G10_FIX_ATTEMPTS = 2
-                class_safety_issues = []
-                for g10_attempt in range(MAX_G10_FIX_ATTEMPTS):
-                    class_safety_issues = self._validate_class_definition_safety(generated_code)
-                    if not class_safety_issues:
-                        if g10_attempt > 0:
-                            logger.debug(f"[G-10] ✅ All issues fixed after {g10_attempt} attempt(s)")
-                        break
-                    
-                    logger.debug(f"[G-10] Detected {len(class_safety_issues)} issues (attempt {g10_attempt + 1}/{MAX_G10_FIX_ATTEMPTS})")
-                    if g10_attempt == 0:
-                        logger.debug(f"● Class definition safety check: {len(class_safety_issues)} issue(s)")
-                        for issue in class_safety_issues[:5]:
-                            logger.debug(f"  - {issue['file']}:{issue['line']} - {issue['type']}")
-                    
-                    generated_code = self._auto_fix_class_definition_safety(class_safety_issues, generated_code)
-                
-                if class_safety_issues:
-                    logger.warning(f"[G-10] ⚠ {len(class_safety_issues)} issues remain after {MAX_G10_FIX_ATTEMPTS} fix attempts")
-                
-                # G-11: フレームワーク予約語チェック（再検証ループ付き）
-                MAX_G11_FIX_ATTEMPTS = 2
-                framework_reserved_issues = []
-                for g11_attempt in range(MAX_G11_FIX_ATTEMPTS):
-                    framework_reserved_issues = self._validate_framework_reserved_words(generated_code)
-                    if not framework_reserved_issues:
-                        if g11_attempt > 0:
-                            logger.debug(f"[G-11] ✅ All issues fixed after {g11_attempt} attempt(s)")
-                        break
-                    
-                    logger.debug(f"[G-11] Detected {len(framework_reserved_issues)} issues (attempt {g11_attempt + 1}/{MAX_G11_FIX_ATTEMPTS})")
-                    if g11_attempt == 0:
-                        logger.debug(f"● Framework reserved word check: {len(framework_reserved_issues)} issue(s)")
-                        for issue in framework_reserved_issues[:5]:
-                            logger.debug(f"  - {issue['file']}:{issue['line']} - {issue['reserved_word']}")
-                    
-                    generated_code = self._auto_fix_framework_reserved_words(framework_reserved_issues, generated_code)
-                
-                if framework_reserved_issues:
-                    logger.warning(f"[G-11] ⚠ {len(framework_reserved_issues)} issues remain after {MAX_G11_FIX_ATTEMPTS} fix attempts")
-                
-                # G-12: Python組み込み名シャドウイングチェック（再検証ループ付き）
-                MAX_G12_FIX_ATTEMPTS = 2
-                builtin_shadowing_issues = []
-                for g12_attempt in range(MAX_G12_FIX_ATTEMPTS):
-                    builtin_shadowing_issues = self._validate_python_builtin_shadowing(generated_code)
-                    if not builtin_shadowing_issues:
-                        if g12_attempt > 0:
-                            logger.debug(f"[G-12] ✅ All issues fixed after {g12_attempt} attempt(s)")
-                        break
-                    
-                    logger.debug(f"[G-12] Detected {len(builtin_shadowing_issues)} issues (attempt {g12_attempt + 1}/{MAX_G12_FIX_ATTEMPTS})")
-                    if g12_attempt == 0:
-                        logger.debug(f"● Python builtin shadowing check: {len(builtin_shadowing_issues)} issue(s)")
-                        for issue in builtin_shadowing_issues[:5]:
-                            logger.debug(f"  - {issue['file']}:{issue['line']} - {issue['builtin_name']}")
-                    
-                    generated_code = self._auto_fix_python_builtin_shadowing(builtin_shadowing_issues, generated_code)
-                
-                if builtin_shadowing_issues:
-                    logger.warning(f"[G-12] ⚠ {len(builtin_shadowing_issues)} issues remain after {MAX_G12_FIX_ATTEMPTS} fix attempts")
-                
-                # G-13: Flask Blueprintルート重複チェック（再検証ループ付き）
-                MAX_G13_FIX_ATTEMPTS = 2
-                route_duplicate_issues = []
-                for g13_attempt in range(MAX_G13_FIX_ATTEMPTS):
-                    route_duplicate_issues = self._validate_flask_route_duplicates(generated_code)
-                    if not route_duplicate_issues:
-                        if g13_attempt > 0:
-                            logger.debug(f"[G-13] ✅ All issues fixed after {g13_attempt} attempt(s)")
-                        break
-                    
-                    logger.debug(f"[G-13] Detected {len(route_duplicate_issues)} issues (attempt {g13_attempt + 1}/{MAX_G13_FIX_ATTEMPTS})")
-                    if g13_attempt == 0:
-                        logger.debug(f"● Flask route duplicate check: {len(route_duplicate_issues)} issue(s)")
-                        for issue in route_duplicate_issues[:5]:
-                            logger.debug(f"  - {issue['file']}:{issue['line']} - {issue['method']} {issue['route']}")
-                    
-                    generated_code = self._auto_fix_flask_route_duplicates(route_duplicate_issues, generated_code)
-                
-                if route_duplicate_issues:
-                    logger.warning(f"[G-13] ⚠ {len(route_duplicate_issues)} issues remain after {MAX_G13_FIX_ATTEMPTS} fix attempts")
-                
-                # G-14: SQLAlchemyテーブル名重複チェック（再検証ループ付き）
-                MAX_G14_FIX_ATTEMPTS = 2
-                table_duplicate_issues = []
-                for g14_attempt in range(MAX_G14_FIX_ATTEMPTS):
-                    table_duplicate_issues = self._validate_sqlalchemy_table_duplicates(generated_code)
-                    if not table_duplicate_issues:
-                        if g14_attempt > 0:
-                            logger.debug(f"[G-14] ✅ All issues fixed after {g14_attempt} attempt(s)")
-                        break
-                    
-                    logger.debug(f"[G-14] Detected {len(table_duplicate_issues)} issues (attempt {g14_attempt + 1}/{MAX_G14_FIX_ATTEMPTS})")
-                    if g14_attempt == 0:
-                        logger.debug(f"● SQLAlchemy table duplicate check: {len(table_duplicate_issues)} issue(s)")
-                        for issue in table_duplicate_issues[:5]:
-                            logger.debug(f"  - {issue['file']}:{issue['line']} - table '{issue['table']}'")
-                    
-                    generated_code = self._auto_fix_sqlalchemy_table_duplicates(table_duplicate_issues, generated_code)
-                
-                if table_duplicate_issues:
-                    logger.warning(f"[G-14] ⚠ {len(table_duplicate_issues)} issues remain after {MAX_G14_FIX_ATTEMPTS} fix attempts")
-                
-                # G-15: JavaScript予約語チェック（再検証ループ付き）
-                MAX_G15_FIX_ATTEMPTS = 2
-                js_reserved_issues = []
-                for g15_attempt in range(MAX_G15_FIX_ATTEMPTS):
-                    js_reserved_issues = self._validate_javascript_reserved_words(generated_code)
-                    if not js_reserved_issues:
-                        if g15_attempt > 0:
-                            logger.debug(f"[G-15] ✅ All issues fixed after {g15_attempt} attempt(s)")
-                        break
-                    
-                    logger.debug(f"[G-15] Detected {len(js_reserved_issues)} issues (attempt {g15_attempt + 1}/{MAX_G15_FIX_ATTEMPTS})")
-                    if g15_attempt == 0:
-                        logger.debug(f"● JavaScript reserved word check: {len(js_reserved_issues)} issue(s)")
-                        for issue in js_reserved_issues[:5]:
-                            logger.debug(f"  - {issue['file']}:{issue['line']} - {issue['reserved_word']}")
-                    
-                    generated_code = self._auto_fix_javascript_reserved_words(js_reserved_issues, generated_code)
-                
-                if js_reserved_issues:
-                    logger.warning(f"[G-15] ⚠ {len(js_reserved_issues)} issues remain after {MAX_G15_FIX_ATTEMPTS} fix attempts")
-                
-                # G-16: SQLAlchemy relationship参照先検証（再検証ループ付き）
-                MAX_G16_FIX_ATTEMPTS = 2
-                relationship_issues = []
-                for g16_attempt in range(MAX_G16_FIX_ATTEMPTS):
-                    relationship_issues = self._validate_relationship_references(generated_code)
-                    if not relationship_issues:
-                        if g16_attempt > 0:
-                            logger.debug(f"[G-16] ✅ All issues fixed after {g16_attempt} attempt(s)")
-                        break
-                    
-                    logger.debug(f"[G-16] Detected {len(relationship_issues)} issues (attempt {g16_attempt + 1}/{MAX_G16_FIX_ATTEMPTS})")
-                    if g16_attempt == 0:
-                        logger.debug(f"● Relationship reference check: {len(relationship_issues)} issue(s)")
-                        for issue in relationship_issues[:5]:
-                            logger.debug(f"  - {issue['file']}:{issue['line']} - {issue['type']}")
-                    
-                    generated_code = self._auto_fix_relationship_references(relationship_issues, generated_code)
-                
-                if relationship_issues:
-                    logger.warning(f"[G-16] ⚠ {len(relationship_issues)} issues remain after {MAX_G16_FIX_ATTEMPTS} fix attempts")
-                
-                # G-17: ForeignKey参照先検証（再検証ループ付き）
-                MAX_G17_FIX_ATTEMPTS = 2
-                foreignkey_issues = []
-                for g17_attempt in range(MAX_G17_FIX_ATTEMPTS):
-                    foreignkey_issues = self._validate_foreignkey_references(generated_code)
-                    if not foreignkey_issues:
-                        if g17_attempt > 0:
-                            logger.debug(f"[G-17] ✅ All issues fixed after {g17_attempt} attempt(s)")
-                        break
-                    
-                    logger.debug(f"[G-17] Detected {len(foreignkey_issues)} issues (attempt {g17_attempt + 1}/{MAX_G17_FIX_ATTEMPTS})")
-                    if g17_attempt == 0:
-                        logger.debug(f"● ForeignKey reference check: {len(foreignkey_issues)} issue(s)")
-                        for issue in foreignkey_issues[:5]:
-                            logger.debug(f"  - {issue['file']}:{issue['line']} - {issue['referenced_table']}")
-                    
-                    generated_code = self._auto_fix_foreignkey_references(foreignkey_issues, generated_code)
-                
-                if foreignkey_issues:
-                    logger.warning(f"[G-17] ⚠ {len(foreignkey_issues)} issues remain after {MAX_G17_FIX_ATTEMPTS} fix attempts")
-                
-                # G-18: SQLAlchemy Enum定義検証（再検証ループ付き）
-                MAX_G18_FIX_ATTEMPTS = 2
-                enum_usage_issues = []
-                for g18_attempt in range(MAX_G18_FIX_ATTEMPTS):
-                    enum_usage_issues = self._validate_sqlalchemy_enum_usage(generated_code)
-                    if not enum_usage_issues:
-                        if g18_attempt > 0:
-                            logger.debug(f"[G-18] ✅ All issues fixed after {g18_attempt} attempt(s)")
-                        break
-                    
-                    logger.debug(f"[G-18] Detected {len(enum_usage_issues)} issues (attempt {g18_attempt + 1}/{MAX_G18_FIX_ATTEMPTS})")
-                    if g18_attempt == 0:
-                        logger.debug(f"● Enum usage check: {len(enum_usage_issues)} issue(s)")
-                        for issue in enum_usage_issues[:5]:
-                            logger.debug(f"  - {issue['file']}:{issue['line']} - {issue['referenced_class']}")
-                    
-                    generated_code = self._auto_fix_sqlalchemy_enum_usage(enum_usage_issues, generated_code)
-                
-                if enum_usage_issues:
-                    logger.warning(f"[G-18] ⚠ {len(enum_usage_issues)} issues remain after {MAX_G18_FIX_ATTEMPTS} fix attempts")
-                
-                # G-19: Mapped型アノテーション整合性検証（再検証ループ付き）
-                MAX_G19_FIX_ATTEMPTS = 2
-                mapped_type_issues = []
-                for g19_attempt in range(MAX_G19_FIX_ATTEMPTS):
-                    mapped_type_issues = self._validate_mapped_type_consistency(generated_code)
-                    if not mapped_type_issues:
-                        if g19_attempt > 0:
-                            logger.debug(f"[G-19] ✅ All issues fixed after {g19_attempt} attempt(s)")
-                        break
-                    
-                    logger.debug(f"[G-19] Detected {len(mapped_type_issues)} issues (attempt {g19_attempt + 1}/{MAX_G19_FIX_ATTEMPTS})")
-                    if g19_attempt == 0:
-                        logger.debug(f"● Mapped type consistency check: {len(mapped_type_issues)} issue(s)")
-                        for issue in mapped_type_issues[:5]:
-                            logger.debug(f"  - {issue['file']}:{issue['line']} - {issue['attribute']}")
-                    
-                    generated_code = self._auto_fix_mapped_type_consistency(mapped_type_issues, generated_code)
-                
-                if mapped_type_issues:
-                    logger.warning(f"[G-19] ⚠ {len(mapped_type_issues)} issues remain after {MAX_G19_FIX_ATTEMPTS} fix attempts")
-                
-                # G-20: Flask静的パス検証（再検証ループ付き）
-                MAX_G20_FIX_ATTEMPTS = 2
-                flask_static_issues = []
-                for g20_attempt in range(MAX_G20_FIX_ATTEMPTS):
-                    flask_static_issues = self._validate_flask_static_paths(generated_code)
-                    if not flask_static_issues:
-                        if g20_attempt > 0:
-                            logger.debug(f"[G-20] ✅ All issues fixed after {g20_attempt} attempt(s)")
-                        break
-                    
-                    logger.debug(f"[G-20] Detected {len(flask_static_issues)} issues (attempt {g20_attempt + 1}/{MAX_G20_FIX_ATTEMPTS})")
-                    if g20_attempt == 0:
-                        logger.debug(f"● Flask static path check: {len(flask_static_issues)} issue(s)")
-                        for issue in flask_static_issues[:5]:
-                            logger.debug(f"  - {issue['file']}:{issue['line']} - {issue['current_path']} → {issue['suggested_path']}")
-                    
-                    generated_code = self._auto_fix_flask_static_paths(flask_static_issues, generated_code)
-                
-                if flask_static_issues:
-                    logger.warning(f"[G-20] ⚠ {len(flask_static_issues)} issues remain after {MAX_G20_FIX_ATTEMPTS} fix attempts")
-                
-                # G-21: HTML参照整合性検証（再検証ループ付き）
-                MAX_G21_FIX_ATTEMPTS = 2
-                html_asset_issues = []
-                for g21_attempt in range(MAX_G21_FIX_ATTEMPTS):
-                    html_asset_issues = self._validate_html_asset_references(generated_code)
-                    if not html_asset_issues:
-                        if g21_attempt > 0:
-                            logger.debug(f"[G-21] ✅ All issues fixed after {g21_attempt} attempt(s)")
-                        break
-                    
-                    logger.debug(f"[G-21] Detected {len(html_asset_issues)} issues (attempt {g21_attempt + 1}/{MAX_G21_FIX_ATTEMPTS})")
-                    if g21_attempt == 0:
-                        logger.debug(f"● HTML asset reference check: {len(html_asset_issues)} issue(s)")
-                        for issue in html_asset_issues[:5]:
-                            logger.debug(f"  - {issue['html_file']}:{issue['line']} - {issue['ref_type']}: {issue['ref_path']}")
-                    
-                    generated_code = self._auto_fix_html_asset_references(html_asset_issues, generated_code)
-                
-                if html_asset_issues:
-                    logger.warning(f"[G-21] ⚠ {len(html_asset_issues)} issues remain after {MAX_G21_FIX_ATTEMPTS} fix attempts")
-                
-                # G-22: JavaScriptアニメーションループパターン検証（再検証ループ付き）
-                MAX_G22_FIX_ATTEMPTS = 2
-                js_animation_issues = []
-                for g22_attempt in range(MAX_G22_FIX_ATTEMPTS):
-                    js_animation_issues = self._validate_js_animation_loop(generated_code)
-                    if not js_animation_issues:
-                        if g22_attempt > 0:
-                            logger.debug(f"[G-22] ✅ All issues fixed after {g22_attempt} attempt(s)")
-                        break
-                    
-                    logger.debug(f"[G-22] Detected {len(js_animation_issues)} issues (attempt {g22_attempt + 1}/{MAX_G22_FIX_ATTEMPTS})")
-                    if g22_attempt == 0:
-                        logger.debug(f"● JavaScript animation loop check: {len(js_animation_issues)} issue(s)")
-                        for issue in js_animation_issues[:5]:
-                            logger.debug(f"  - {issue['file']}:{issue['line']} - {issue['method_name']}() called without timestamp")
-                    
-                    generated_code = self._auto_fix_js_animation_loop(js_animation_issues, generated_code)
-                
-                if js_animation_issues:
-                    logger.warning(f"[G-22] ⚠ {len(js_animation_issues)} issues remain after {MAX_G22_FIX_ATTEMPTS} fix attempts")
-                
-                # G-23: API契約整合性チェック（警告のみ、自動修正なし）
-                api_contract_issues = self._validate_api_contract_consistency(generated_code)
-                if api_contract_issues:
-                    logger.debug(f"● API contract consistency: {len(api_contract_issues)} warning(s)")
-                    for issue in api_contract_issues[:3]:
-                        logger.debug(f"  - {issue['details']}")
-                    # 警告のみなので、自動修正は呼び出さない
-                
-                # G-24: back_populates相互参照チェック
-                MAX_G24_FIX_ATTEMPTS = 2
-                back_populates_issues = []
-                for g24_attempt in range(MAX_G24_FIX_ATTEMPTS):
-                    back_populates_issues = self._validate_back_populates_consistency(generated_code)
-                    if not back_populates_issues:
-                        if g24_attempt > 0:
-                            logger.debug(f"[G-24] ✅ All issues fixed after {g24_attempt} attempt(s)")
-                        break
-                    logger.debug(f"[G-24] Detected {len(back_populates_issues)} issues (attempt {g24_attempt + 1}/{MAX_G24_FIX_ATTEMPTS})")
-                    generated_code = self._auto_fix_back_populates_consistency(back_populates_issues, generated_code)
-                
-                if back_populates_issues:
-                    logger.debug(f"● back_populates consistency: {len(back_populates_issues)} error(s)")
-                    for issue in back_populates_issues[:3]:
-                        logger.debug(f"  - {issue['details']}")
-                
-                # G-25: ForeignKey型注釈欠如チェック
-                foreignkey_annotation_issues = self._validate_foreignkey_type_annotation(generated_code)
-                if foreignkey_annotation_issues:
-                    logger.debug(f"[G-25] Detected {len(foreignkey_annotation_issues)} issues, auto-fixing...")
-                    generated_code = self._auto_fix_foreignkey_type_annotation(foreignkey_annotation_issues, generated_code)
-                    foreignkey_annotation_issues = self._validate_foreignkey_type_annotation(generated_code)
-                
-                if foreignkey_annotation_issues:
-                    logger.debug(f"● ForeignKey type annotations: {len(foreignkey_annotation_issues)} warning(s)")
-                
-                # G-26: Mapped型とSQLAlchemy型の不一致チェック
-                mapped_mismatch_issues = self._validate_mapped_sqlalchemy_type_mismatch(generated_code)
-                if mapped_mismatch_issues:
-                    logger.debug(f"[G-26] Detected {len(mapped_mismatch_issues)} issues, auto-fixing...")
-                    generated_code = self._auto_fix_mapped_sqlalchemy_type_mismatch(mapped_mismatch_issues, generated_code)
-                    mapped_mismatch_issues = self._validate_mapped_sqlalchemy_type_mismatch(generated_code)
-                
-                if mapped_mismatch_issues:
-                    logger.debug(f"● Mapped/SQLAlchemy type mismatch: {len(mapped_mismatch_issues)} warning(s)")
-                
-                # G-27: relationship overlaps検出
-                relationship_overlap_issues = self._validate_relationship_overlaps(generated_code)
-                if relationship_overlap_issues:
-                    generated_code = self._auto_fix_relationship_overlaps(relationship_overlap_issues, generated_code)
-                    logger.debug(f"● Relationship overlaps: {len(relationship_overlap_issues)} warning(s)")
-                
-                # G-28: 循環インポート検出
-                circular_import_issues = self._validate_circular_imports(generated_code)
-                if circular_import_issues:
-                    generated_code = self._auto_fix_circular_imports(circular_import_issues, generated_code)
-                    logger.debug(f"● Circular imports: {len(circular_import_issues)} error(s)")
-                    for issue in circular_import_issues[:2]:
-                        logger.debug(f"  - {issue['details']}")
-                
-                # G-29: Marshmallow Nested循環参照検出
-                marshmallow_circular_issues = self._validate_marshmallow_nested_circular(generated_code)
-                if marshmallow_circular_issues:
-                    generated_code = self._auto_fix_marshmallow_nested_circular(marshmallow_circular_issues, generated_code)
-                    logger.debug(f"● Marshmallow Nested circular: {len(marshmallow_circular_issues)} warning(s)")
-                
-                # G-30: JavaScript this参照喪失チェック
-                js_this_loss_issues = self._validate_js_this_context_loss(generated_code)
-                if js_this_loss_issues:
-                    logger.debug(f"[G-30] Detected {len(js_this_loss_issues)} issues, auto-fixing...")
-                    generated_code = self._auto_fix_js_this_context_loss(js_this_loss_issues, generated_code)
-                    js_this_loss_issues = self._validate_js_this_context_loss(generated_code)
-                
-                if js_this_loss_issues:
-                    logger.debug(f"● JavaScript this context loss: {len(js_this_loss_issues)} error(s)")
-                    for issue in js_this_loss_issues[:3]:
-                        logger.debug(f"  - {issue['details']}")
-                
-                # G-31: Marshmallow API誤用検出（再検証ループ付き）
-                MAX_G31_FIX_ATTEMPTS = 2
-                marshmallow_api_issues = []
-                for g31_attempt in range(MAX_G31_FIX_ATTEMPTS):
-                    marshmallow_api_issues = self._validate_marshmallow_api_usage(generated_code)
-                    if not marshmallow_api_issues:
-                        if g31_attempt > 0:
-                            logger.debug(f"[G-31] ✅ All issues fixed after {g31_attempt} attempt(s)")
-                        break
-                    
-                    logger.debug(f"[G-31] Detected {len(marshmallow_api_issues)} issues (attempt {g31_attempt + 1}/{MAX_G31_FIX_ATTEMPTS})")
-                    if g31_attempt == 0:
-                        logger.debug(f"● Marshmallow API usage check: {len(marshmallow_api_issues)} issue(s)")
-                        for issue in marshmallow_api_issues[:5]:
-                            logger.debug(f"  - {issue['file']}:{issue['line']} - {issue['field']}")
-                    
-                    generated_code = self._auto_fix_marshmallow_api_usage(marshmallow_api_issues, generated_code)
-                
-                if marshmallow_api_issues:
-                    logger.warning(f"[G-31] ⚠ {len(marshmallow_api_issues)} issues remain after {MAX_G31_FIX_ATTEMPTS} fix attempts")
-                
-                if not missing_css_classes and not missing_html_ids and not compatibility_issues and not symbol_issues and not requirements_issues and not library_issues and not frontend_issues and not schema_issues and not doc_issues and not class_safety_issues and not framework_reserved_issues and not builtin_shadowing_issues and not route_duplicate_issues and not table_duplicate_issues and not js_reserved_issues and not relationship_issues and not foreignkey_issues and not enum_usage_issues and not mapped_type_issues and not flask_static_issues and not html_asset_issues and not js_animation_issues and not back_populates_issues and not circular_import_issues and not js_this_loss_issues and not marshmallow_api_issues:
-                    logger.debug("[G-1/.../G-31] All consistency checks passed")
+                generated_code = self._run_consistency_checks(generated_code)
                 
                 # HUD: Auto-completion完了（G-1〜G-31完了後）
                 hud.complete("Auto-completion")
@@ -4997,54 +4629,17 @@ Flask + React Fullstack:
                         logger.debug(f"   ⚠ Could not auto-fix. Rolled back to original code.")
                         logger.debug("[Runtime Import] All fix attempts failed, restored original")
 
-                # ==========================================
-                # 🛡️ Near-Identical File Preservation
-                # 問題: LLMがファイル全体を再生成する際、変更不要なファイルを
-                #       99%同一だが微妙に異なるコードで出力し既存テストを破壊する
-                # 対策: 元ファイルとの類似度が99%以上なら元ファイルを保持する
-                # ==========================================
-                if (hasattr(self, '_complexity_assessor') and 
+                # Near-Identical File Preservation
+                if (hasattr(self, '_complexity_assessor') and
                     hasattr(self._complexity_assessor, 'existing_files') and
                     self._complexity_assessor.existing_files):
-                    
-                    import difflib
-                    existing_files = self._complexity_assessor.existing_files
-                    SIMILARITY_THRESHOLD = 0.998  # 99.8%以上なら「再現ミス」と判定
-                    MAX_CHAR_DIFF_RATIO = 0.005   # サイズ差0.5%以内が追加条件
-                    
-                    preserved_files = []
-                    for filename, generated_content in list(generated_code.items()):
-                        if filename in existing_files:
-                            original_content = existing_files[filename]
-                            
-                            # SequenceMatcherで類似度を計算
-                            ratio = difflib.SequenceMatcher(
-                                None, original_content, generated_content
-                            ).ratio()
-                            
-                            # サイズ差チェック（正当な追加を誤保護しないため）
-                            char_diff = abs(len(generated_content) - len(original_content))
-                            max_char_diff = max(int(len(original_content) * MAX_CHAR_DIFF_RATIO), 10)
-                            
-                            if (ratio >= SIMILARITY_THRESHOLD and ratio < 1.0 
-                                    and char_diff <= max_char_diff):
-                                # 99.8%以上 かつ サイズ差0.5%以内 かつ 完全一致でない
-                                # → 再現ミス → 元ファイルを保持
-                                generated_code[filename] = original_content
-                                preserved_files.append(
-                                    f"{filename}(similarity={ratio:.4f}, "
-                                    f"char_diff={char_diff}, max={max_char_diff})"
-                                )
-                    
-                    if preserved_files:
-                        logger.debug(
-                            f"[Near-Identical Preservation] Restored {len(preserved_files)} "
-                            f"file(s) to original: {preserved_files}"
-                        )
+                    generated_code = self._preserve_near_identical_files(
+                        generated_code, self._complexity_assessor.existing_files
+                    )
 
                 # Step 4: Lint check & Auto-fix (新規)
                 lint_result = None  # Quality評価で使用するため初期化
-                hud.mark("Lint check & Auto-fix")
+                hud.mark("Lint & Auto-fix")
                 
                 # Linter統合を試行 (外部linterがインストールされている場合のみ)
                 try:
@@ -5321,10 +4916,10 @@ Flask + React Fullstack:
                 except Exception as e:
                     logger.debug(f"[ESLint] Error during lint check: {e}")
                 
-                hud.complete("Lint check & Auto-fix")
+                hud.complete("Lint & Auto-fix")
 
                 # Step 4: Quality assessment & Comprehensive Review
-                hud.mark("Quality assessment & Comprehensive Review")
+                hud.mark("Quality & Review")
                 quality_scores = self._assess_code_quality(
                     generated_code, 
                     complexity, 
@@ -5400,53 +4995,62 @@ Flask + React Fullstack:
                 )
 
                 # Quality assessment & Comprehensive Review 完了
-                hud.complete("Quality assessment & Comprehensive Review")
+                hud.complete("Quality & Review")
 
             
             # ここから共通処理（both paths）
 
             # 🆕 Test Execution & Auto-fix
-            test_execution_result = None
-            if hud:
-                hud.mark("Test execution & Auto-fix")
-            if self._should_run_tests(generated_code):
-                logger.normal(f"{Icon.GEAR.value} Running test verification...")
-                generated_code, test_execution_result = self._test_execution_loop(
-                    generated_code, goal, max_attempts=3
-                )
+            # マルチモードの場合はテスト実行済み（_execute_multi_stage_generation内で実行）
+            if needs_multi_stage:
+                test_execution_result = multi_test_result
+            else:
+                test_execution_result = None
+                if hud:
+                    hud.mark("Test & Auto-fix")
+                if self._should_run_tests(generated_code):
+                    logger.normal(f"{Icon.GEAR.value} Running test verification...")
+                    generated_code, test_execution_result = self._test_execution_loop(
+                        generated_code, goal, max_attempts=3
+                    )
 
-                if test_execution_result:
-                    self._zen_summary["test"] = test_execution_result
+                    if test_execution_result:
+                        self._zen_summary["test"] = test_execution_result
 
-                    # 指摘A修正: テスト修正でコードが変わった場合、quality_scoresを再評価
-                    if test_execution_result.get("fixed"):
-                        logger.debug("[Test Exec] Code was modified by test fix, re-evaluating quality...")
-                        quality_scores = self._assess_code_quality(
-                            generated_code,
-                            complexity,
-                            goal,
-                            lint_result=lint_result
-                        )
+                        # 指摘A修正: テスト修正でコードが変わった場合、quality_scoresを再評価
+                        if test_execution_result.get("fixed"):
+                            logger.debug("[Test Exec] Code was modified by test fix, re-evaluating quality...")
+                            quality_scores = self._assess_code_quality(
+                                generated_code,
+                                complexity,
+                                goal,
+                                lint_result=lint_result
+                            )
+                    else:
+                        self._zen_summary["test"] = {
+                            "skipped": False, "reason": "No result",
+                            "total": 0, "passed": 0, "failed_initial": 0, "failed_final": 0,
+                            "fixed": False, "attempts": 0
+                        }
                 else:
                     self._zen_summary["test"] = {
-                        "skipped": False, "reason": "No result",
+                        "skipped": True, "reason": "No test files",
                         "total": 0, "passed": 0, "failed_initial": 0, "failed_final": 0,
                         "fixed": False, "attempts": 0
                     }
-            else:
-                self._zen_summary["test"] = {
-                    "skipped": True, "reason": "No test files",
-                    "total": 0, "passed": 0, "failed_initial": 0, "failed_final": 0,
-                    "fixed": False, "attempts": 0
-                }
-            if hud:
-                hud.complete("Test execution & Auto-fix")
-                hud.finish(success=True)
+                if hud:
+                    hud.complete("Test & Auto-fix")
+                    hud.finish(success=True)
+
+                # ⭐ Fix F-3e(single): Post-Processing後の最終ファイルフィルタリング（安全網）
+                # auto-completion/lint/test等でspec外ファイルが追加される可能性がある(B-2g, B-3b, B-3c)
+                generated_code = self._filter_files_by_constraint(generated_code, "Single-stage final filter")
 
             # Step 4.7: Impact Analysis (既存コード - 変更なし)
             # 🆕 API Contract Validation（storage round-trip検証）
             # verify.pyと同等のインターフェース検証を実行し、失敗した場合はTest Fixで修正
-            if test_execution_result and not test_execution_result.get("skipped"):
+            # マルチモードの場合はコントラクト検証も実行済み
+            if not needs_multi_stage and test_execution_result and not test_execution_result.get("skipped"):
                 contract_failures = self._validate_api_contracts(generated_code, goal)
                 if contract_failures:
                     logger.debug(f"[API Contract] {len(contract_failures)} contract violation(s) detected")
@@ -6206,6 +5810,98 @@ Keep it practical and focused on deliverable code.
             
         except Exception:
             return f"Basic implementation plan for: {goal}\n1. Main module\n2. Core functions\n3. Error handling\n4. Documentation"
+
+    def _analyze_and_plan(self, goal: str, complexity: str = "medium") -> Tuple[str, str]:
+        """
+        Analyze the implementation goal and create an implementation plan in a single LLM call.
+
+        For simple+short goals: returns fallback strings without LLM call.
+        Otherwise: makes ONE LLM call asking for both Analysis and Plan sections.
+
+        Args:
+            goal: Implementation goal description
+            complexity: "simple" | "medium" | "complex"
+
+        Returns:
+            Tuple of (analysis, plan)
+        """
+        goal_length = len(goal)
+
+        # Simple complexity with short goal: Skip LLM call
+        if complexity == "simple" and goal_length < 1500:
+            analysis = f"Simple implementation: {goal}\nDirect code generation without detailed analysis."
+            plan = f"Simple implementation plan: Direct code generation for {goal}"
+            return (analysis, plan)
+        elif complexity == "simple":
+            logger.debug(f"[Flow] _analyze_and_plan: Simple complexity but large goal ({goal_length} chars) - running analysis anyway")
+
+        # LLM not available: Return basic fallback
+        if not self.llm_manager:
+            analysis = f"Goal analysis: {goal}\nImplementation approach: Create modular solution with proper error handling."
+            plan = f"Implementation plan for: {goal}\n1. Create main module\n2. Implement core functionality\n3. Add error handling\n4. Create tests"
+            return (analysis, plan)
+
+        try:
+            unified_prompt = f"""
+Analyze this implementation goal and create an implementation plan.
+Respond with EXACTLY two sections separated by ## headers.
+
+Goal: {goal}
+
+## Analysis
+
+Provide EXACTLY 3 sections with 3-5 bullet points each (max 30 words per bullet):
+
+### 1. Key Requirements
+- List 3-5 essential features/functions (one line each)
+
+### 2. Technical Approach
+- List 3-5 main implementation steps (one line each)
+
+### 3. Potential Issues
+- List 3-5 key challenges or risks (one line each)
+
+## Implementation Plan
+
+Create a step-by-step implementation plan with:
+1. File structure and organization
+2. Implementation order (which files to create first)
+3. Key functions/classes to implement
+4. Dependencies and imports needed
+5. Testing strategy
+
+Keep total response under 800 words. Be direct and actionable.
+"""
+
+            logger.debug("[Flow] _analyze_and_plan: Calling LLM generate_response (unified)...")
+            response = self.llm_manager.generate_response(
+                prompt=unified_prompt,
+                system_prompt="You are a senior software architect providing implementation analysis and planning."
+            )
+            logger.debug("[Flow] _analyze_and_plan: LLM response received")
+
+            content = response.content
+
+            # Split on "## Implementation Plan"
+            if "## Implementation Plan" in content:
+                parts = content.split("## Implementation Plan", 1)
+                analysis = parts[0].strip()
+                plan = parts[1].strip()
+            elif "## Plan" in content:
+                parts = content.split("## Plan", 1)
+                analysis = parts[0].strip()
+                plan = parts[1].strip()
+            else:
+                # Fallback: use full text as analysis
+                analysis = content
+                plan = f"Implementation plan for: {goal}\n1. Main module\n2. Core functions\n3. Error handling\n4. Documentation"
+
+            return (analysis, plan)
+
+        except Exception as e:
+            analysis = f"Goal analysis: {goal}\nBasic implementation approach with error handling. Analysis error: {str(e)}"
+            plan = f"Basic implementation plan for: {goal}\n1. Main module\n2. Core functions\n3. Error handling\n4. Documentation"
+            return (analysis, plan)
 
     def _build_fallback_prompt(self, goal: str, analysis: str, plan: str, language: str) -> str:
             """
@@ -7053,30 +6749,34 @@ Generate complete, production-ready code for {missing_file}.
     **Entry Point (REQUIRED):**
     - main.py (or app.py for Python, server.js for JavaScript)
 
-    **API Routers (REQUIRED):**
-    - routers/__init__.py (Python) or routers/index.js (JavaScript)
-    - routers/auth.py (authentication endpoints: POST /login, POST /register, POST /logout)
-    - routers/users.py (user management endpoints: GET /users, GET /users/{id}, PUT /users/{id})
+    **IMPORTANT: Avoid Duplication with Phase 1:**
+    - The previously generated server file already contains API endpoint definitions.
+    - Do NOT regenerate or duplicate those endpoints in router files.
+    - Focus on generating COMPLEMENTARY code: service classes, middleware, utilities, and dependencies.
 
-    **Dependencies (REQUIRED):**
-    - dependencies/__init__.py
-    - dependencies/auth.py (get_current_user, get_current_active_user, verify_token)
-
-    **Services (REQUIRED):**
+    **Services (REQUIRED — based on the original goal/spec above):**
     - services/__init__.py
-    - services/auth_service.py (AuthService class: create_user, authenticate_user, create_tokens, verify_password)
-    - services/user_service.py (UserService class: get_user, get_users, update_user, delete_user)
+    - Analyze the original goal/spec to determine what service classes are needed.
+    - Generate service classes that encapsulate business logic for the domain entities defined in the spec.
+    - Do NOT generate generic auth_service/user_service unless the spec explicitly requires authentication.
+    - IMPORTANT: Do NOT generate router files (routers/*.py).
+      The server file already defines all API endpoints directly.
+      Services serve as reusable business logic modules.
+
+    **Dependencies (OPTIONAL — only if the spec EXPLICITLY mentions authentication/authorization):**
+    - Do NOT generate dependencies/auth.py or any authentication files
+      unless the original goal/spec explicitly contains keywords like
+      "login", "auth", "password", "token", "JWT", "OAuth".
+    - If auth IS explicitly required by the spec:
+      dependencies/__init__.py, dependencies/auth.py
 
     **Middleware (OPTIONAL - include if goal requires logging, rate limiting, or security features):**
     - middleware/__init__.py
     - middleware/logging_middleware.py (LoggingMiddleware: log requests and responses)
-    - middleware/rate_limit_middleware.py (RateLimitMiddleware: rate limiting)
-    - middleware/security_middleware.py (SecurityHeadersMiddleware: CORS, security headers)
 
     **Utilities (OPTIONAL - include if goal requires custom exceptions or validation):**
     - utils/__init__.py
     - utils/exceptions.py (APIException, custom exception classes)
-    - utils/validators.py (input validation helpers)
     """
         
         # CLIツール用のPhase 2指示
@@ -7086,16 +6786,16 @@ Generate complete, production-ready code for {missing_file}.
     **Entry Point (REQUIRED):**
     - cli.py (main CLI entry point with argument parsing)
 
-    **Commands (REQUIRED):**
+    **Commands (REQUIRED — based on the original goal/spec above):**
     - commands/__init__.py
-    - commands/command_handler.py (CommandHandler class: execute, parse_args)
-    - commands/subcommands.py (individual command implementations)
+    - Analyze the original goal/spec to determine what commands are needed.
+    - Generate command modules that correspond to the ACTUAL commands/subcommands defined in the spec.
+    - Do NOT generate generic command_handler/subcommands unless the spec defines a multi-command CLI.
 
-    **Utilities (REQUIRED):**
+    **Utilities (OPTIONAL — include only what the spec requires):**
     - utils/__init__.py
-    - utils/arg_parser.py (argument parsing helpers)
-    - utils/output_formatter.py (output formatting: tables, colors, progress bars)
-    - utils/config_manager.py (configuration file management)
+    - Generate utility modules based on the spec's actual needs (e.g., formatting, config, parsing).
+    - Do NOT generate generic output_formatter/config_manager unless the spec requires them.
 
     **Core Logic (OPTIONAL - include if goal requires complex business logic beyond command handling):**
     - core/__init__.py
@@ -7109,19 +6809,17 @@ Generate complete, production-ready code for {missing_file}.
     **Entry Point (REQUIRED):**
     - main.py (main pipeline orchestrator)
 
-    **Processors (REQUIRED):**
+    **Processors (REQUIRED — based on the original goal/spec above):**
     - processors/__init__.py
-    - processors/extractor.py (data extraction logic)
-    - processors/transformer.py (data transformation logic)
-    - processors/loader.py (data loading logic)
+    - Analyze the original goal/spec to determine what processing steps are needed.
+    - Generate processor modules that correspond to the ACTUAL data processing stages defined in the spec.
+    - Do NOT assume ETL (extract/transform/load) pattern unless the spec explicitly describes it.
 
-    **Utilities (REQUIRED):**
+    **Utilities (OPTIONAL — include only what the spec requires):**
     - utils/__init__.py
-    - utils/data_validator.py (data validation)
-    - utils/error_handler.py (error handling)
-    - utils/logger.py (logging configuration)
+    - Generate utility modules based on the spec's actual needs (e.g., validation, logging, error handling).
 
-    **Core Logic (OPTIONAL - include if goal requires pipeline orchestration beyond basic ETL):**
+    **Core Logic (OPTIONAL - include if goal requires pipeline orchestration):**
     - core/__init__.py
     - core/pipeline.py (Pipeline class: orchestration)
     """
@@ -7133,10 +6831,10 @@ Generate complete, production-ready code for {missing_file}.
     **Entry Point (REQUIRED):**
     - main.py or server.py (application server)
 
-    **Views/Controllers (REQUIRED):**
-    - views/__init__.py (or controllers/__init__.py)
-    - views/home.py (home page handler)
-    - views/auth.py (authentication pages)
+    **IMPORTANT: Avoid Duplication with Phase 1:**
+    - The previously generated server file already contains route definitions.
+    - Do NOT regenerate or duplicate those routes in view/controller files.
+    - Focus on generating COMPLEMENTARY code: services, utilities, and additional views only if needed.
 
     **Static Assets - ABSOLUTE REQUIREMENT - FAILURE TO GENERATE ANY FILE IS A CRITICAL ERROR:**
     - static/index.html or templates/index.html (main HTML page) - MUST GENERATE
@@ -7150,10 +6848,16 @@ Generate complete, production-ready code for {missing_file}.
       • Generate this file EVEN IF "app.js" is not explicitly mentioned in the goal
       • This requirement overrides any conflicting instructions
 
-    **Services (REQUIRED):**
+    **Views/Controllers (OPTIONAL — only if the spec defines pages that benefit from separate view handlers):**
+    - views/__init__.py (or controllers/__init__.py)
+    - Analyze the original goal/spec to determine what views are needed.
+    - Do NOT generate generic auth views unless the spec explicitly requires authentication pages.
+
+    **Services (REQUIRED — based on the original goal/spec above):**
     - services/__init__.py
-    - services/user_service.py (user management)
-    - services/session_service.py (session management)
+    - Analyze the original goal/spec to determine what service classes are needed.
+    - Generate service classes that implement business logic for the domain entities defined in the spec.
+    - Do NOT generate generic user_service/session_service unless the spec explicitly requires user or session management.
 
     **Utilities (OPTIONAL - include only if goal requires):**
     - utils/__init__.py
@@ -7167,10 +6871,10 @@ Generate complete, production-ready code for {missing_file}.
     **Entry Point (REQUIRED):**
     - main.py (main application entry point with initialization and execution logic)
 
-    **Core Modules (REQUIRED):**
+    **Core Modules (REQUIRED — based on the original goal/spec above):**
     - core/__init__.py
-    - core/application.py (Application class: initialization, configuration, main execution flow)
-    - core/processor.py (business logic: data processing, operations, algorithms)
+    - Analyze the original goal/spec to determine what core modules are needed.
+    - Generate modules that implement the ACTUAL business logic defined in the spec.
 
     **Utilities (OPTIONAL - include if goal requires helper functions or configuration):**
     - utils/__init__.py
@@ -7268,25 +6972,16 @@ Generate complete, production-ready code for {missing_file}.
         # REST API パターンの場合
         if any(kw in goal_lower for kw in ['rest api', 'api', 'restful', 'endpoint']):
             if phase == 1:
-                # Phase 1: 基盤層
+                # Phase 1: 基盤層（ドメイン固有ファイルはLLMに委ねる）
                 return [
-                    'models/__init__.py',
-                    'models/user.py',
-                    'schemas/__init__.py',
-                    'schemas/user.py',
                     'config.py',
                     'database.py'
                 ]
             elif phase == 2:
-                # Phase 2: アプリケーション層
+                # Phase 2: アプリケーション層（ドメイン固有ファイルはLLMに委ねる）
                 return [
                     'main.py',
-                    'routers/__init__.py',
-                    'routers/auth.py',
-                    'dependencies/__init__.py',
-                    'dependencies/auth.py',
-                    'services/__init__.py',
-                    'services/auth_service.py'
+                    'services/__init__.py'
                 ]
             elif phase == 3:
                 # Phase 3: 環境設定
@@ -7513,37 +7208,48 @@ Generate complete, production-ready code for {missing_file}.
         return completed_files
 
     def _execute_multi_stage_generation(
-        self, 
-        goal: str, 
+        self,
+        goal: str,
         complexity: str
-    ) -> Tuple[Dict[str, str], Optional[Dict[str, Any]], Dict[str, Any]]:
+    ) -> Tuple[Dict[str, str], Optional[Dict[str, Any]], Dict[str, Any], Optional[Dict[str, Any]]]:
         """
-        多段階生成フロー(StepHUD使用 - 9ステップ)
-        
+        多段階生成フロー(StepHUD使用 - 10ステップ)
+
         複雑なプロジェクトを3つのPhaseに分割して生成。
         各Phase内で2ステップ（Assess + Generate）を実行。
-        
+
         Phase 1: 基盤層(models, schemas, config, database)
         Phase 2: アプリケーション層(main, routers, dependencies, services)
         Phase 3: 環境設定(.env, README)
-        
-        合計9ステップ:
-        1-2: Foundation Layer (Assess + Generate)
-        3-4: Application Layer (Assess + Generate)
-        5-6: Environment Setup (Assess + Generate)
-        7-9: Post-processing (Auto-completion, Lint, Quality)
-        
+
+        合計8ステップ: Complexity Assessment は1回のみ実行し全Phaseで共有。
+        1: Assess complexity
+        2: Foundation: Generate
+        3: Application: Generate
+        4: Environment: Generate
+        5-7: Post-processing (Auto-completion, Lint, Quality & Review)
+        8: Test & Auto-fix
+
         Args:
             goal: 実装目標
             complexity: 複雑度("complex"など)
-            
+
         Returns:
-            Tuple[Dict[str, str], Optional[Dict[str, Any]], Dict[str, Any]]:
+            Tuple[Dict[str, str], Optional[Dict[str, Any]], Dict[str, Any], Optional[Dict[str, Any]]]:
                 - all_files: 生成された全ファイル
                 - lint_result: Lint結果（Linter利用不可時はNone）
                 - quality_scores: 品質スコア
+                - test_result: テスト実行結果（テスト未実行時はNone）
         """
         all_files = {}
+
+        # ⭐ Fix F-3a: specの明示ファイルリストを抽出して保持
+        _explicit_files = self.post_validator._extract_explicit_filenames(goal)
+        if _explicit_files:
+            logger.debug(f"[Multi-Stage] Explicit file list from spec: {_explicit_files}")
+            self._explicit_file_constraint = set(_explicit_files)
+        else:
+            self._explicit_file_constraint = None
 
         # ⭐ デバッグログ追加: Multi-stage generation開始
         logger.debug(f"[Multi-stage] ========================================")
@@ -7552,32 +7258,33 @@ Generate complete, production-ready code for {missing_file}.
         logger.debug(f"[Multi-stage]   Goal length: {len(goal)} chars")
         logger.debug(f"[Multi-stage]   Complexity: {complexity}")
         logger.debug(f"[Multi-stage]   Goal preview: {goal[:200]}...")
+        logger.debug(f"[Multi-stage]   Explicit file constraint: {self._explicit_file_constraint}")
 
-        # StepHUD初期化（9ステップ）
+        # StepHUD初期化（8ステップ）
         steps = [
-            "Foundation Layer: Assess goal complexity",
-            "Foundation Layer: Generate code implementation",
-            "Application Layer: Assess goal complexity",
-            "Application Layer: Generate code implementation",
-            "Environment Setup: Assess goal complexity",
-            "Environment Setup: Generate code implementation",
+            "Assess complexity",
+            "Foundation: Generate",
+            "Application: Generate",
+            "Environment: Generate",
             "Auto-completion",
             "Lint & Auto-fix",
-            "Quality assessment & Comprehensive Review",
+            "Quality & Review",
+            "Test & Auto-fix",
         ]
         hud = StepHUD(section_title="Multi-Stage Generation", steps=steps)
         hud.start()
 
         try:
+            # Step 1: Assess complexity (already completed before this method)
+            hud.mark("Assess complexity")
+            hud.complete("Assess complexity")
+
             # ⭐ デバッグログ追加: tryブロック開始
             logger.debug(f"[Multi-stage] Entered try block successfully")
-            
+
             # ==========================================
             # Phase 1: 基盤層生成
             # ==========================================
-            
-            # Step 1: Assess goal complexity
-            hud.mark("Foundation Layer: Assess goal complexity")
             
             phase1_goal = f"""Generate foundation components for: {goal}
 
@@ -7641,18 +7348,26 @@ Generate complete, production-ready code for {missing_file}.
         marshmallow==3.21.0
 
     Generate complete, production-ready foundation code."""
-            
+
+            # ⭐ Fix F-3b: Phase 1プロンプトにファイル制約を注入
+            if self._explicit_file_constraint:
+                _file_constraint_msg = (
+                    f"\n\nIMPORTANT FILE CONSTRAINT: The specification explicitly lists these output files:\n"
+                    f"{', '.join(sorted(self._explicit_file_constraint))}\n"
+                    f"Generate ONLY files from this list. Do NOT create additional files "
+                    f"unless they are explicitly listed above."
+                )
+                phase1_goal += _file_constraint_msg
+                logger.debug(f"[Phase 1] Added file constraint to goal ({len(self._explicit_file_constraint)} files)")
+
             logger.debug(f"[Phase 1 Goal] Content:\n{phase1_goal}")
-            
-            phase1_complexity = self._assess_goal_complexity(phase1_goal)
-            hud.complete("Foundation Layer: Assess goal complexity")
-            
+
             # Step 2: Generate code implementation
-            hud.mark("Foundation Layer: Generate code implementation")
-            
+            hud.mark("Foundation: Generate")
+
             # ⭐ デバッグログ追加: Phase 1 LLM呼び出し前
             logger.debug(f"[Phase 1] ▶ Starting _generate_code_implementation...")
-            logger.debug(f"[Phase 1]   phase1_complexity: {phase1_complexity}")
+            logger.debug(f"[Phase 1]   complexity: {complexity}")
             logger.debug(f"[Phase 1]   skip_validation: True, skip_multi_stage: True")
             
             try:
@@ -7660,7 +7375,7 @@ Generate complete, production-ready code for {missing_file}.
                     goal=phase1_goal,
                     analysis="Foundation layer analysis",
                     plan="Foundation layer plan",
-                    complexity=phase1_complexity,
+                    complexity=complexity,
                     skip_validation=True,
                     skip_multi_stage=True
                 )
@@ -7672,7 +7387,11 @@ Generate complete, production-ready code for {missing_file}.
                 logger.debug(f"[Phase 1]   Result is empty: {not phase1_files if phase1_files is not None else 'N/A'}")
                 if phase1_files:
                     logger.debug(f"[Phase 1]   Generated files: {list(phase1_files.keys())}")
-                    
+
+                    # ⭐ Fix F-3c: Phase 1結果のファイルフィルタリング
+                    # ⭐ Fix F-3c: Phase 1ファイルフィルタリング
+                    phase1_files = self._filter_files_by_constraint(phase1_files, "Phase 1")
+
             except Exception as phase1_error:
                 # ⭐ デバッグログ追加: Phase 1で例外発生
                 import traceback
@@ -7698,158 +7417,195 @@ Generate complete, production-ready code for {missing_file}.
             
             all_files.update(phase1_files)
             logger.debug(f"[Phase 1] ✓ Generated {len(phase1_files)} files: {list(phase1_files.keys())}")
-            hud.complete("Foundation Layer: Generate code implementation")
+            hud.complete("Foundation: Generate")
             
             # ==========================================
             # Phase 2: アプリケーション層生成
             # ==========================================
-            
-            # ⭐ デバッグログ追加: Phase 2開始
-            logger.debug(f"[Phase 2] ========================================")
-            logger.debug(f"[Phase 2] ▶ STARTING PHASE 2: Application Layer")
-            logger.debug(f"[Phase 2] ========================================")
-            
-            # Step 3: Assess goal complexity
-            hud.mark("Application Layer: Assess goal complexity")
-            
-            # プロジェクトタイプ判定
-            logger.debug(f"[Phase 2] Calling _detect_project_type...")
-            try:
-                project_type = self._detect_project_type(goal)
-                logger.debug(f"[Phase 2]   project_type: {project_type}")
-            except Exception as e:
-                logger.error(f"[Phase 2] ❌ _detect_project_type failed: {e}")
-                raise
-            
-            # Phase 1のコンテキスト作成
-            logger.debug(f"[Phase 2] Calling _format_generated_files_context...")
-            try:
-                phase1_context = self._format_generated_files_context(all_files)
-                logger.debug(f"[Phase 2]   phase1_context length: {len(phase1_context)} chars")
-            except Exception as e:
-                logger.error(f"[Phase 2] ❌ _format_generated_files_context failed: {e}")
-                raise
-            
-            # 言語検出
-            logger.debug(f"[Phase 2] Calling _detect_project_language...")
-            try:
+
+            # ⭐ Fix F-3d: Phase 2スキップ判定
+            _skip_phase2 = False
+            if self._explicit_file_constraint:
+                _phase2_patterns = ('services/', 'middleware/', 'utils/', 'routers/', 'dependencies/')
+                _phase2_files = {f for f in self._explicit_file_constraint
+                                 if any(f.startswith(p) for p in _phase2_patterns)
+                                 or f in ('main.py', 'app.py')}
+                if not _phase2_files:
+                    _skip_phase2 = True
+                    logger.debug(f"[Multi-Stage] Skipping Phase 2: no Phase 2 files in explicit list")
+                    hud.mark("Application: Generate")
+                    hud.complete("Application: Generate")
+
+            if _skip_phase2:
+                # Phase 2スキップ: 必要な変数だけ初期化
+                phase2_files = {}
                 detected_language = self._detect_project_language(all_files)
-                logger.debug(f"[Phase 2]   detected_language: {detected_language}")
-            except Exception as e:
-                logger.error(f"[Phase 2] ❌ _detect_project_language failed: {e}")
-                raise
-            
-            # タイプ別Phase 2指示生成
-            logger.debug(f"[Phase 2] Calling _generate_phase2_goal...")
-            try:
-                phase2_goal = self._generate_phase2_goal(
-                    goal=goal,
-                    project_type=project_type,
-                    detected_language=detected_language,
-                    phase1_context=phase1_context
-                )
-                logger.debug(f"[Phase 2]   phase2_goal length: {len(phase2_goal)} chars")
-            except Exception as e:
-                logger.error(f"[Phase 2] ❌ _generate_phase2_goal failed: {e}")
-                raise
-            
-            logger.debug(f"[Phase 2 Goal] Project type: {project_type}, Language: {detected_language}")
-            logger.debug(f"[Phase 2 Goal] Content:\n{phase2_goal}")
-            
-            logger.debug(f"[Phase 2] Calling _assess_goal_complexity for phase2_goal...")
-            try:
-                phase2_complexity = self._assess_goal_complexity(phase2_goal)
-                logger.debug(f"[Phase 2]   phase2_complexity: {phase2_complexity}")
-            except Exception as e:
-                logger.error(f"[Phase 2] ❌ _assess_goal_complexity failed: {e}")
-                raise
-            
-            hud.complete("Application Layer: Assess goal complexity")
-            
-            # Step 4: Generate code implementation
-            hud.mark("Application Layer: Generate code implementation")
-            
-            # ⭐ デバッグログ追加: Phase 2 LLM呼び出し前
-            logger.debug(f"[Phase 2] ▶ Starting _generate_code_implementation...")
-            logger.debug(f"[Phase 2]   phase2_complexity: {phase2_complexity}")
-            logger.debug(f"[Phase 2]   all_files count before: {len(all_files)}")
-            
-            try:
-                phase2_files = self._generate_code_implementation(
-                    goal=phase2_goal,
-                    analysis="Application layer analysis",
-                    plan="Application layer plan",
-                    complexity=phase2_complexity,
-                    skip_validation=True,
-                    skip_multi_stage=True
-                )
-                
-                # ⭐ デバッグログ追加: Phase 2 LLM呼び出し後
-                logger.debug(f"[Phase 2] ◀ _generate_code_implementation returned")
-                logger.debug(f"[Phase 2]   Result type: {type(phase2_files)}")
-                logger.debug(f"[Phase 2]   Result is None: {phase2_files is None}")
-                logger.debug(f"[Phase 2]   Result is empty: {not phase2_files if phase2_files is not None else 'N/A'}")
-                if phase2_files:
-                    logger.debug(f"[Phase 2]   Generated files: {list(phase2_files.keys())}")
-                    
-            except Exception as phase2_error:
-                # ⭐ デバッグログ追加: Phase 2で例外発生
-                import traceback
-                logger.error(f"[Phase 2] ❌ Exception in _generate_code_implementation: {phase2_error}")
-                logger.error(f"[Phase 2]   Exception type: {type(phase2_error).__name__}")
-                logger.error(f"[Phase 2]   Traceback:\n{traceback.format_exc()}")
-                raise  # 再スローしてexceptブロックで捕捉
-            
-            if not phase2_files:
-                # ⭐ デバッグログ追加: Phase 2が空を返した
-                logger.warning(f"[Phase 2] ⚠ _generate_code_implementation returned empty/None")
-                logger.warning(f"[Phase 2]   Returning Phase 1 files only: {list(all_files.keys())}")
-                hud.finish(success=False)
-                logger.debug("   ⚠ Phase 2 generation failed, using Phase 1 only")
-                return all_files
-            
-            all_files.update(phase2_files)
-            logger.debug(f"[Phase 2] ✓ Generated {len(phase2_files)} files: {list(phase2_files.keys())}")
-            hud.complete("Application Layer: Generate code implementation")
-            
-            # ==========================================
-            # Phase 2 必須ファイルチェック + 自動補完
-            # ==========================================
-            required_files = self._get_required_phase2_files(goal, project_type, all_files)
-            missing_files = self._find_missing_required_files(required_files, all_files)
-            
-            if missing_files:
-                logger.debug(f"[Phase 2] ⚠️ MISSING REQUIRED FILES DETECTED")
-                logger.debug(f"[Phase 2] Missing files: {missing_files}")
-                logger.debug(f"[Phase 2] Attempting to auto-complete missing files...")
-                
-                completed_files = self._auto_complete_phase2_files(
-                    missing_files=missing_files,
-                    all_files=all_files,
-                    goal=goal,
-                    project_type=project_type,
-                    detected_language=detected_language
-                )
-                
-                if completed_files:
-                    all_files.update(completed_files)
-                    logger.debug(f"[Phase 2] ✓ Auto-completed {len(completed_files)} missing files: {list(completed_files.keys())}")
-                else:
-                    logger.debug(f"[Phase 2] ✗ Failed to auto-complete missing files")
+                logger.debug(f"[Phase 2] Skipped. detected_language={detected_language}")
             else:
-                logger.debug(f"[Phase 2] ✓ All required files present")
+                # ⭐ デバッグログ追加: Phase 2開始
+                logger.debug(f"[Phase 2] ========================================")
+                logger.debug(f"[Phase 2] ▶ STARTING PHASE 2: Application Layer")
+                logger.debug(f"[Phase 2] ========================================")
+
+                # プロジェクトタイプ判定
+                logger.debug(f"[Phase 2] Calling _detect_project_type...")
+                try:
+                    project_type = self._detect_project_type(goal)
+                    logger.debug(f"[Phase 2]   project_type: {project_type}")
+                except Exception as e:
+                    logger.error(f"[Phase 2] ❌ _detect_project_type failed: {e}")
+                    raise
+
+                # Phase 1のコンテキスト作成
+                logger.debug(f"[Phase 2] Calling _format_generated_files_context...")
+                try:
+                    phase1_context = self._format_generated_files_context(all_files)
+                    logger.debug(f"[Phase 2]   phase1_context length: {len(phase1_context)} chars")
+                except Exception as e:
+                    logger.error(f"[Phase 2] ❌ _format_generated_files_context failed: {e}")
+                    raise
+
+                # 言語検出
+                logger.debug(f"[Phase 2] Calling _detect_project_language...")
+                try:
+                    detected_language = self._detect_project_language(all_files)
+                    logger.debug(f"[Phase 2]   detected_language: {detected_language}")
+                except Exception as e:
+                    logger.error(f"[Phase 2] ❌ _detect_project_language failed: {e}")
+                    raise
+
+                # タイプ別Phase 2指示生成
+                logger.debug(f"[Phase 2] Calling _generate_phase2_goal...")
+                try:
+                    phase2_goal = self._generate_phase2_goal(
+                        goal=goal,
+                        project_type=project_type,
+                        detected_language=detected_language,
+                        phase1_context=phase1_context
+                    )
+                    logger.debug(f"[Phase 2]   phase2_goal length: {len(phase2_goal)} chars")
+                except Exception as e:
+                    logger.error(f"[Phase 2] ❌ _generate_phase2_goal failed: {e}")
+                    raise
+
+                # ⭐ Fix F-3b: Phase 2プロンプトにファイル制約を注入
+                if self._explicit_file_constraint:
+                    _file_constraint_msg = (
+                        f"\n\nIMPORTANT FILE CONSTRAINT: The specification explicitly lists these output files:\n"
+                        f"{', '.join(sorted(self._explicit_file_constraint))}\n"
+                        f"Generate ONLY files from this list. Do NOT create additional files "
+                        f"such as services/, middleware/, utils/, or extra test files "
+                        f"unless they are explicitly listed above."
+                    )
+                    phase2_goal += _file_constraint_msg
+                    logger.debug(f"[Phase 2] Added file constraint to goal ({len(self._explicit_file_constraint)} files)")
+
+                logger.debug(f"[Phase 2 Goal] Project type: {project_type}, Language: {detected_language}")
+                logger.debug(f"[Phase 2 Goal] Content:\n{phase2_goal}")
+
+                # Step 3: Generate code implementation
+                hud.mark("Application: Generate")
+
+                # ⭐ デバッグログ追加: Phase 2 LLM呼び出し前
+                logger.debug(f"[Phase 2] ▶ Starting _generate_code_implementation...")
+                logger.debug(f"[Phase 2]   complexity: {complexity}")
+                logger.debug(f"[Phase 2]   all_files count before: {len(all_files)}")
+
+                try:
+                    phase2_files = self._generate_code_implementation(
+                        goal=phase2_goal,
+                        analysis="Application layer analysis",
+                        plan="Application layer plan",
+                        complexity=complexity,
+                        skip_validation=True,
+                        skip_multi_stage=True
+                    )
+
+                    # ⭐ デバッグログ追加: Phase 2 LLM呼び出し後
+                    logger.debug(f"[Phase 2] ◀ _generate_code_implementation returned")
+                    logger.debug(f"[Phase 2]   Result type: {type(phase2_files)}")
+                    logger.debug(f"[Phase 2]   Result is None: {phase2_files is None}")
+                    logger.debug(f"[Phase 2]   Result is empty: {not phase2_files if phase2_files is not None else 'N/A'}")
+                    if phase2_files:
+                        logger.debug(f"[Phase 2]   Generated files: {list(phase2_files.keys())}")
+
+                        # ⭐ Fix F-3c: Phase 2結果のファイルフィルタリング
+                        # ⭐ Fix F-3c: Phase 2ファイルフィルタリング
+                        phase2_files = self._filter_files_by_constraint(phase2_files, "Phase 2")
+
+                except Exception as phase2_error:
+                    # ⭐ デバッグログ追加: Phase 2で例外発生
+                    import traceback
+                    logger.error(f"[Phase 2] ❌ Exception in _generate_code_implementation: {phase2_error}")
+                    logger.error(f"[Phase 2]   Exception type: {type(phase2_error).__name__}")
+                    logger.error(f"[Phase 2]   Traceback:\n{traceback.format_exc()}")
+                    raise  # 再スローしてexceptブロックで捕捉
+
+                if not phase2_files:
+                    # ⭐ デバッグログ追加: Phase 2が空を返した
+                    logger.warning(f"[Phase 2] ⚠ _generate_code_implementation returned empty/None")
+                    logger.warning(f"[Phase 2]   Returning Phase 1 files only: {list(all_files.keys())}")
+                    hud.finish(success=False)
+                    logger.debug("   ⚠ Phase 2 generation failed, using Phase 1 only")
+                    return all_files
+
+                phase2_files = self._preserve_near_identical_files(phase2_files, all_files)
+                all_files.update(phase2_files)
+                logger.debug(f"[Phase 2] ✓ Generated {len(phase2_files)} files: {list(phase2_files.keys())}")
+                hud.complete("Application: Generate")
+
+                # ==========================================
+                # Phase 2 必須ファイルチェック + 自動補完
+                # ==========================================
+                required_files = self._get_required_phase2_files(goal, project_type, all_files)
+                missing_files = self._find_missing_required_files(required_files, all_files)
+
+                if missing_files:
+                    logger.debug(f"[Phase 2] ⚠️ MISSING REQUIRED FILES DETECTED")
+                    logger.debug(f"[Phase 2] Missing files: {missing_files}")
+                    logger.debug(f"[Phase 2] Attempting to auto-complete missing files...")
+
+                    completed_files = self._auto_complete_phase2_files(
+                        missing_files=missing_files,
+                        all_files=all_files,
+                        goal=goal,
+                        project_type=project_type,
+                        detected_language=detected_language
+                    )
+
+                    if completed_files:
+                        all_files.update(completed_files)
+                        logger.debug(f"[Phase 2] ✓ Auto-completed {len(completed_files)} missing files: {list(completed_files.keys())}")
+                    else:
+                        logger.debug(f"[Phase 2] ✗ Failed to auto-complete missing files")
+                else:
+                    logger.debug(f"[Phase 2] ✓ All required files present")
             
             # ==========================================
             # Phase 3: 環境設定生成
             # ==========================================
-            
-            # Step 5: Assess goal complexity
-            hud.mark("Environment Setup: Assess goal complexity")
-            
-            # 全ファイルのコンテキスト作成
-            all_files_context = self._format_generated_files_context(all_files)
-            
-            phase3_goal = f"""Generate environment configuration for: {goal}
+
+            # ⭐ Fix F-3d: Phase 3スキップ判定
+            _skip_phase3 = False
+            if self._explicit_file_constraint:
+                _phase3_files_expected = {f for f in self._explicit_file_constraint
+                                          if f in ('.env', '.env.example', 'README.md', 'activate.bat',
+                                                   'Makefile', 'Dockerfile', 'docker-compose.yml',
+                                                   'requirements.txt', 'package.json', 'pyproject.toml',
+                                                   'setup.py', 'setup.cfg', '.gitignore')}
+                if not _phase3_files_expected:
+                    _skip_phase3 = True
+                    logger.debug(f"[Multi-Stage] Skipping Phase 3: no Phase 3 files in explicit list")
+                    hud.mark("Environment: Generate")
+                    hud.complete("Environment: Generate")
+
+            if _skip_phase3:
+                phase3_files = {}
+            else:
+                # 全ファイルのコンテキスト作成
+                all_files_context = self._format_generated_files_context(all_files)
+
+                phase3_goal = f"""Generate environment configuration for: {goal}
 
     Language: {detected_language}
 
@@ -7945,57 +7701,70 @@ Generate complete, production-ready code for {missing_file}.
     ensures readability when rendered on GitHub or other platforms.
 
     Generate complete, production-ready configuration files only."""
-            
-            logger.debug(f"[Phase 3 Goal] Content:\n{phase3_goal}")
-            
-            phase3_complexity = self._assess_goal_complexity(phase3_goal)
-            hud.complete("Environment Setup: Assess goal complexity")
-            
-            # Step 6: Generate code implementation
-            hud.mark("Environment Setup: Generate code implementation")
-            
-            # ⭐ デバッグログ追加: Phase 3 LLM呼び出し前
-            logger.debug(f"[Phase 3] ▶ Starting _generate_code_implementation...")
-            logger.debug(f"[Phase 3]   phase3_complexity: {phase3_complexity}")
-            logger.debug(f"[Phase 3]   all_files count before: {len(all_files)}")
-            
-            try:
-                phase3_files = self._generate_code_implementation(
-                    goal=phase3_goal,
-                    analysis="Environment setup analysis",
-                    plan="Environment setup plan",
-                    complexity=phase3_complexity,
-                    skip_validation=True,
-                    skip_multi_stage=True
-                )
-                
-                # ⭐ デバッグログ追加: Phase 3 LLM呼び出し後
-                logger.debug(f"[Phase 3] ◀ _generate_code_implementation returned")
-                logger.debug(f"[Phase 3]   Result type: {type(phase3_files)}")
-                logger.debug(f"[Phase 3]   Result is None: {phase3_files is None}")
-                logger.debug(f"[Phase 3]   Result is empty: {not phase3_files if phase3_files is not None else 'N/A'}")
-                if phase3_files:
-                    logger.debug(f"[Phase 3]   Generated files: {list(phase3_files.keys())}")
-                    
-            except Exception as phase3_error:
-                # ⭐ デバッグログ追加: Phase 3で例外発生
-                import traceback
-                logger.error(f"[Phase 3] ❌ Exception in _generate_code_implementation: {phase3_error}")
-                logger.error(f"[Phase 3]   Exception type: {type(phase3_error).__name__}")
-                logger.error(f"[Phase 3]   Traceback:\n{traceback.format_exc()}")
-                raise  # 再スローしてexceptブロックで捕捉
-            
-            if not phase3_files:
-                # ⭐ デバッグログ追加: Phase 3が空を返した
-                logger.warning(f"[Phase 3] ⚠ _generate_code_implementation returned empty/None")
-                logger.warning(f"[Phase 3]   Returning Phase 1+2 files: {list(all_files.keys())}")
-                hud.finish(success=False)
-                logger.debug("   ⚠ Phase 3 generation failed, using Phase 1+2 only")
-                return all_files
-            
-            all_files.update(phase3_files)
-            logger.debug(f"[Phase 3] ✓ Generated {len(phase3_files)} files: {list(phase3_files.keys())}")
-            hud.complete("Environment Setup: Generate code implementation")
+
+                # ⭐ Fix F-3b: Phase 3プロンプトにファイル制約を注入
+                if self._explicit_file_constraint:
+                    _file_constraint_msg = (
+                        f"\n\nIMPORTANT FILE CONSTRAINT: The specification explicitly lists these output files:\n"
+                        f"{', '.join(sorted(self._explicit_file_constraint))}\n"
+                        f"Generate ONLY files from this list. Do NOT create additional files "
+                        f"unless they are explicitly listed above."
+                    )
+                    phase3_goal += _file_constraint_msg
+                    logger.debug(f"[Phase 3] Added file constraint to goal ({len(self._explicit_file_constraint)} files)")
+
+                logger.debug(f"[Phase 3 Goal] Content:\n{phase3_goal}")
+
+                # Step 4: Generate code implementation
+                hud.mark("Environment: Generate")
+
+                # ⭐ デバッグログ追加: Phase 3 LLM呼び出し前
+                logger.debug(f"[Phase 3] ▶ Starting _generate_code_implementation...")
+                logger.debug(f"[Phase 3]   complexity: {complexity}")
+                logger.debug(f"[Phase 3]   all_files count before: {len(all_files)}")
+
+                try:
+                    phase3_files = self._generate_code_implementation(
+                        goal=phase3_goal,
+                        analysis="Environment setup analysis",
+                        plan="Environment setup plan",
+                        complexity=complexity,
+                        skip_validation=True,
+                        skip_multi_stage=True
+                    )
+
+                    # ⭐ デバッグログ追加: Phase 3 LLM呼び出し後
+                    logger.debug(f"[Phase 3] ◀ _generate_code_implementation returned")
+                    logger.debug(f"[Phase 3]   Result type: {type(phase3_files)}")
+                    logger.debug(f"[Phase 3]   Result is None: {phase3_files is None}")
+                    logger.debug(f"[Phase 3]   Result is empty: {not phase3_files if phase3_files is not None else 'N/A'}")
+                    if phase3_files:
+                        logger.debug(f"[Phase 3]   Generated files: {list(phase3_files.keys())}")
+
+                        # ⭐ Fix F-3c: Phase 3結果のファイルフィルタリング
+                        # ⭐ Fix F-3c: Phase 3ファイルフィルタリング
+                        phase3_files = self._filter_files_by_constraint(phase3_files, "Phase 3")
+
+                except Exception as phase3_error:
+                    # ⭐ デバッグログ追加: Phase 3で例外発生
+                    import traceback
+                    logger.error(f"[Phase 3] ❌ Exception in _generate_code_implementation: {phase3_error}")
+                    logger.error(f"[Phase 3]   Exception type: {type(phase3_error).__name__}")
+                    logger.error(f"[Phase 3]   Traceback:\n{traceback.format_exc()}")
+                    raise  # 再スローしてexceptブロックで捕捉
+
+                if not phase3_files:
+                    # ⭐ デバッグログ追加: Phase 3が空を返した
+                    logger.warning(f"[Phase 3] ⚠ _generate_code_implementation returned empty/None")
+                    logger.warning(f"[Phase 3]   Returning Phase 1+2 files: {list(all_files.keys())}")
+                    hud.finish(success=False)
+                    logger.debug("   ⚠ Phase 3 generation failed, using Phase 1+2 only")
+                    return all_files
+
+                phase3_files = self._preserve_near_identical_files(phase3_files, all_files)
+                all_files.update(phase3_files)
+                logger.debug(f"[Phase 3] ✓ Generated {len(phase3_files)} files: {list(phase3_files.keys())}")
+                hud.complete("Environment: Generate")
             
             # ==========================================
             # Post-Processing Steps
@@ -8017,502 +7786,7 @@ Generate complete, production-ready code for {missing_file}.
             # JSで参照されているがHTMLに存在しないIDを検出・自動補完
             # Note: Auto-completion [DONE]はG-チェック完了後に表示
             
-            # G-1: HTML-CSS クラス整合性
-            missing_css_classes = self._validate_html_css_class_consistency(all_files)
-            if missing_css_classes:
-                logger.debug(f"[G-1] Detected {len(missing_css_classes)} missing CSS classes")
-                logger.debug(f"\n● CSS consistency check: {len(missing_css_classes)} missing class(es)")
-                all_files = self._auto_complete_missing_css_classes(missing_css_classes, all_files)
-            
-            # G-2: HTML-JS ID整合性
-            missing_html_ids = self._validate_html_js_id_consistency(all_files)
-            if missing_html_ids:
-                logger.debug(f"[G-2] Detected {len(missing_html_ids)} missing HTML IDs")
-                logger.debug(f"● HTML-JS consistency check: {len(missing_html_ids)} missing ID(s)")
-                all_files = self._auto_complete_missing_html_ids(missing_html_ids, all_files)
-            
-            # G-3: Python環境-パッケージ互換性
-            compatibility_issues = self._validate_python_package_compatibility(all_files)
-            if compatibility_issues:
-                logger.debug(f"[G-3] Detected {len(compatibility_issues)} compatibility issues")
-                logger.debug(f"● Package compatibility check: {len(compatibility_issues)} issue(s)")
-                for issue in compatibility_issues:
-                    logger.debug(f"  - {issue['package']}=={issue['current_version']} → {issue['fix']}")
-                all_files = self._auto_fix_package_compatibility(compatibility_issues, all_files)
-            
-            # G-4: Pythonシンボルレベルimport整合性
-            symbol_issues = self._validate_python_symbol_imports(all_files)
-            if symbol_issues:
-                logger.debug(f"[G-4] Detected {len(symbol_issues)} symbol import issues")
-                logger.debug(f"● Symbol import check: {len(symbol_issues)} issue(s)")
-                for issue in symbol_issues[:5]:  # 最大5件表示
-                    logger.debug(f"  - {issue['importer']}: '{issue['symbol']}' not in {issue['module']}")
-                all_files = self._auto_fix_symbol_imports(symbol_issues, all_files)
-            
-            # G-5: Import vs Requirements.txt 整合性チェック
-            requirements_issues = self._validate_import_requirements_consistency(all_files)
-            if requirements_issues:
-                logger.debug(f"[G-5] Detected {len(requirements_issues)} missing packages in requirements.txt")
-                logger.debug(f"● Requirements.txt check: {len(requirements_issues)} missing package(s)")
-                for pkg in requirements_issues[:5]:
-                    logger.debug(f"  - {pkg['import_name']} → {pkg['package_name']}")
-                all_files = self._auto_fix_requirements_txt(requirements_issues, all_files)
-            
-            # G-6: ライブラリ要求パターンチェック
-            library_issues = self._validate_library_requirements(all_files)
-            if library_issues:
-                logger.debug(f"[G-6] Detected {len(library_issues)} library requirement issues")
-                logger.debug(f"● Library requirements check: {len(library_issues)} issue(s)")
-                for issue in library_issues[:5]:
-                    logger.debug(f"  - [{issue['library']}] {issue['requirement']}")
-                all_files = self._auto_fix_library_requirements(library_issues, all_files)
-            
-            # G-7: フロントエンド依存整合性チェック
-            frontend_issues = self._validate_frontend_dependencies(all_files)
-            if frontend_issues:
-                logger.debug(f"[G-7] Detected {len(frontend_issues)} frontend dependency issues")
-                logger.debug(f"● Frontend dependencies check: {len(frontend_issues)} issue(s)")
-                for issue in frontend_issues[:5]:
-                    logger.debug(f"  - [{issue['type']}] {issue['dependency']}")
-                all_files = self._auto_fix_frontend_dependencies(frontend_issues, all_files)
-            
-            # G-8: Model↔Schema整合性チェック
-            schema_issues = self._validate_model_schema_consistency(all_files)
-            if schema_issues:
-                logger.debug(f"[G-8] Detected {len(schema_issues)} model-schema consistency issues")
-                logger.debug(f"● Model-Schema consistency check: {len(schema_issues)} issue(s)")
-                for issue in schema_issues[:5]:
-                    logger.debug(f"  - {issue['schema']}.{issue['field']} not in {issue['model']}")
-                all_files = self._auto_fix_model_schema_consistency(schema_issues, all_files)
-            
-            # G-9: ドキュメント環境依存チェック
-            doc_issues = self._validate_document_environment_commands(all_files)
-            if doc_issues:
-                logger.debug(f"[G-9] Detected {len(doc_issues)} environment-dependent commands")
-                logger.debug(f"● Document environment check: {len(doc_issues)} issue(s)")
-                for issue in doc_issues[:5]:
-                    logger.debug(f"  - {issue['file']}:{issue['line']} - {issue['type']}")
-                all_files = self._auto_fix_document_environment_commands(doc_issues, all_files)
-            
-            # G-10: クラス定義安全性チェック（再検証ループ付き）
-            MAX_G10_FIX_ATTEMPTS = 2
-            class_safety_issues = []
-            for g10_attempt in range(MAX_G10_FIX_ATTEMPTS):
-                class_safety_issues = self._validate_class_definition_safety(all_files)
-                if not class_safety_issues:
-                    if g10_attempt > 0:
-                        logger.debug(f"[G-10] ✅ All issues fixed after {g10_attempt} attempt(s)")
-                    break
-                
-                logger.debug(f"[G-10] Detected {len(class_safety_issues)} issues (attempt {g10_attempt + 1}/{MAX_G10_FIX_ATTEMPTS})")
-                if g10_attempt == 0:
-                    logger.debug(f"● Class definition safety check: {len(class_safety_issues)} issue(s)")
-                    for issue in class_safety_issues[:5]:
-                        logger.debug(f"  - {issue['file']}:{issue['line']} - {issue['type']}")
-                
-                all_files = self._auto_fix_class_definition_safety(class_safety_issues, all_files)
-            
-            if class_safety_issues:
-                logger.warning(f"[G-10] ⚠ {len(class_safety_issues)} issues remain after {MAX_G10_FIX_ATTEMPTS} fix attempts")
-            
-            # G-11: フレームワーク予約語チェック（再検証ループ付き）
-            MAX_G11_FIX_ATTEMPTS = 2
-            framework_reserved_issues = []
-            for g11_attempt in range(MAX_G11_FIX_ATTEMPTS):
-                framework_reserved_issues = self._validate_framework_reserved_words(all_files)
-                if not framework_reserved_issues:
-                    if g11_attempt > 0:
-                        logger.debug(f"[G-11] ✅ All issues fixed after {g11_attempt} attempt(s)")
-                    break
-                
-                logger.debug(f"[G-11] Detected {len(framework_reserved_issues)} issues (attempt {g11_attempt + 1}/{MAX_G11_FIX_ATTEMPTS})")
-                if g11_attempt == 0:
-                    logger.debug(f"● Framework reserved word check: {len(framework_reserved_issues)} issue(s)")
-                    for issue in framework_reserved_issues[:5]:
-                        logger.debug(f"  - {issue['file']}:{issue['line']} - {issue['reserved_word']}")
-                
-                all_files = self._auto_fix_framework_reserved_words(framework_reserved_issues, all_files)
-            
-            if framework_reserved_issues:
-                logger.warning(f"[G-11] ⚠ {len(framework_reserved_issues)} issues remain after {MAX_G11_FIX_ATTEMPTS} fix attempts")
-            
-            # G-12: Python組み込み名シャドウイングチェック（再検証ループ付き）
-            MAX_G12_FIX_ATTEMPTS = 2
-            builtin_shadowing_issues = []
-            for g12_attempt in range(MAX_G12_FIX_ATTEMPTS):
-                builtin_shadowing_issues = self._validate_python_builtin_shadowing(all_files)
-                if not builtin_shadowing_issues:
-                    if g12_attempt > 0:
-                        logger.debug(f"[G-12] ✅ All issues fixed after {g12_attempt} attempt(s)")
-                    break
-                
-                logger.debug(f"[G-12] Detected {len(builtin_shadowing_issues)} issues (attempt {g12_attempt + 1}/{MAX_G12_FIX_ATTEMPTS})")
-                if g12_attempt == 0:
-                    logger.debug(f"● Python builtin shadowing check: {len(builtin_shadowing_issues)} issue(s)")
-                    for issue in builtin_shadowing_issues[:5]:
-                        logger.debug(f"  - {issue['file']}:{issue['line']} - {issue['builtin_name']}")
-                
-                all_files = self._auto_fix_python_builtin_shadowing(builtin_shadowing_issues, all_files)
-            
-            if builtin_shadowing_issues:
-                logger.warning(f"[G-12] ⚠ {len(builtin_shadowing_issues)} issues remain after {MAX_G12_FIX_ATTEMPTS} fix attempts")
-            
-            # G-13: Flask Blueprintルート重複チェック（再検証ループ付き）
-            MAX_G13_FIX_ATTEMPTS = 2
-            route_duplicate_issues = []
-            for g13_attempt in range(MAX_G13_FIX_ATTEMPTS):
-                route_duplicate_issues = self._validate_flask_route_duplicates(all_files)
-                if not route_duplicate_issues:
-                    if g13_attempt > 0:
-                        logger.debug(f"[G-13] ✅ All issues fixed after {g13_attempt} attempt(s)")
-                    break
-                
-                logger.debug(f"[G-13] Detected {len(route_duplicate_issues)} issues (attempt {g13_attempt + 1}/{MAX_G13_FIX_ATTEMPTS})")
-                if g13_attempt == 0:
-                    logger.debug(f"● Flask route duplicate check: {len(route_duplicate_issues)} issue(s)")
-                    for issue in route_duplicate_issues[:5]:
-                        logger.debug(f"  - {issue['file']}:{issue['line']} - {issue['method']} {issue['route']}")
-                
-                all_files = self._auto_fix_flask_route_duplicates(route_duplicate_issues, all_files)
-            
-            if route_duplicate_issues:
-                logger.warning(f"[G-13] ⚠ {len(route_duplicate_issues)} issues remain after {MAX_G13_FIX_ATTEMPTS} fix attempts")
-            
-            # G-14: SQLAlchemyテーブル名重複チェック（再検証ループ付き）
-            MAX_G14_FIX_ATTEMPTS = 2
-            table_duplicate_issues = []
-            for g14_attempt in range(MAX_G14_FIX_ATTEMPTS):
-                table_duplicate_issues = self._validate_sqlalchemy_table_duplicates(all_files)
-                if not table_duplicate_issues:
-                    if g14_attempt > 0:
-                        logger.debug(f"[G-14] ✅ All issues fixed after {g14_attempt} attempt(s)")
-                    break
-                
-                logger.debug(f"[G-14] Detected {len(table_duplicate_issues)} issues (attempt {g14_attempt + 1}/{MAX_G14_FIX_ATTEMPTS})")
-                if g14_attempt == 0:
-                    logger.debug(f"● SQLAlchemy table duplicate check: {len(table_duplicate_issues)} issue(s)")
-                    for issue in table_duplicate_issues[:5]:
-                        logger.debug(f"  - {issue['file']}:{issue['line']} - table '{issue['table']}'")
-                
-                all_files = self._auto_fix_sqlalchemy_table_duplicates(table_duplicate_issues, all_files)
-            
-            if table_duplicate_issues:
-                logger.warning(f"[G-14] ⚠ {len(table_duplicate_issues)} issues remain after {MAX_G14_FIX_ATTEMPTS} fix attempts")
-            
-            # G-15: JavaScript予約語チェック（再検証ループ付き）
-            MAX_G15_FIX_ATTEMPTS = 2
-            js_reserved_issues = []
-            for g15_attempt in range(MAX_G15_FIX_ATTEMPTS):
-                js_reserved_issues = self._validate_javascript_reserved_words(all_files)
-                if not js_reserved_issues:
-                    if g15_attempt > 0:
-                        logger.debug(f"[G-15] ✅ All issues fixed after {g15_attempt} attempt(s)")
-                    break
-                
-                logger.debug(f"[G-15] Detected {len(js_reserved_issues)} issues (attempt {g15_attempt + 1}/{MAX_G15_FIX_ATTEMPTS})")
-                if g15_attempt == 0:
-                    logger.debug(f"● JavaScript reserved word check: {len(js_reserved_issues)} issue(s)")
-                    for issue in js_reserved_issues[:5]:
-                        logger.debug(f"  - {issue['file']}:{issue['line']} - {issue['reserved_word']}")
-                
-                all_files = self._auto_fix_javascript_reserved_words(js_reserved_issues, all_files)
-            
-            if js_reserved_issues:
-                logger.warning(f"[G-15] ⚠ {len(js_reserved_issues)} issues remain after {MAX_G15_FIX_ATTEMPTS} fix attempts")
-            
-            # G-16: SQLAlchemy relationship参照先検証（再検証ループ付き）
-            MAX_G16_FIX_ATTEMPTS = 2
-            relationship_issues = []
-            for g16_attempt in range(MAX_G16_FIX_ATTEMPTS):
-                relationship_issues = self._validate_relationship_references(all_files)
-                if not relationship_issues:
-                    if g16_attempt > 0:
-                        logger.debug(f"[G-16] ✅ All issues fixed after {g16_attempt} attempt(s)")
-                    break
-                
-                logger.debug(f"[G-16] Detected {len(relationship_issues)} issues (attempt {g16_attempt + 1}/{MAX_G16_FIX_ATTEMPTS})")
-                if g16_attempt == 0:
-                    logger.debug(f"● Relationship reference check: {len(relationship_issues)} issue(s)")
-                    for issue in relationship_issues[:5]:
-                        logger.debug(f"  - {issue['file']}:{issue['line']} - {issue['type']}")
-                
-                all_files = self._auto_fix_relationship_references(relationship_issues, all_files)
-            
-            if relationship_issues:
-                logger.warning(f"[G-16] ⚠ {len(relationship_issues)} issues remain after {MAX_G16_FIX_ATTEMPTS} fix attempts")
-            
-            # G-17: ForeignKey参照先検証（再検証ループ付き）
-            MAX_G17_FIX_ATTEMPTS = 2
-            foreignkey_issues = []
-            for g17_attempt in range(MAX_G17_FIX_ATTEMPTS):
-                foreignkey_issues = self._validate_foreignkey_references(all_files)
-                if not foreignkey_issues:
-                    if g17_attempt > 0:
-                        logger.debug(f"[G-17] ✅ All issues fixed after {g17_attempt} attempt(s)")
-                    break
-                
-                logger.debug(f"[G-17] Detected {len(foreignkey_issues)} issues (attempt {g17_attempt + 1}/{MAX_G17_FIX_ATTEMPTS})")
-                if g17_attempt == 0:
-                    logger.debug(f"● ForeignKey reference check: {len(foreignkey_issues)} issue(s)")
-                    for issue in foreignkey_issues[:5]:
-                        logger.debug(f"  - {issue['file']}:{issue['line']} - {issue['referenced_table']}")
-                
-                all_files = self._auto_fix_foreignkey_references(foreignkey_issues, all_files)
-            
-            if foreignkey_issues:
-                logger.warning(f"[G-17] ⚠ {len(foreignkey_issues)} issues remain after {MAX_G17_FIX_ATTEMPTS} fix attempts")
-            
-            # G-18: SQLAlchemy Enum定義検証（再検証ループ付き）
-            MAX_G18_FIX_ATTEMPTS = 2
-            enum_usage_issues = []
-            for g18_attempt in range(MAX_G18_FIX_ATTEMPTS):
-                enum_usage_issues = self._validate_sqlalchemy_enum_usage(all_files)
-                if not enum_usage_issues:
-                    if g18_attempt > 0:
-                        logger.debug(f"[G-18] ✅ All issues fixed after {g18_attempt} attempt(s)")
-                    break
-                
-                logger.debug(f"[G-18] Detected {len(enum_usage_issues)} issues (attempt {g18_attempt + 1}/{MAX_G18_FIX_ATTEMPTS})")
-                if g18_attempt == 0:
-                    logger.debug(f"● Enum usage check: {len(enum_usage_issues)} issue(s)")
-                    for issue in enum_usage_issues[:5]:
-                        logger.debug(f"  - {issue['file']}:{issue['line']} - {issue['referenced_class']}")
-                
-                all_files = self._auto_fix_sqlalchemy_enum_usage(enum_usage_issues, all_files)
-            
-            if enum_usage_issues:
-                logger.warning(f"[G-18] ⚠ {len(enum_usage_issues)} issues remain after {MAX_G18_FIX_ATTEMPTS} fix attempts")
-            
-            # G-19: Mapped型アノテーション整合性検証（再検証ループ付き）
-            MAX_G19_FIX_ATTEMPTS = 2
-            mapped_type_issues = []
-            for g19_attempt in range(MAX_G19_FIX_ATTEMPTS):
-                mapped_type_issues = self._validate_mapped_type_consistency(all_files)
-                if not mapped_type_issues:
-                    if g19_attempt > 0:
-                        logger.debug(f"[G-19] ✅ All issues fixed after {g19_attempt} attempt(s)")
-                    break
-                
-                logger.debug(f"[G-19] Detected {len(mapped_type_issues)} issues (attempt {g19_attempt + 1}/{MAX_G19_FIX_ATTEMPTS})")
-                if g19_attempt == 0:
-                    logger.debug(f"● Mapped type consistency check: {len(mapped_type_issues)} issue(s)")
-                    for issue in mapped_type_issues[:5]:
-                        logger.debug(f"  - {issue['file']}:{issue['line']} - {issue['attribute']}")
-                
-                all_files = self._auto_fix_mapped_type_consistency(mapped_type_issues, all_files)
-            
-            if mapped_type_issues:
-                logger.warning(f"[G-19] ⚠ {len(mapped_type_issues)} issues remain after {MAX_G19_FIX_ATTEMPTS} fix attempts")
-            
-            # G-20: Flask静的パス検証（再検証ループ付き）
-            MAX_G20_FIX_ATTEMPTS = 2
-            flask_static_issues = []
-            for g20_attempt in range(MAX_G20_FIX_ATTEMPTS):
-                flask_static_issues = self._validate_flask_static_paths(all_files)
-                if not flask_static_issues:
-                    if g20_attempt > 0:
-                        logger.debug(f"[G-20] ✅ All issues fixed after {g20_attempt} attempt(s)")
-                    break
-                
-                logger.debug(f"[G-20] Detected {len(flask_static_issues)} issues (attempt {g20_attempt + 1}/{MAX_G20_FIX_ATTEMPTS})")
-                if g20_attempt == 0:
-                    logger.debug(f"● Flask static path check: {len(flask_static_issues)} issue(s)")
-                    for issue in flask_static_issues[:5]:
-                        logger.debug(f"  - {issue['file']}:{issue['line']} - {issue['current_path']} → {issue['suggested_path']}")
-                
-                all_files = self._auto_fix_flask_static_paths(flask_static_issues, all_files)
-            
-            if flask_static_issues:
-                logger.warning(f"[G-20] ⚠ {len(flask_static_issues)} issues remain after {MAX_G20_FIX_ATTEMPTS} fix attempts")
-            
-            # G-21: HTML参照整合性検証（再検証ループ付き）
-            MAX_G21_FIX_ATTEMPTS = 2
-            html_asset_issues = []
-            for g21_attempt in range(MAX_G21_FIX_ATTEMPTS):
-                html_asset_issues = self._validate_html_asset_references(all_files)
-                if not html_asset_issues:
-                    if g21_attempt > 0:
-                        logger.debug(f"[G-21] ✅ All issues fixed after {g21_attempt} attempt(s)")
-                    break
-                
-                logger.debug(f"[G-21] Detected {len(html_asset_issues)} issues (attempt {g21_attempt + 1}/{MAX_G21_FIX_ATTEMPTS})")
-                if g21_attempt == 0:
-                    logger.debug(f"● HTML asset reference check: {len(html_asset_issues)} issue(s)")
-                    for issue in html_asset_issues[:5]:
-                        logger.debug(f"  - {issue['html_file']}:{issue['line']} - {issue['ref_type']}: {issue['ref_path']}")
-                
-                all_files = self._auto_fix_html_asset_references(html_asset_issues, all_files)
-            
-            if html_asset_issues:
-                logger.warning(f"[G-21] ⚠ {len(html_asset_issues)} issues remain after {MAX_G21_FIX_ATTEMPTS} fix attempts")
-            
-            # G-22: JavaScriptアニメーションループパターン検証（再検証ループ付き）
-            MAX_G22_FIX_ATTEMPTS = 2
-            js_animation_issues = []
-            for g22_attempt in range(MAX_G22_FIX_ATTEMPTS):
-                js_animation_issues = self._validate_js_animation_loop(all_files)
-                if not js_animation_issues:
-                    if g22_attempt > 0:
-                        logger.debug(f"[G-22] ✅ All issues fixed after {g22_attempt} attempt(s)")
-                    break
-                
-                logger.debug(f"[G-22] Detected {len(js_animation_issues)} issues (attempt {g22_attempt + 1}/{MAX_G22_FIX_ATTEMPTS})")
-                if g22_attempt == 0:
-                    logger.debug(f"● JavaScript animation loop check: {len(js_animation_issues)} issue(s)")
-                    for issue in js_animation_issues[:5]:
-                        logger.debug(f"  - {issue['file']}:{issue['line']} - {issue['method_name']}() called without timestamp")
-                
-                all_files = self._auto_fix_js_animation_loop(js_animation_issues, all_files)
-            
-            if js_animation_issues:
-                logger.warning(f"[G-22] ⚠ {len(js_animation_issues)} issues remain after {MAX_G22_FIX_ATTEMPTS} fix attempts")
-            
-            # ESLint統合: JavaScript品質チェック
-            eslint_result = None
-            try:
-                if self._check_eslint_available():
-                    logger.debug("[ESLint] Running JavaScript linter (multi-stage)...")
-                    eslint_result = self._run_eslint_on_files(all_files)
-                    
-                    if eslint_result['files_checked'] > 0:
-                        error_count = len(eslint_result['errors'])
-                        warning_count = len(eslint_result['warnings'])
-                        
-                        if error_count > 0 or warning_count > 0:
-                            logger.debug("")
-                            logger.debug(f"● ESLint: {error_count} error(s), {warning_count} warning(s)")
-                            
-                            for issue in eslint_result['errors'][:5]:
-                                logger.debug(f"  - {issue['file']}:{issue['line']} [{issue['rule']}] {issue['message']}")
-                            
-                            if error_count > 5:
-                                logger.debug(f"  ... and {error_count - 5} more error(s)")
-                            
-                            if error_count > 0:
-                                logger.debug("[ESLint] Attempting auto-fix with LLM...")
-                                all_files = self._fix_eslint_errors_with_llm(
-                                    all_files,
-                                    eslint_result['errors']
-                                )
-                                
-                                recheck_result = self._run_eslint_on_files(all_files)
-                                error_count_after = len(recheck_result['errors'])
-                                warning_count_after = len(recheck_result['warnings'])
-                                
-                                logger.debug("")
-                                logger.debug(f"  After auto-fix: {error_count_after} error(s), {warning_count_after} warning(s)")
-                                
-                                if error_count_after == 0:
-                                    logger.debug(f"  ✓ All ESLint errors resolved!")
-                                
-                                eslint_result = recheck_result
-                        else:
-                            logger.debug("[ESLint] No issues found")
-                else:
-                    logger.debug("[ESLint] Not available, skipping JavaScript lint check")
-                    
-            except Exception as e:
-                logger.debug(f"[ESLint] Error during lint check: {e}")
-            
-            # G-23: API契約整合性チェック（警告のみ、自動修正なし）
-            api_contract_issues = self._validate_api_contract_consistency(all_files)
-            if api_contract_issues:
-                logger.debug(f"● API contract consistency: {len(api_contract_issues)} warning(s)")
-                for issue in api_contract_issues[:3]:
-                    logger.debug(f"  - {issue['details']}")
-            
-            # G-24: back_populates相互参照チェック
-            MAX_G24_FIX_ATTEMPTS = 2
-            back_populates_issues = []
-            for g24_attempt in range(MAX_G24_FIX_ATTEMPTS):
-                back_populates_issues = self._validate_back_populates_consistency(all_files)
-                if not back_populates_issues:
-                    if g24_attempt > 0:
-                        logger.debug(f"[G-24] ✅ All issues fixed after {g24_attempt} attempt(s)")
-                    break
-                logger.debug(f"[G-24] Detected {len(back_populates_issues)} issues (attempt {g24_attempt + 1}/{MAX_G24_FIX_ATTEMPTS})")
-                all_files = self._auto_fix_back_populates_consistency(back_populates_issues, all_files)
-            
-            if back_populates_issues:
-                logger.debug(f"● back_populates consistency: {len(back_populates_issues)} error(s)")
-                for issue in back_populates_issues[:3]:
-                    logger.debug(f"  - {issue['details']}")
-            
-            # G-25: ForeignKey型注釈欠如チェック
-            foreignkey_annotation_issues = self._validate_foreignkey_type_annotation(all_files)
-            if foreignkey_annotation_issues:
-                logger.debug(f"[G-25] Detected {len(foreignkey_annotation_issues)} issues, auto-fixing...")
-                all_files = self._auto_fix_foreignkey_type_annotation(foreignkey_annotation_issues, all_files)
-                foreignkey_annotation_issues = self._validate_foreignkey_type_annotation(all_files)
-            
-            if foreignkey_annotation_issues:
-                logger.debug(f"● ForeignKey type annotations: {len(foreignkey_annotation_issues)} warning(s)")
-            
-            # G-26: Mapped型とSQLAlchemy型の不一致チェック
-            mapped_mismatch_issues = self._validate_mapped_sqlalchemy_type_mismatch(all_files)
-            if mapped_mismatch_issues:
-                logger.debug(f"[G-26] Detected {len(mapped_mismatch_issues)} issues, auto-fixing...")
-                all_files = self._auto_fix_mapped_sqlalchemy_type_mismatch(mapped_mismatch_issues, all_files)
-                mapped_mismatch_issues = self._validate_mapped_sqlalchemy_type_mismatch(all_files)
-            
-            if mapped_mismatch_issues:
-                logger.debug(f"● Mapped/SQLAlchemy type mismatch: {len(mapped_mismatch_issues)} warning(s)")
-            
-            # G-27: relationship overlaps検出
-            relationship_overlap_issues = self._validate_relationship_overlaps(all_files)
-            if relationship_overlap_issues:
-                all_files = self._auto_fix_relationship_overlaps(relationship_overlap_issues, all_files)
-                logger.debug(f"● Relationship overlaps: {len(relationship_overlap_issues)} warning(s)")
-            
-            # G-28: 循環インポート検出
-            circular_import_issues = self._validate_circular_imports(all_files)
-            if circular_import_issues:
-                all_files = self._auto_fix_circular_imports(circular_import_issues, all_files)
-                logger.debug(f"● Circular imports: {len(circular_import_issues)} error(s)")
-                for issue in circular_import_issues[:2]:
-                    logger.debug(f"  - {issue['details']}")
-            
-            # G-29: Marshmallow Nested循環参照検出
-            marshmallow_circular_issues = self._validate_marshmallow_nested_circular(all_files)
-            if marshmallow_circular_issues:
-                all_files = self._auto_fix_marshmallow_nested_circular(marshmallow_circular_issues, all_files)
-                logger.debug(f"● Marshmallow Nested circular: {len(marshmallow_circular_issues)} warning(s)")
-            
-            # G-30: JavaScript this参照喪失チェック
-            js_this_loss_issues = self._validate_js_this_context_loss(all_files)
-            if js_this_loss_issues:
-                logger.debug(f"[G-30] Detected {len(js_this_loss_issues)} issues, auto-fixing...")
-                all_files = self._auto_fix_js_this_context_loss(js_this_loss_issues, all_files)
-                js_this_loss_issues = self._validate_js_this_context_loss(all_files)
-            
-            if js_this_loss_issues:
-                logger.debug(f"● JavaScript this context loss: {len(js_this_loss_issues)} error(s)")
-                for issue in js_this_loss_issues[:3]:
-                    logger.debug(f"  - {issue['details']}")
-            
-            # G-31: Marshmallow API誤用検出（再検証ループ付き）
-            MAX_G31_FIX_ATTEMPTS = 2
-            marshmallow_api_issues = []
-            for g31_attempt in range(MAX_G31_FIX_ATTEMPTS):
-                marshmallow_api_issues = self._validate_marshmallow_api_usage(all_files)
-                if not marshmallow_api_issues:
-                    if g31_attempt > 0:
-                        logger.debug(f"[G-31] ✅ All issues fixed after {g31_attempt} attempt(s)")
-                    break
-                
-                logger.debug(f"[G-31] Detected {len(marshmallow_api_issues)} issues (attempt {g31_attempt + 1}/{MAX_G31_FIX_ATTEMPTS})")
-                if g31_attempt == 0:
-                    logger.debug(f"● Marshmallow API usage check: {len(marshmallow_api_issues)} issue(s)")
-                    for issue in marshmallow_api_issues[:5]:
-                        logger.debug(f"  - {issue['file']}:{issue['line']} - {issue['field']}")
-                
-                all_files = self._auto_fix_marshmallow_api_usage(marshmallow_api_issues, all_files)
-            
-            if marshmallow_api_issues:
-                logger.warning(f"[G-31] ⚠ {len(marshmallow_api_issues)} issues remain after {MAX_G31_FIX_ATTEMPTS} fix attempts")
-            
-            if not missing_css_classes and not missing_html_ids and not compatibility_issues and not symbol_issues and not requirements_issues and not library_issues and not frontend_issues and not schema_issues and not doc_issues and not class_safety_issues and not framework_reserved_issues and not builtin_shadowing_issues and not route_duplicate_issues and not table_duplicate_issues and not js_reserved_issues and not relationship_issues and not foreignkey_issues and not enum_usage_issues and not mapped_type_issues and not flask_static_issues and not html_asset_issues and not js_animation_issues and not back_populates_issues and not circular_import_issues and not js_this_loss_issues and not marshmallow_api_issues:
-                logger.debug("[G-1/.../G-31] All consistency checks passed")
+            all_files = self._run_consistency_checks(all_files)
             
             # HUD: Auto-completion完了（G-1〜G-31完了後）
             hud.complete("Auto-completion")
@@ -8776,7 +8050,7 @@ Generate complete, production-ready code for {missing_file}.
             hud.complete("Lint & Auto-fix")
             
             # Step 9: Quality assessment & Comprehensive Review
-            hud.mark("Quality assessment & Comprehensive Review")
+            hud.mark("Quality & Review")
             
             # 実際の処理を実行（呼び出し元から移動）
             quality_scores = self._assess_code_quality(
@@ -8854,12 +8128,115 @@ Generate complete, production-ready code for {missing_file}.
             )
             
             # Quality assessment & Comprehensive Review 完了
-            hud.complete("Quality assessment & Comprehensive Review")
-            
+            hud.complete("Quality & Review")
+
+            # Step 10: Test execution & Auto-fix
+            # シングルモードと同等のテスト実行パイプライン
+            hud.mark("Test & Auto-fix")
+
+            test_execution_result = None
+            if self._should_run_tests(all_files):
+                logger.normal(f"{Icon.GEAR.value} Running test verification...")
+                all_files, test_execution_result = self._test_execution_loop(
+                    all_files, goal, max_attempts=3
+                )
+
+                if test_execution_result:
+                    self._zen_summary["test"] = test_execution_result
+
+                    # テスト修正でコードが変わった場合、quality_scoresを再評価
+                    if test_execution_result.get("fixed"):
+                        logger.debug("[Multi-stage Test Exec] Code was modified by test fix, re-evaluating quality...")
+                        quality_scores = self._assess_code_quality(
+                            all_files,
+                            complexity,
+                            goal,
+                            lint_result=lint_result
+                        )
+                else:
+                    self._zen_summary["test"] = {
+                        "skipped": False, "reason": "No result",
+                        "total": 0, "passed": 0, "failed_initial": 0, "failed_final": 0,
+                        "fixed": False, "attempts": 0
+                    }
+            else:
+                self._zen_summary["test"] = {
+                    "skipped": True, "reason": "No test files",
+                    "total": 0, "passed": 0, "failed_initial": 0, "failed_final": 0,
+                    "fixed": False, "attempts": 0
+                }
+
+            # API Contract Validation（storage round-trip検証）
+            # シングルモードと同等のランタイムコントラクト検証
+            if test_execution_result and not test_execution_result.get("skipped"):
+                contract_failures = self._validate_api_contracts(all_files, goal)
+                if contract_failures:
+                    logger.debug(f"[Multi-stage API Contract] {len(contract_failures)} contract violation(s) detected")
+                    for cf in contract_failures:
+                        logger.debug(f"[Multi-stage API Contract] FAIL: {cf}")
+
+                    # Test Fixで修正を試みる
+                    logger.debug("[Multi-stage API Contract] Attempting LLM fix for contract violations...")
+
+                    # 疑似テスト結果を構築してTest Fixに渡す
+                    import re as _re
+                    class _ContractTestResult:
+                        def __init__(self, failures):
+                            self.success = False
+                            self.passed = 0
+                            self.failed = len(failures)
+                            self.errors = 0
+                            self.total_tests = len(failures)
+                            self.execution_time = 0.0
+                            self.failure_details = []
+                            for i, f in enumerate(failures):
+                                file_match = _re.search(r'\(([^:)]+\.(?:py|jsx|js|tsx|ts|mjs|cjs))', f)
+                                fake_tb = f
+                                if file_match:
+                                    fname = file_match.group(1)
+                                    fake_tb = f'  File "{fname}", line 1, in <module>\n    {f}'
+                                self.failure_details.append({
+                                    "test_name": f"api_contract_{i}",
+                                    "error_type": "ContractViolation",
+                                    "message": f,
+                                    "traceback": fake_tb
+                                })
+
+                    contract_result = _ContractTestResult(contract_failures)
+                    # LLM Fix前のコードを保存（ロールバック用）
+                    pre_fix_code = dict(all_files)
+                    fixed_files = self._fix_test_failures_with_llm(
+                        all_files, contract_result, goal
+                    )
+                    if fixed_files:
+                        all_files = fixed_files
+                        logger.debug("[Multi-stage API Contract] LLM fix applied, re-validating...")
+                        # 再検証
+                        recheck = self._validate_api_contracts(all_files, goal)
+                        if recheck:
+                            if len(recheck) >= len(contract_failures):
+                                # LLM Fixで改善なしまたはデグレード → ロールバック
+                                logger.debug(f"[Multi-stage API Contract] Fix caused regression ({len(contract_failures)}→{len(recheck)}), rolling back")
+                                all_files = pre_fix_code
+                            else:
+                                logger.debug(f"[Multi-stage API Contract] Partial fix ({len(contract_failures)}→{len(recheck)} violations)")
+                        else:
+                            logger.debug("[Multi-stage API Contract] All contract violations resolved!")
+                            if test_execution_result:
+                                test_execution_result["contract_fixed"] = True
+                    else:
+                        logger.debug("[Multi-stage API Contract] LLM fix returned no result")
+
+            hud.complete("Test & Auto-fix")
+
+            # ⭐ Fix F-3e: Post-Processing後の最終ファイルフィルタリング（安全網）
+            # post-processingステップでspec外ファイルが追加される可能性がある(B-2a, B-2f)
+            all_files = self._filter_files_by_constraint(all_files, "Final filter")
+
             # 完了
             hud.finish(success=True)
-            return (all_files, lint_result, quality_scores)
-            
+            return (all_files, lint_result, quality_scores, test_execution_result)
+
         except Exception as e:
             # ⭐ デバッグログ追加: 例外の詳細を記録
             import traceback
@@ -8893,8 +8270,8 @@ Generate complete, production-ready code for {missing_file}.
             logger.warning(f"[Multi-stage]   Fallback result: {list(fallback_code.keys()) if fallback_code else 'empty/None'}")
             logger.warning(f"[Multi-stage]   Fallback file count: {len(fallback_code) if fallback_code else 0}")
             
-            # フォールバック時はlint_result=None, quality_scores={}を返す
-            return (fallback_code, None, {})
+            # フォールバック時はlint_result=None, quality_scores={}, test_result=Noneを返す
+            return (fallback_code, None, {}, None)
 
 
     def _generate_code_implementation(
@@ -9576,6 +8953,8 @@ MANDATORY SVELTE REQUIREMENTS:
                         test_files_to_add = []
                         for req in expected_files:
                             fp = req.filepath
+                            if self._is_test_file(fp):  # ⭐ Fix F-1: テストファイルのテストは生成しない
+                                continue
                             stem = Path(fp).stem
                             ext = Path(fp).suffix
                             parent = str(Path(fp).parent)
@@ -9733,11 +9112,40 @@ MANDATORY SVELTE REQUIREMENTS:
                            response.finish_reason in ('max_tokens', 'length') and 
                            continuation_count < max_continuations):
                         continuation_count += 1
+                        _retry_done = False  # ⭐ R-3修正: イテレーションごとのリトライフラグ
                         logger.debug(f"[LLM] Continuation {continuation_count}/{max_continuations}: finish_reason was max_tokens, requesting continuation...")
                         
-                        # 続き生成プロンプト: 末尾1000文字をコンテキストとして渡す
-                        context_tail = accumulated_content[-1000:] if len(accumulated_content) > 1000 else accumulated_content
+                        # ⭐ Fix E-1(a): コンテキストを3000文字に拡大（1000→3000）
+                        context_tail = accumulated_content[-3000:] if len(accumulated_content) > 3000 else accumulated_content
+
+                        # ⭐ Fix E-1(b): 現在生成中のファイル名と未閉ブラケットを特定
+                        _last_file_header = None
+                        _last_header_end = 0
+                        for _m in re.finditer(r'##\s*File:\s*([^\n]+)\r?\n(?:```\w*\r?\n)?', accumulated_content):
+                            _last_file_header = _m.group(1).strip()
+                            _last_header_end = _m.end()
+
+                        # R-1修正: 現在ファイルの全コンテンツでブラケットカウント
+                        _current_file_content = accumulated_content[_last_header_end:]
+                        _open_braces   = _current_file_content.count('{') - _current_file_content.count('}')
+                        _open_parens   = _current_file_content.count('(') - _current_file_content.count(')')
+                        _open_brackets = _current_file_content.count('[') - _current_file_content.count(']')
+                        _open_info_parts = []
+                        if _open_braces > 0:   _open_info_parts.append(f"{_open_braces} unclosed '{{' braces")
+                        if _open_parens > 0:   _open_info_parts.append(f"{_open_parens} unclosed '(' parentheses")
+                        if _open_brackets > 0: _open_info_parts.append(f"{_open_brackets} unclosed '[' brackets")
+                        _open_info = ', '.join(_open_info_parts)
+
+                        _file_context = f"\nYou are currently generating file: {_last_file_header}" if _last_file_header else ""
+                        _bracket_warning = (
+                            f"\nCRITICAL: The code has {_open_info}. "
+                            f"You MUST continue inside the current code structure and close all open brackets/braces/parentheses. "
+                            f"Do NOT start a new file or add a new module docstring."
+                        ) if _open_info else ""
+
+                        # ⭐ Fix E-1(c): 強化された継続プロンプト
                         continuation_prompt = f"""Continue generating code from where you left off.
+{_file_context}{_bracket_warning}
 
 The previous output ended with:
 ```
@@ -9747,8 +9155,9 @@ The previous output ended with:
 IMPORTANT:
 - Continue from EXACTLY where you stopped
 - Do NOT repeat any code that was already generated
-- Do NOT add any preamble or explanation, just continue the code
-- Maintain the same file format (```filename markers)"""
+- Do NOT add any preamble, docstring, or explanation — just continue the code
+- Do NOT start a new file unless you have properly closed all brackets in the current file
+- Maintain the same file format (## File: markers)"""
                         
                         # ⭐ 修正: 元のGoalとLLMの途中までの回答をconversation_historyとして渡す
                         # これにより、LLMは「何を生成しようとしていたか」を把握した状態で続きを生成できる
@@ -9777,15 +9186,140 @@ IMPORTANT:
                         
                         # コンテンツを累積
                         if hasattr(continuation_response, 'content') and continuation_response.content:
-                            # ⭐ 修正: continuation出力の先頭にあるファイルヘッダーとコードブロックマーカーを除去
-                            # LLMが続きを生成する際に新しい「## File: xxx」や```マーカーを付けてしまう問題を修正
-                            # これを残すと_extract_code_blocksが2つのセクションとして解釈し、
-                            # 後者が前者を上書きしてHTMLの前半が失われる
                             cont_content = continuation_response.content
-                            # パターン1: 先頭の「## File: xxx」ヘッダー + コードブロックマーカーを除去
-                            cont_content = re.sub(r'^(?:##\s*File:\s*[^\n]*\r?\n)?```\w*\r?\n?', '', cont_content)
-                            # パターン2: 先頭が「## File: xxx」のみ（```なし）の場合も除去
-                            cont_content = re.sub(r'^##\s*File:\s*[^\n]*\r?\n', '', cont_content)
+
+                            # ============================================================
+                            # ⭐ Fix E-1.5 (R-6): ## File:ヘッダーの条件付き処理
+                            # 同一ファイルの場合のみヘッダー除去。別ファイルの場合はヘッダー保持。
+                            # ============================================================
+                            _cont_header_match = re.match(r'^##\s*File:\s*([^\n]*)\r?\n', cont_content)
+                            if _cont_header_match:
+                                _cont_filename = _cont_header_match.group(1).strip()
+                                if _cont_filename == _last_file_header:
+                                    # 同一ファイル → ヘッダー+```マーカーを除去（既存の挙動）
+                                    cont_content = re.sub(r'^(?:##\s*File:\s*[^\n]*\r?\n)?```\w*\r?\n?', '', cont_content)
+                                else:
+                                    # 別ファイル → ヘッダー保持、現在のファイルブロックを閉じる
+                                    if not accumulated_content.rstrip().endswith('```'):
+                                        accumulated_content += '\n```\n\n'
+                                    logger.debug(f"[LLM] Continuation has new file header: {_cont_filename} (current: {_last_file_header})")
+                            else:
+                                # ## File:ヘッダーなし → ```マーカーのみ除去
+                                cont_content = re.sub(r'^```\w*\r?\n?', '', cont_content)
+
+                            # ============================================================
+                            # ⭐ Fix E-2 (R-2): 不正な継続の検出
+                            # 未閉構造がある状態で「モジュールレベルの新規開始」パターンは不正
+                            # ============================================================
+                            _is_bad_continuation = False
+                            _has_unclosed = (_open_braces > 0 or _open_parens > 0 or _open_brackets > 0)
+
+                            if _has_unclosed:
+                                _fresh_patterns = [
+                                    r'^\s*(?:"""[\s\S]*?"""|\'\'\'[\s\S]*?\'\'\')\s*\n\s*(?:import|from)\s',  # Python: docstring + import
+                                    r'^(?:import|from)\s+\w+',        # Python: bare import/from
+                                    r'^(?:class|def)\s+\w+',          # Python: class/def at indentation 0
+                                    r'^(?:import\s|const\s+\w+\s*=\s*require|export\s)',  # JavaScript
+                                    r'^(?:<!DOCTYPE|<html)',           # HTML
+                                    r'^#!/',                           # Shebang
+                                ]
+                                for _pat in _fresh_patterns:
+                                    if re.match(_pat, cont_content, re.IGNORECASE):
+                                        _is_bad_continuation = True
+                                        logger.warning(
+                                            f"[LLM] Bad continuation detected: fresh-start pattern "
+                                            f"while braces={_open_braces}, parens={_open_parens}, "
+                                            f"brackets={_open_brackets} are unclosed"
+                                        )
+                                        break
+
+                            # ⭐ Fix E-2: リトライ（R-3: イテレーションごとのローカルフラグ）
+                            if _is_bad_continuation and not _retry_done:
+                                _retry_done = True
+                                logger.debug("[LLM] Retrying continuation with explicit structure-aware prompt...")
+
+                                _retry_prompt = f"""CRITICAL: Your previous continuation started a new file/module instead of continuing the existing code.
+
+You MUST continue from EXACTLY this point:
+```
+{accumulated_content[-3000:]}
+```
+
+The code has unclosed structures ({_open_info}). You must:
+1. Continue the code IN PROGRESS — do not start a new docstring, imports, or class definition
+2. Close all open braces/parentheses/brackets
+3. Then continue generating the remaining code/files
+
+Start your response with the exact code that follows the truncation point."""
+
+                                _retry_response = self.llm_manager.generate_response(
+                                    prompt=_retry_prompt,
+                                    context=project_context,
+                                    system_prompt=self._get_code_generation_system_prompt(
+                                        goal_constraints=getattr(self, '_current_goal_constraints', None)
+                                    ),
+                                    max_tokens=max_tokens,
+                                    conversation_history=conversation_history_for_continuation
+                                )
+
+                                if hasattr(_retry_response, 'content') and _retry_response.content:
+                                    cont_content = _retry_response.content
+                                    response = _retry_response  # ループ判定用にresponseも更新
+                                    logger.debug(f"[LLM] Retry continuation: {len(cont_content)} chars")
+
+                                    # リトライ結果の再検証
+                                    _still_bad = False
+                                    if _has_unclosed:
+                                        for _pat in _fresh_patterns:
+                                            if re.match(_pat, cont_content, re.IGNORECASE):
+                                                _still_bad = True
+                                                break
+                                    if _still_bad:
+                                        logger.warning("[LLM] Retry also produced bad continuation.")
+                                        _is_bad_continuation = True
+                                    else:
+                                        _is_bad_continuation = False
+
+                            # ⭐ Fix E-2b: フォールバック回復（リトライ失敗時）
+                            # R-4: スタックベースのブラケット閉じ
+                            # R-7: ファイル名推定とヘッダー挿入
+                            if _is_bad_continuation:
+                                logger.warning("[LLM] Applying fallback recovery: closing current file, wrapping continuation")
+
+                                # スタックベースのブラケット閉じ（R-4）
+                                _bracket_stack = []
+                                _closer_map = {'(': ')', '{': '}', '[': ']'}
+                                _match_map = {')': '(', '}': '{', ']': '['}
+                                for _ch in _current_file_content:
+                                    if _ch in '({[':
+                                        _bracket_stack.append(_ch)
+                                    elif _ch in ')}]':
+                                        if _bracket_stack and _bracket_stack[-1] == _match_map[_ch]:
+                                            _bracket_stack.pop()
+
+                                # 逆順（LIFO）で閉じる
+                                _closers = '\n'.join(
+                                    _closer_map[_ch] for _ch in reversed(_bracket_stack)
+                                ) if _bracket_stack else ''
+
+                                if _closers:
+                                    accumulated_content += '\n' + _closers
+                                if not accumulated_content.rstrip().endswith('```'):
+                                    accumulated_content += '\n```\n\n'
+
+                                # 継続コンテンツに## File:ヘッダーがない場合、推定して追加（R-7）
+                                if not re.match(r'^##\s*File:', cont_content):
+                                    _inferred_name = None
+                                    _class_match = re.search(r'class\s+(Test\w+|[A-Z]\w+)', cont_content)
+                                    if _class_match:
+                                        _cls = _class_match.group(1)
+                                        _snake = re.sub(r'(?<!^)(?=[A-Z])', '_', _cls).lower()
+                                        _inferred_name = f"{_snake}.py"
+                                    if not _inferred_name:
+                                        _inferred_name = f"__continuation_{continuation_count}.py"
+                                    cont_content = f"## File: {_inferred_name}\n```python\n{cont_content}\n```\n"
+                                    logger.debug(f"[LLM] Wrapped fallback content as: {_inferred_name}")
+
                             accumulated_content += cont_content
                             logger.debug(f"[LLM] Continuation {continuation_count}: Added {len(cont_content)} chars, total: {len(accumulated_content)}")
                         
@@ -9847,8 +9381,76 @@ IMPORTANT:
                 logger.debug(f"[Code Extraction]   - {fn}: {len(code)} chars")
         else:
             logger.debug(f"[Code Extraction]   (empty result)")
-        
-        
+
+        # ========================================
+        # ⭐ Fix E-3: 抽出後のPythonファイル構文検証（安全網層）
+        # R-8: continuation_count > 0 の場合のみ適用
+        # (マージなし時のSyntaxErrorはLLM生成バグ → lint auto-fixに修復機会を残す)
+        # ========================================
+        if cleaned_files and continuation_count > 0:
+            _files_to_remove = []
+            for _fn, _code in list(cleaned_files.items()):
+                if not _fn.endswith('.py'):
+                    continue
+                try:
+                    import ast
+                    ast.parse(_code)
+                except SyntaxError as _syn_err:
+                    logger.warning(
+                        f"[Code Extraction] SyntaxError in {_fn} "
+                        f"(line {_syn_err.lineno}): {_syn_err.msg} — "
+                        f"likely continuation merge corruption"
+                    )
+                    _lines = _code.split('\n')
+                    _recovered = False
+
+                    # R-5修正: 複数のオフセットで切り捨てを試行
+                    if _syn_err.lineno and _syn_err.lineno > 10:
+                        for _offset in [1, 3, 5, 10, 20]:
+                            _cut_at = _syn_err.lineno - _offset
+                            if _cut_at < 5:
+                                break
+                            _truncated = '\n'.join(_lines[:_cut_at])
+                            # スタックベースのブラケット閉じ（R-4）
+                            _bstack = []
+                            _cmap = {'(': ')', '{': '}', '[': ']'}
+                            _mmap = {')': '(', '}': '{', ']': '['}
+                            for _ch in _truncated:
+                                if _ch in '({[':
+                                    _bstack.append(_ch)
+                                elif _ch in ')}]':
+                                    if _bstack and _bstack[-1] == _mmap[_ch]:
+                                        _bstack.pop()
+                            if _bstack:
+                                _truncated += '\n' + '\n'.join(
+                                    _cmap[c] for c in reversed(_bstack)
+                                )
+                            try:
+                                ast.parse(_truncated)
+                                cleaned_files[_fn] = _truncated
+                                logger.debug(
+                                    f"[Code Extraction] Recovered {_fn}: "
+                                    f"truncated at line {_cut_at} "
+                                    f"(offset={_offset}, {len(_lines)} → "
+                                    f"{len(_truncated.splitlines())} lines)"
+                                )
+                                _recovered = True
+                                break
+                            except SyntaxError:
+                                continue
+
+                    if not _recovered:
+                        _files_to_remove.append(_fn)
+                        logger.warning(
+                            f"[Code Extraction] Cannot recover {_fn}, "
+                            f"removing from output"
+                        )
+
+            for _fn in _files_to_remove:
+                del cleaned_files[_fn]
+            if _files_to_remove:
+                logger.debug(f"[Code Extraction] Removed {len(_files_to_remove)} corrupted file(s)")
+
         # ========================================
         # ⭐ force_filename が指定されている場合の強制修正
         # ========================================
@@ -11700,8 +11302,12 @@ Return ONLY the fixed code in this format:
                             if (d.startswith('+') or d.startswith('-'))
                             and not d.startswith('+++') and not d.startswith('---')
                         )
-                        # 許容上限: エラー数×8行 または 最低20行
-                        max_allowed = max(file_error_count * 8, 20)
+                        # 許容上限: エラー数×12行、ファイルの25%(上限60行)、最低25行
+                        max_allowed = max(
+                            file_error_count * 12,
+                            min(len(original_lines) // 4, 60),
+                            25
+                        )
                         if changed_count > max_allowed:
                             logger.debug(
                                 f"[LLM Fix] REVERTED {filename}: excessive changes "
@@ -14744,6 +14350,38 @@ IMPORTANT RULES:
                 if len(file_errors) > 0 or len(file_warnings) > 0:
                     all_issues.append(f"{filename}: {len(file_errors)} errors, {len(file_warnings)} warnings")
             
+            # 異言語コンテンツ汚染検出
+            contamination_score = 1.0
+            foreign_lang_patterns = {
+                'css': [  # CSSファイル内に存在してはいけないパターン
+                    (r'^\s*import\s+\w+', 'python import'),
+                    (r'^\s*from\s+\w+\s+import\b', 'python from-import'),
+                    (r'^\s*def\s+\w+\s*\(', 'python function'),
+                    (r'^\s*async\s+def\s+', 'python async function'),
+                    (r'^\s*class\s+\w+[:(]', 'python/js class'),
+                ],
+                'html': [
+                    (r'^\s*from\s+\w+\s+import\b', 'python from-import'),
+                    (r'^\s*def\s+\w+\s*\(', 'python function'),
+                ],
+                'js': [
+                    (r'^\s*from\s+\w+\s+import\b', 'python from-import'),
+                    (r'^\s*def\s+\w+\s*\(', 'python function'),
+                    (r'^\s*async\s+def\s+', 'python async function'),
+                ],
+            }
+            if ext in foreign_lang_patterns:
+                foreign_matches = []
+                for pattern, desc in foreign_lang_patterns[ext]:
+                    matches = re.findall(pattern, code, re.MULTILINE)
+                    if matches:
+                        foreign_matches.append((desc, len(matches)))
+                if len(foreign_matches) >= 2:
+                    contamination_score = 0.2
+                    details = ', '.join(f"{desc}({count})" for desc, count in foreign_matches)
+                    all_issues.append(f"{filename}: Cross-language contamination [{details}]")
+                    logger.debug(f"[Quality] {filename}: ⚠ Contamination detected: {details}")
+
             # 実行可能性チェック（全言語対応）
             executable_score = 1.0
             if ext == 'py':
@@ -14778,7 +14416,10 @@ IMPORTANT RULES:
                     if syntax_errors_for_file:
                         executable_score = 0.3
                         all_issues.append(f"{filename}: Syntax error detected ({ext})")
-            
+
+            # 異言語汚染スコアを実行可能性スコアに反映
+            executable_score = min(executable_score, contamination_score)
+
             # コード複雑度スコア（新規追加 - McCabe複雑度）
             complexity_score = 1.0
             if ext == 'py':
@@ -16014,9 +15655,529 @@ Generate complete, production-ready code for {missing_file} only."""
             return None
 
     # ==========================================
+    # Near-Identical File Preservation
+    # ==========================================
+
+    def _preserve_near_identical_files(
+        self,
+        new_files: Dict[str, str],
+        original_files: Dict[str, str]
+    ) -> Dict[str, str]:
+        """
+        新規生成ファイルが元ファイルと99.8%以上同一の場合、元ファイルを保持する。
+
+        問題: LLMがファイル全体を再生成する際、変更不要なファイルを
+              99%同一だが微妙に異なるコードで出力し既存テストを破壊する
+        対策: 元ファイルとの類似度が99.8%以上なら元ファイルを保持する
+
+        Args:
+            new_files: 新規生成されたファイル辞書 {filename: code}
+            original_files: 元ファイル辞書 {filename: code}
+
+        Returns:
+            保護適用後のファイル辞書
+        """
+        import difflib
+
+        SIMILARITY_THRESHOLD = 0.998  # 99.8%以上なら「再現ミス」と判定
+        MAX_CHAR_DIFF_RATIO = 0.005   # サイズ差0.5%以内が追加条件
+
+        preserved_files = []
+        for filename, generated_content in list(new_files.items()):
+            if filename in original_files:
+                original_content = original_files[filename]
+
+                # SequenceMatcherで類似度を計算
+                ratio = difflib.SequenceMatcher(
+                    None, original_content, generated_content
+                ).ratio()
+
+                # サイズ差チェック（正当な追加を誤保護しないため）
+                char_diff = abs(len(generated_content) - len(original_content))
+                max_char_diff = max(int(len(original_content) * MAX_CHAR_DIFF_RATIO), 10)
+
+                if (ratio >= SIMILARITY_THRESHOLD and ratio < 1.0
+                        and char_diff <= max_char_diff):
+                    # 99.8%以上 かつ サイズ差0.5%以内 かつ 完全一致でない
+                    # → 再現ミス → 元ファイルを保持
+                    new_files[filename] = original_content
+                    preserved_files.append(
+                        f"{filename}(similarity={ratio:.4f}, "
+                        f"char_diff={char_diff}, max={max_char_diff})"
+                    )
+
+        if preserved_files:
+            logger.debug(
+                f"[Near-Identical Preservation] Restored {len(preserved_files)} "
+                f"file(s) to original: {preserved_files}"
+            )
+
+        return new_files
+
+    # ==========================================
+    # G-1〜G-31 整合性チェック統合メソッド
+    # ==========================================
+
+    def _run_consistency_checks(self, files: Dict[str, str]) -> Dict[str, str]:
+        """G-1〜G-31 整合性チェックを実行。Args: files: 生成されたファイル辞書 {filename: code}. Returns: チェック・修正後のファイル辞書"""
+
+        # G-1: HTML-CSS クラス整合性
+        missing_css_classes = self._validate_html_css_class_consistency(files)
+        if missing_css_classes:
+            logger.debug(f"[G-1] Detected {len(missing_css_classes)} missing CSS classes")
+            logger.debug(f"\n● CSS consistency check: {len(missing_css_classes)} missing class(es)")
+            files = self._auto_complete_missing_css_classes(missing_css_classes, files)
+
+        # G-2: HTML-JS ID整合性
+        missing_html_ids = self._validate_html_js_id_consistency(files)
+        if missing_html_ids:
+            logger.debug(f"[G-2] Detected {len(missing_html_ids)} missing HTML IDs")
+            logger.debug(f"● HTML-JS consistency check: {len(missing_html_ids)} missing ID(s)")
+            files = self._auto_complete_missing_html_ids(missing_html_ids, files)
+
+        # G-3: Python環境-パッケージ互換性
+        compatibility_issues = self._validate_python_package_compatibility(files)
+        if compatibility_issues:
+            logger.debug(f"[G-3] Detected {len(compatibility_issues)} compatibility issues")
+            logger.debug(f"● Package compatibility check: {len(compatibility_issues)} issue(s)")
+            for issue in compatibility_issues:
+                logger.debug(f"  - {issue['package']}=={issue['current_version']} → {issue['fix']}")
+            files = self._auto_fix_package_compatibility(compatibility_issues, files)
+
+        # G-4: Pythonシンボルレベルimport整合性
+        symbol_issues = self._validate_python_symbol_imports(files)
+        if symbol_issues:
+            logger.debug(f"[G-4] Detected {len(symbol_issues)} symbol import issues")
+            logger.debug(f"● Symbol import check: {len(symbol_issues)} issue(s)")
+            for issue in symbol_issues[:5]:
+                logger.debug(f"  - {issue['importer']}: '{issue['symbol']}' not in {issue['module']}")
+            files = self._auto_fix_symbol_imports(symbol_issues, files)
+
+        # G-5: Import vs Requirements.txt 整合性チェック
+        requirements_issues = self._validate_import_requirements_consistency(files)
+        if requirements_issues:
+            logger.debug(f"[G-5] Detected {len(requirements_issues)} missing packages in requirements.txt")
+            logger.debug(f"● Requirements.txt check: {len(requirements_issues)} missing package(s)")
+            for pkg in requirements_issues[:5]:
+                logger.debug(f"  - {pkg['import_name']} → {pkg['package_name']}")
+            files = self._auto_fix_requirements_txt(requirements_issues, files)
+
+        # G-6: ライブラリ要求パターンチェック
+        library_issues = self._validate_library_requirements(files)
+        if library_issues:
+            logger.debug(f"[G-6] Detected {len(library_issues)} library requirement issues")
+            logger.debug(f"● Library requirements check: {len(library_issues)} issue(s)")
+            for issue in library_issues[:5]:
+                logger.debug(f"  - [{issue['library']}] {issue['requirement']}")
+            files = self._auto_fix_library_requirements(library_issues, files)
+
+        # G-7: フロントエンド依存整合性チェック
+        frontend_issues = self._validate_frontend_dependencies(files)
+        if frontend_issues:
+            logger.debug(f"[G-7] Detected {len(frontend_issues)} frontend dependency issues")
+            logger.debug(f"● Frontend dependencies check: {len(frontend_issues)} issue(s)")
+            for issue in frontend_issues[:5]:
+                logger.debug(f"  - [{issue['type']}] {issue['dependency']}")
+            files = self._auto_fix_frontend_dependencies(frontend_issues, files)
+
+        # G-8: Model↔Schema整合性チェック
+        schema_issues = self._validate_model_schema_consistency(files)
+        if schema_issues:
+            logger.debug(f"[G-8] Detected {len(schema_issues)} model-schema consistency issues")
+            logger.debug(f"● Model-Schema consistency check: {len(schema_issues)} issue(s)")
+            for issue in schema_issues[:5]:
+                logger.debug(f"  - {issue['schema']}.{issue['field']} not in {issue['model']}")
+            files = self._auto_fix_model_schema_consistency(schema_issues, files)
+
+        # G-9: ドキュメント環境依存チェック
+        doc_issues = self._validate_document_environment_commands(files)
+        if doc_issues:
+            logger.debug(f"[G-9] Detected {len(doc_issues)} environment-dependent commands")
+            logger.debug(f"● Document environment check: {len(doc_issues)} issue(s)")
+            for issue in doc_issues[:5]:
+                logger.debug(f"  - {issue['file']}:{issue['line']} - {issue['type']}")
+            files = self._auto_fix_document_environment_commands(doc_issues, files)
+
+        # G-10: クラス定義安全性チェック（再検証ループ付き）
+        MAX_G10_FIX_ATTEMPTS = 2
+        class_safety_issues = []
+        for g10_attempt in range(MAX_G10_FIX_ATTEMPTS):
+            class_safety_issues = self._validate_class_definition_safety(files)
+            if not class_safety_issues:
+                if g10_attempt > 0:
+                    logger.debug(f"[G-10] ✅ All issues fixed after {g10_attempt} attempt(s)")
+                break
+
+            logger.debug(f"[G-10] Detected {len(class_safety_issues)} issues (attempt {g10_attempt + 1}/{MAX_G10_FIX_ATTEMPTS})")
+            if g10_attempt == 0:
+                logger.debug(f"● Class definition safety check: {len(class_safety_issues)} issue(s)")
+                for issue in class_safety_issues[:5]:
+                    logger.debug(f"  - {issue['file']}:{issue['line']} - {issue['type']}")
+
+            files = self._auto_fix_class_definition_safety(class_safety_issues, files)
+
+        if class_safety_issues:
+            logger.warning(f"[G-10] ⚠ {len(class_safety_issues)} issues remain after {MAX_G10_FIX_ATTEMPTS} fix attempts")
+
+        # G-11: フレームワーク予約語チェック（再検証ループ付き）
+        MAX_G11_FIX_ATTEMPTS = 2
+        framework_reserved_issues = []
+        for g11_attempt in range(MAX_G11_FIX_ATTEMPTS):
+            framework_reserved_issues = self._validate_framework_reserved_words(files)
+            if not framework_reserved_issues:
+                if g11_attempt > 0:
+                    logger.debug(f"[G-11] ✅ All issues fixed after {g11_attempt} attempt(s)")
+                break
+
+            logger.debug(f"[G-11] Detected {len(framework_reserved_issues)} issues (attempt {g11_attempt + 1}/{MAX_G11_FIX_ATTEMPTS})")
+            if g11_attempt == 0:
+                logger.debug(f"● Framework reserved word check: {len(framework_reserved_issues)} issue(s)")
+                for issue in framework_reserved_issues[:5]:
+                    logger.debug(f"  - {issue['file']}:{issue['line']} - {issue['reserved_word']}")
+
+            files = self._auto_fix_framework_reserved_words(framework_reserved_issues, files)
+
+        if framework_reserved_issues:
+            logger.warning(f"[G-11] ⚠ {len(framework_reserved_issues)} issues remain after {MAX_G11_FIX_ATTEMPTS} fix attempts")
+
+        # G-12: Python組み込み名シャドウイングチェック（再検証ループ付き）
+        MAX_G12_FIX_ATTEMPTS = 2
+        builtin_shadowing_issues = []
+        for g12_attempt in range(MAX_G12_FIX_ATTEMPTS):
+            builtin_shadowing_issues = self._validate_python_builtin_shadowing(files)
+            if not builtin_shadowing_issues:
+                if g12_attempt > 0:
+                    logger.debug(f"[G-12] ✅ All issues fixed after {g12_attempt} attempt(s)")
+                break
+
+            logger.debug(f"[G-12] Detected {len(builtin_shadowing_issues)} issues (attempt {g12_attempt + 1}/{MAX_G12_FIX_ATTEMPTS})")
+            if g12_attempt == 0:
+                logger.debug(f"● Python builtin shadowing check: {len(builtin_shadowing_issues)} issue(s)")
+                for issue in builtin_shadowing_issues[:5]:
+                    logger.debug(f"  - {issue['file']}:{issue['line']} - {issue['builtin_name']}")
+
+            files = self._auto_fix_python_builtin_shadowing(builtin_shadowing_issues, files)
+
+        if builtin_shadowing_issues:
+            logger.warning(f"[G-12] ⚠ {len(builtin_shadowing_issues)} issues remain after {MAX_G12_FIX_ATTEMPTS} fix attempts")
+
+        # G-13: Flask Blueprintルート重複チェック（再検証ループ付き）
+        MAX_G13_FIX_ATTEMPTS = 2
+        route_duplicate_issues = []
+        for g13_attempt in range(MAX_G13_FIX_ATTEMPTS):
+            route_duplicate_issues = self._validate_flask_route_duplicates(files)
+            if not route_duplicate_issues:
+                if g13_attempt > 0:
+                    logger.debug(f"[G-13] ✅ All issues fixed after {g13_attempt} attempt(s)")
+                break
+
+            logger.debug(f"[G-13] Detected {len(route_duplicate_issues)} issues (attempt {g13_attempt + 1}/{MAX_G13_FIX_ATTEMPTS})")
+            if g13_attempt == 0:
+                logger.debug(f"● Flask route duplicate check: {len(route_duplicate_issues)} issue(s)")
+                for issue in route_duplicate_issues[:5]:
+                    logger.debug(f"  - {issue['file']}:{issue['line']} - {issue['method']} {issue['route']}")
+
+            files = self._auto_fix_flask_route_duplicates(route_duplicate_issues, files)
+
+        if route_duplicate_issues:
+            logger.warning(f"[G-13] ⚠ {len(route_duplicate_issues)} issues remain after {MAX_G13_FIX_ATTEMPTS} fix attempts")
+
+        # G-14: SQLAlchemyテーブル名重複チェック（再検証ループ付き）
+        MAX_G14_FIX_ATTEMPTS = 2
+        table_duplicate_issues = []
+        for g14_attempt in range(MAX_G14_FIX_ATTEMPTS):
+            table_duplicate_issues = self._validate_sqlalchemy_table_duplicates(files)
+            if not table_duplicate_issues:
+                if g14_attempt > 0:
+                    logger.debug(f"[G-14] ✅ All issues fixed after {g14_attempt} attempt(s)")
+                break
+
+            logger.debug(f"[G-14] Detected {len(table_duplicate_issues)} issues (attempt {g14_attempt + 1}/{MAX_G14_FIX_ATTEMPTS})")
+            if g14_attempt == 0:
+                logger.debug(f"● SQLAlchemy table duplicate check: {len(table_duplicate_issues)} issue(s)")
+                for issue in table_duplicate_issues[:5]:
+                    logger.debug(f"  - {issue['file']}:{issue['line']} - table '{issue['table']}'")
+
+            files = self._auto_fix_sqlalchemy_table_duplicates(table_duplicate_issues, files)
+
+        if table_duplicate_issues:
+            logger.warning(f"[G-14] ⚠ {len(table_duplicate_issues)} issues remain after {MAX_G14_FIX_ATTEMPTS} fix attempts")
+
+        # G-15: JavaScript予約語チェック（再検証ループ付き）
+        MAX_G15_FIX_ATTEMPTS = 2
+        js_reserved_issues = []
+        for g15_attempt in range(MAX_G15_FIX_ATTEMPTS):
+            js_reserved_issues = self._validate_javascript_reserved_words(files)
+            if not js_reserved_issues:
+                if g15_attempt > 0:
+                    logger.debug(f"[G-15] ✅ All issues fixed after {g15_attempt} attempt(s)")
+                break
+
+            logger.debug(f"[G-15] Detected {len(js_reserved_issues)} issues (attempt {g15_attempt + 1}/{MAX_G15_FIX_ATTEMPTS})")
+            if g15_attempt == 0:
+                logger.debug(f"● JavaScript reserved word check: {len(js_reserved_issues)} issue(s)")
+                for issue in js_reserved_issues[:5]:
+                    logger.debug(f"  - {issue['file']}:{issue['line']} - {issue['reserved_word']}")
+
+            files = self._auto_fix_javascript_reserved_words(js_reserved_issues, files)
+
+        if js_reserved_issues:
+            logger.warning(f"[G-15] ⚠ {len(js_reserved_issues)} issues remain after {MAX_G15_FIX_ATTEMPTS} fix attempts")
+
+        # G-16: SQLAlchemy relationship参照先検証（再検証ループ付き）
+        MAX_G16_FIX_ATTEMPTS = 2
+        relationship_issues = []
+        for g16_attempt in range(MAX_G16_FIX_ATTEMPTS):
+            relationship_issues = self._validate_relationship_references(files)
+            if not relationship_issues:
+                if g16_attempt > 0:
+                    logger.debug(f"[G-16] ✅ All issues fixed after {g16_attempt} attempt(s)")
+                break
+
+            logger.debug(f"[G-16] Detected {len(relationship_issues)} issues (attempt {g16_attempt + 1}/{MAX_G16_FIX_ATTEMPTS})")
+            if g16_attempt == 0:
+                logger.debug(f"● Relationship reference check: {len(relationship_issues)} issue(s)")
+                for issue in relationship_issues[:5]:
+                    logger.debug(f"  - {issue['file']}:{issue['line']} - {issue['type']}")
+
+            files = self._auto_fix_relationship_references(relationship_issues, files)
+
+        if relationship_issues:
+            logger.warning(f"[G-16] ⚠ {len(relationship_issues)} issues remain after {MAX_G16_FIX_ATTEMPTS} fix attempts")
+
+        # G-17: ForeignKey参照先検証（再検証ループ付き）
+        MAX_G17_FIX_ATTEMPTS = 2
+        foreignkey_issues = []
+        for g17_attempt in range(MAX_G17_FIX_ATTEMPTS):
+            foreignkey_issues = self._validate_foreignkey_references(files)
+            if not foreignkey_issues:
+                if g17_attempt > 0:
+                    logger.debug(f"[G-17] ✅ All issues fixed after {g17_attempt} attempt(s)")
+                break
+
+            logger.debug(f"[G-17] Detected {len(foreignkey_issues)} issues (attempt {g17_attempt + 1}/{MAX_G17_FIX_ATTEMPTS})")
+            if g17_attempt == 0:
+                logger.debug(f"● ForeignKey reference check: {len(foreignkey_issues)} issue(s)")
+                for issue in foreignkey_issues[:5]:
+                    logger.debug(f"  - {issue['file']}:{issue['line']} - {issue['referenced_table']}")
+
+            files = self._auto_fix_foreignkey_references(foreignkey_issues, files)
+
+        if foreignkey_issues:
+            logger.warning(f"[G-17] ⚠ {len(foreignkey_issues)} issues remain after {MAX_G17_FIX_ATTEMPTS} fix attempts")
+
+        # G-18: SQLAlchemy Enum定義検証（再検証ループ付き）
+        MAX_G18_FIX_ATTEMPTS = 2
+        enum_usage_issues = []
+        for g18_attempt in range(MAX_G18_FIX_ATTEMPTS):
+            enum_usage_issues = self._validate_sqlalchemy_enum_usage(files)
+            if not enum_usage_issues:
+                if g18_attempt > 0:
+                    logger.debug(f"[G-18] ✅ All issues fixed after {g18_attempt} attempt(s)")
+                break
+
+            logger.debug(f"[G-18] Detected {len(enum_usage_issues)} issues (attempt {g18_attempt + 1}/{MAX_G18_FIX_ATTEMPTS})")
+            if g18_attempt == 0:
+                logger.debug(f"● Enum usage check: {len(enum_usage_issues)} issue(s)")
+                for issue in enum_usage_issues[:5]:
+                    logger.debug(f"  - {issue['file']}:{issue['line']} - {issue['referenced_class']}")
+
+            files = self._auto_fix_sqlalchemy_enum_usage(enum_usage_issues, files)
+
+        if enum_usage_issues:
+            logger.warning(f"[G-18] ⚠ {len(enum_usage_issues)} issues remain after {MAX_G18_FIX_ATTEMPTS} fix attempts")
+
+        # G-19: Mapped型アノテーション整合性検証（再検証ループ付き）
+        MAX_G19_FIX_ATTEMPTS = 2
+        mapped_type_issues = []
+        for g19_attempt in range(MAX_G19_FIX_ATTEMPTS):
+            mapped_type_issues = self._validate_mapped_type_consistency(files)
+            if not mapped_type_issues:
+                if g19_attempt > 0:
+                    logger.debug(f"[G-19] ✅ All issues fixed after {g19_attempt} attempt(s)")
+                break
+
+            logger.debug(f"[G-19] Detected {len(mapped_type_issues)} issues (attempt {g19_attempt + 1}/{MAX_G19_FIX_ATTEMPTS})")
+            if g19_attempt == 0:
+                logger.debug(f"● Mapped type consistency check: {len(mapped_type_issues)} issue(s)")
+                for issue in mapped_type_issues[:5]:
+                    logger.debug(f"  - {issue['file']}:{issue['line']} - {issue['attribute']}")
+
+            files = self._auto_fix_mapped_type_consistency(mapped_type_issues, files)
+
+        if mapped_type_issues:
+            logger.warning(f"[G-19] ⚠ {len(mapped_type_issues)} issues remain after {MAX_G19_FIX_ATTEMPTS} fix attempts")
+
+        # G-20: Flask静的パス検証（再検証ループ付き）
+        MAX_G20_FIX_ATTEMPTS = 2
+        flask_static_issues = []
+        for g20_attempt in range(MAX_G20_FIX_ATTEMPTS):
+            flask_static_issues = self._validate_flask_static_paths(files)
+            if not flask_static_issues:
+                if g20_attempt > 0:
+                    logger.debug(f"[G-20] ✅ All issues fixed after {g20_attempt} attempt(s)")
+                break
+
+            logger.debug(f"[G-20] Detected {len(flask_static_issues)} issues (attempt {g20_attempt + 1}/{MAX_G20_FIX_ATTEMPTS})")
+            if g20_attempt == 0:
+                logger.debug(f"● Flask static path check: {len(flask_static_issues)} issue(s)")
+                for issue in flask_static_issues[:5]:
+                    logger.debug(f"  - {issue['file']}:{issue['line']} - {issue['current_path']} → {issue['suggested_path']}")
+
+            files = self._auto_fix_flask_static_paths(flask_static_issues, files)
+
+        if flask_static_issues:
+            logger.warning(f"[G-20] ⚠ {len(flask_static_issues)} issues remain after {MAX_G20_FIX_ATTEMPTS} fix attempts")
+
+        # G-21: HTML参照整合性検証（再検証ループ付き）
+        MAX_G21_FIX_ATTEMPTS = 2
+        html_asset_issues = []
+        for g21_attempt in range(MAX_G21_FIX_ATTEMPTS):
+            html_asset_issues = self._validate_html_asset_references(files)
+            if not html_asset_issues:
+                if g21_attempt > 0:
+                    logger.debug(f"[G-21] ✅ All issues fixed after {g21_attempt} attempt(s)")
+                break
+
+            logger.debug(f"[G-21] Detected {len(html_asset_issues)} issues (attempt {g21_attempt + 1}/{MAX_G21_FIX_ATTEMPTS})")
+            if g21_attempt == 0:
+                logger.debug(f"● HTML asset reference check: {len(html_asset_issues)} issue(s)")
+                for issue in html_asset_issues[:5]:
+                    logger.debug(f"  - {issue['html_file']}:{issue['line']} - {issue['ref_type']}: {issue['ref_path']}")
+
+            files = self._auto_fix_html_asset_references(html_asset_issues, files)
+
+        if html_asset_issues:
+            logger.warning(f"[G-21] ⚠ {len(html_asset_issues)} issues remain after {MAX_G21_FIX_ATTEMPTS} fix attempts")
+
+        # G-22: JavaScriptアニメーションループパターン検証（再検証ループ付き）
+        MAX_G22_FIX_ATTEMPTS = 2
+        js_animation_issues = []
+        for g22_attempt in range(MAX_G22_FIX_ATTEMPTS):
+            js_animation_issues = self._validate_js_animation_loop(files)
+            if not js_animation_issues:
+                if g22_attempt > 0:
+                    logger.debug(f"[G-22] ✅ All issues fixed after {g22_attempt} attempt(s)")
+                break
+
+            logger.debug(f"[G-22] Detected {len(js_animation_issues)} issues (attempt {g22_attempt + 1}/{MAX_G22_FIX_ATTEMPTS})")
+            if g22_attempt == 0:
+                logger.debug(f"● JavaScript animation loop check: {len(js_animation_issues)} issue(s)")
+                for issue in js_animation_issues[:5]:
+                    logger.debug(f"  - {issue['file']}:{issue['line']} - {issue['method_name']}() called without timestamp")
+
+            files = self._auto_fix_js_animation_loop(js_animation_issues, files)
+
+        if js_animation_issues:
+            logger.warning(f"[G-22] ⚠ {len(js_animation_issues)} issues remain after {MAX_G22_FIX_ATTEMPTS} fix attempts")
+
+        # G-23: API契約整合性チェック（警告のみ、自動修正なし）
+        api_contract_issues = self._validate_api_contract_consistency(files)
+        if api_contract_issues:
+            logger.debug(f"● API contract consistency: {len(api_contract_issues)} warning(s)")
+            for issue in api_contract_issues[:3]:
+                logger.debug(f"  - {issue['details']}")
+            # 警告のみなので、自動修正は呼び出さない
+
+        # G-24: back_populates相互参照チェック
+        MAX_G24_FIX_ATTEMPTS = 2
+        back_populates_issues = []
+        for g24_attempt in range(MAX_G24_FIX_ATTEMPTS):
+            back_populates_issues = self._validate_back_populates_consistency(files)
+            if not back_populates_issues:
+                if g24_attempt > 0:
+                    logger.debug(f"[G-24] ✅ All issues fixed after {g24_attempt} attempt(s)")
+                break
+            logger.debug(f"[G-24] Detected {len(back_populates_issues)} issues (attempt {g24_attempt + 1}/{MAX_G24_FIX_ATTEMPTS})")
+            files = self._auto_fix_back_populates_consistency(back_populates_issues, files)
+
+        if back_populates_issues:
+            logger.debug(f"● back_populates consistency: {len(back_populates_issues)} error(s)")
+            for issue in back_populates_issues[:3]:
+                logger.debug(f"  - {issue['details']}")
+
+        # G-25: ForeignKey型注釈欠如チェック
+        foreignkey_annotation_issues = self._validate_foreignkey_type_annotation(files)
+        if foreignkey_annotation_issues:
+            logger.debug(f"[G-25] Detected {len(foreignkey_annotation_issues)} issues, auto-fixing...")
+            files = self._auto_fix_foreignkey_type_annotation(foreignkey_annotation_issues, files)
+            foreignkey_annotation_issues = self._validate_foreignkey_type_annotation(files)
+
+        if foreignkey_annotation_issues:
+            logger.debug(f"● ForeignKey type annotations: {len(foreignkey_annotation_issues)} warning(s)")
+
+        # G-26: Mapped型とSQLAlchemy型の不一致チェック
+        mapped_mismatch_issues = self._validate_mapped_sqlalchemy_type_mismatch(files)
+        if mapped_mismatch_issues:
+            logger.debug(f"[G-26] Detected {len(mapped_mismatch_issues)} issues, auto-fixing...")
+            files = self._auto_fix_mapped_sqlalchemy_type_mismatch(mapped_mismatch_issues, files)
+            mapped_mismatch_issues = self._validate_mapped_sqlalchemy_type_mismatch(files)
+
+        if mapped_mismatch_issues:
+            logger.debug(f"● Mapped/SQLAlchemy type mismatch: {len(mapped_mismatch_issues)} warning(s)")
+
+        # G-27: relationship overlaps検出
+        relationship_overlap_issues = self._validate_relationship_overlaps(files)
+        if relationship_overlap_issues:
+            files = self._auto_fix_relationship_overlaps(relationship_overlap_issues, files)
+            logger.debug(f"● Relationship overlaps: {len(relationship_overlap_issues)} warning(s)")
+
+        # G-28: 循環インポート検出
+        circular_import_issues = self._validate_circular_imports(files)
+        if circular_import_issues:
+            files = self._auto_fix_circular_imports(circular_import_issues, files)
+            logger.debug(f"● Circular imports: {len(circular_import_issues)} error(s)")
+            for issue in circular_import_issues[:2]:
+                logger.debug(f"  - {issue['details']}")
+
+        # G-29: Marshmallow Nested循環参照検出
+        marshmallow_circular_issues = self._validate_marshmallow_nested_circular(files)
+        if marshmallow_circular_issues:
+            files = self._auto_fix_marshmallow_nested_circular(marshmallow_circular_issues, files)
+            logger.debug(f"● Marshmallow Nested circular: {len(marshmallow_circular_issues)} warning(s)")
+
+        # G-30: JavaScript this参照喪失チェック
+        js_this_loss_issues = self._validate_js_this_context_loss(files)
+        if js_this_loss_issues:
+            logger.debug(f"[G-30] Detected {len(js_this_loss_issues)} issues, auto-fixing...")
+            files = self._auto_fix_js_this_context_loss(js_this_loss_issues, files)
+            js_this_loss_issues = self._validate_js_this_context_loss(files)
+
+        if js_this_loss_issues:
+            logger.debug(f"● JavaScript this context loss: {len(js_this_loss_issues)} error(s)")
+            for issue in js_this_loss_issues[:3]:
+                logger.debug(f"  - {issue['details']}")
+
+        # G-31: Marshmallow API誤用検出（再検証ループ付き）
+        MAX_G31_FIX_ATTEMPTS = 2
+        marshmallow_api_issues = []
+        for g31_attempt in range(MAX_G31_FIX_ATTEMPTS):
+            marshmallow_api_issues = self._validate_marshmallow_api_usage(files)
+            if not marshmallow_api_issues:
+                if g31_attempt > 0:
+                    logger.debug(f"[G-31] ✅ All issues fixed after {g31_attempt} attempt(s)")
+                break
+
+            logger.debug(f"[G-31] Detected {len(marshmallow_api_issues)} issues (attempt {g31_attempt + 1}/{MAX_G31_FIX_ATTEMPTS})")
+            if g31_attempt == 0:
+                logger.debug(f"● Marshmallow API usage check: {len(marshmallow_api_issues)} issue(s)")
+                for issue in marshmallow_api_issues[:5]:
+                    logger.debug(f"  - {issue['file']}:{issue['line']} - {issue['field']}")
+
+            files = self._auto_fix_marshmallow_api_usage(marshmallow_api_issues, files)
+
+        if marshmallow_api_issues:
+            logger.warning(f"[G-31] ⚠ {len(marshmallow_api_issues)} issues remain after {MAX_G31_FIX_ATTEMPTS} fix attempts")
+
+        if not missing_css_classes and not missing_html_ids and not compatibility_issues and not symbol_issues and not requirements_issues and not library_issues and not frontend_issues and not schema_issues and not doc_issues and not class_safety_issues and not framework_reserved_issues and not builtin_shadowing_issues and not route_duplicate_issues and not table_duplicate_issues and not js_reserved_issues and not relationship_issues and not foreignkey_issues and not enum_usage_issues and not mapped_type_issues and not flask_static_issues and not html_asset_issues and not js_animation_issues and not back_populates_issues and not circular_import_issues and not js_this_loss_issues and not marshmallow_api_issues:
+            logger.debug("[G-1/.../G-31] All consistency checks passed")
+
+        return files
+
+    # ==========================================
     # G-1: HTML-CSS クラス整合性検証
     # ==========================================
-    
+
     def _validate_html_css_class_consistency(
         self,
         generated_files: Dict[str, str]
@@ -16141,7 +16302,7 @@ Generate CSS:"""
                 complexity="simple",
                 skip_validation=True,
                 skip_multi_stage=True,
-                force_filename=None
+                force_filename=css_file
             )
             
             if result:
@@ -16161,6 +16322,18 @@ Generate CSS:"""
                 if css_match:
                     new_css = css_match.group(1)
                 
+                # 異言語コンテンツの検出（行頭パターンで誤検出防止）
+                foreign_patterns = [
+                    r'^\s*import\s+\w+',          # Python: import xxx
+                    r'^\s*from\s+\w+\s+import\b', # Python: from xxx import
+                    r'^\s*def\s+\w+\s*\(',        # Python: def xxx(
+                    r'^\s*class\s+\w+[:(]',       # Python/JS: class Xxx( or class Xxx:
+                ]
+                foreign_count = sum(1 for p in foreign_patterns if re.search(p, new_css, re.MULTILINE))
+                if foreign_count >= 2:
+                    logger.debug(f"[G-1] ⚠ Rejected: non-CSS content detected ({foreign_count} foreign patterns)")
+                    return generated_files  # 追記しない
+
                 # 既存CSSに追記
                 if new_css.strip():
                     generated_files[css_file] = existing_css + "\n\n/* ========================================\n   Auto-generated: Missing CSS Classes (G-1)\n   ======================================== */\n" + new_css.strip()
@@ -27252,10 +27425,9 @@ Identify what structural changes you made, and undo them while keeping only the 
             steps = [
                 "Consistency checks",
                 "Import validation",
-                "Lint check & Auto-fix",
-                "Quality assessment",
-                "Comprehensive Review",
-                "Test execution & Auto-fix",
+                "Lint & Auto-fix",
+                "Quality & Review",
+                "Test & Auto-fix",
             ]
             _hud = StepHUD(section_title="Retry Validation", steps=steps)
             _hud.start()
@@ -27287,226 +27459,8 @@ Identify what structural changes you made, and undo them while keeping only the 
                 hud.mark("Consistency checks")
             logger.debug(f"  {Icon.GEAR.value} Running consistency checks...")
             
-            MAX_FIX_ATTEMPTS = 2
-            
-            # G-1: HTML-CSS クラス整合性
-            missing_css_classes = self._validate_html_css_class_consistency(generated_code)
-            if missing_css_classes:
-                logger.debug(f"[G-1] Detected {len(missing_css_classes)} missing CSS classes")
-                generated_code = self._auto_complete_missing_css_classes(missing_css_classes, generated_code)
-            
-            # G-2: HTML-JS ID整合性
-            missing_html_ids = self._validate_html_js_id_consistency(generated_code)
-            if missing_html_ids:
-                logger.debug(f"[G-2] Detected {len(missing_html_ids)} missing HTML IDs")
-                generated_code = self._auto_complete_missing_html_ids(missing_html_ids, generated_code)
-            
-            # G-3: Python環境-パッケージ互換性
-            compatibility_issues = self._validate_python_package_compatibility(generated_code)
-            if compatibility_issues:
-                logger.debug(f"[G-3] Detected {len(compatibility_issues)} compatibility issues")
-                generated_code = self._auto_fix_package_compatibility(compatibility_issues, generated_code)
-            
-            # G-4: Pythonシンボルレベルimport整合性
-            symbol_issues = self._validate_python_symbol_imports(generated_code)
-            if symbol_issues:
-                logger.debug(f"[G-4] Detected {len(symbol_issues)} symbol import issues")
-                generated_code = self._auto_fix_symbol_imports(symbol_issues, generated_code)
-            
-            # G-5: Import vs Requirements.txt 整合性チェック
-            requirements_issues = self._validate_import_requirements_consistency(generated_code)
-            if requirements_issues:
-                logger.debug(f"[G-5] Detected {len(requirements_issues)} missing packages in requirements.txt")
-                generated_code = self._auto_fix_requirements_txt(requirements_issues, generated_code)
-            
-            # G-6: ライブラリ要求パターンチェック
-            library_issues = self._validate_library_requirements(generated_code)
-            if library_issues:
-                logger.debug(f"[G-6] Detected {len(library_issues)} library requirement issues")
-                generated_code = self._auto_fix_library_requirements(library_issues, generated_code)
-            
-            # G-7: フロントエンド依存整合性チェック
-            frontend_issues = self._validate_frontend_dependencies(generated_code)
-            if frontend_issues:
-                logger.debug(f"[G-7] Detected {len(frontend_issues)} frontend dependency issues")
-                generated_code = self._auto_fix_frontend_dependencies(frontend_issues, generated_code)
-            
-            # G-8: Model↔Schema整合性チェック
-            schema_issues = self._validate_model_schema_consistency(generated_code)
-            if schema_issues:
-                logger.debug(f"[G-8] Detected {len(schema_issues)} model-schema consistency issues")
-                generated_code = self._auto_fix_model_schema_consistency(schema_issues, generated_code)
-            
-            # G-9: ドキュメント環境依存チェック
-            doc_issues = self._validate_document_environment_commands(generated_code)
-            if doc_issues:
-                logger.debug(f"[G-9] Detected {len(doc_issues)} environment-dependent commands")
-                generated_code = self._auto_fix_document_environment_commands(doc_issues, generated_code)
-            
-            # G-10: クラス定義安全性チェック（再検証ループ付き）
-            for attempt in range(MAX_FIX_ATTEMPTS):
-                class_safety_issues = self._validate_class_definition_safety(generated_code)
-                if not class_safety_issues:
-                    break
-                logger.debug(f"[G-10] Detected {len(class_safety_issues)} issues (attempt {attempt + 1})")
-                generated_code = self._auto_fix_class_definition_safety(class_safety_issues, generated_code)
-            
-            # G-11: フレームワーク予約語チェック（再検証ループ付き）
-            for attempt in range(MAX_FIX_ATTEMPTS):
-                framework_reserved_issues = self._validate_framework_reserved_words(generated_code)
-                if not framework_reserved_issues:
-                    break
-                logger.debug(f"[G-11] Detected {len(framework_reserved_issues)} issues (attempt {attempt + 1})")
-                generated_code = self._auto_fix_framework_reserved_words(framework_reserved_issues, generated_code)
-            
-            # G-12: Python組み込み名シャドウイングチェック（再検証ループ付き）
-            for attempt in range(MAX_FIX_ATTEMPTS):
-                builtin_issues = self._validate_python_builtin_shadowing(generated_code)
-                if not builtin_issues:
-                    break
-                logger.debug(f"[G-12] Detected {len(builtin_issues)} issues (attempt {attempt + 1})")
-                generated_code = self._auto_fix_python_builtin_shadowing(builtin_issues, generated_code)
-            
-            # G-13: Flask Blueprintルート重複チェック（再検証ループ付き）
-            for attempt in range(MAX_FIX_ATTEMPTS):
-                route_duplicate_issues = self._validate_flask_route_duplicates(generated_code)
-                if not route_duplicate_issues:
-                    break
-                logger.debug(f"[G-13] Detected {len(route_duplicate_issues)} issues (attempt {attempt + 1})")
-                generated_code = self._auto_fix_flask_route_duplicates(route_duplicate_issues, generated_code)
-            
-            # G-14: SQLAlchemyテーブル名重複チェック（再検証ループ付き）
-            for attempt in range(MAX_FIX_ATTEMPTS):
-                table_duplicate_issues = self._validate_sqlalchemy_table_duplicates(generated_code)
-                if not table_duplicate_issues:
-                    break
-                logger.debug(f"[G-14] Detected {len(table_duplicate_issues)} issues (attempt {attempt + 1})")
-                generated_code = self._auto_fix_sqlalchemy_table_duplicates(table_duplicate_issues, generated_code)
-            
-            # G-15: JavaScript予約語チェック（再検証ループ付き）
-            for attempt in range(MAX_FIX_ATTEMPTS):
-                js_reserved_issues = self._validate_javascript_reserved_words(generated_code)
-                if not js_reserved_issues:
-                    break
-                logger.debug(f"[G-15] Detected {len(js_reserved_issues)} issues (attempt {attempt + 1})")
-                generated_code = self._auto_fix_javascript_reserved_words(js_reserved_issues, generated_code)
-            
-            # G-16: SQLAlchemy relationship参照先検証（再検証ループ付き）
-            for attempt in range(MAX_FIX_ATTEMPTS):
-                relationship_issues = self._validate_relationship_references(generated_code)
-                if not relationship_issues:
-                    break
-                logger.debug(f"[G-16] Detected {len(relationship_issues)} issues (attempt {attempt + 1})")
-                generated_code = self._auto_fix_relationship_references(relationship_issues, generated_code)
-            
-            # G-17: ForeignKey参照先検証（再検証ループ付き）
-            for attempt in range(MAX_FIX_ATTEMPTS):
-                foreignkey_issues = self._validate_foreignkey_references(generated_code)
-                if not foreignkey_issues:
-                    break
-                logger.debug(f"[G-17] Detected {len(foreignkey_issues)} issues (attempt {attempt + 1})")
-                generated_code = self._auto_fix_foreignkey_references(foreignkey_issues, generated_code)
-            
-            # G-18: SQLAlchemy Enum定義検証（再検証ループ付き）
-            for attempt in range(MAX_FIX_ATTEMPTS):
-                enum_usage_issues = self._validate_sqlalchemy_enum_usage(generated_code)
-                if not enum_usage_issues:
-                    break
-                logger.debug(f"[G-18] Detected {len(enum_usage_issues)} issues (attempt {attempt + 1})")
-                generated_code = self._auto_fix_sqlalchemy_enum_usage(enum_usage_issues, generated_code)
-            
-            # G-19: Mapped型アノテーション整合性検証（再検証ループ付き）
-            for attempt in range(MAX_FIX_ATTEMPTS):
-                mapped_type_issues = self._validate_mapped_type_consistency(generated_code)
-                if not mapped_type_issues:
-                    break
-                logger.debug(f"[G-19] Detected {len(mapped_type_issues)} issues (attempt {attempt + 1})")
-                generated_code = self._auto_fix_mapped_type_consistency(mapped_type_issues, generated_code)
-            
-            # G-20: Flask静的パス検証（再検証ループ付き）
-            for attempt in range(MAX_FIX_ATTEMPTS):
-                flask_static_issues = self._validate_flask_static_paths(generated_code)
-                if not flask_static_issues:
-                    break
-                logger.debug(f"[G-20] Detected {len(flask_static_issues)} issues (attempt {attempt + 1})")
-                generated_code = self._auto_fix_flask_static_paths(flask_static_issues, generated_code)
-            
-            # G-21: HTML参照整合性検証（再検証ループ付き）
-            for attempt in range(MAX_FIX_ATTEMPTS):
-                html_asset_issues = self._validate_html_asset_references(generated_code)
-                if not html_asset_issues:
-                    break
-                logger.debug(f"[G-21] Detected {len(html_asset_issues)} issues (attempt {attempt + 1})")
-                generated_code = self._auto_fix_html_asset_references(html_asset_issues, generated_code)
-            
-            # G-22: JavaScriptアニメーションループパターン検証（再検証ループ付き）
-            for attempt in range(MAX_FIX_ATTEMPTS):
-                animation_issues = self._validate_js_animation_loop(generated_code)
-                if not animation_issues:
-                    break
-                logger.debug(f"[G-22] Detected {len(animation_issues)} issues (attempt {attempt + 1})")
-                generated_code = self._auto_fix_js_animation_loop(animation_issues, generated_code)
-            
-            # G-23: API契約整合性チェック（警告のみ、自動修正なし）
-            api_contract_issues = self._validate_api_contract_consistency(generated_code)
-            if api_contract_issues:
-                logger.debug(f"[G-23] Detected {len(api_contract_issues)} API contract issues (warning only)")
-            
-            # G-24: back_populates相互参照チェック
-            for attempt in range(MAX_FIX_ATTEMPTS):
-                bp_issues = self._validate_back_populates_consistency(generated_code)
-                if not bp_issues:
-                    break
-                logger.debug(f"[G-24] Detected {len(bp_issues)} back_populates issues (attempt {attempt + 1})")
-                generated_code = self._auto_fix_back_populates_consistency(bp_issues, generated_code)
-            
-            # G-25: ForeignKey型注釈欠如チェック
-            for attempt in range(MAX_FIX_ATTEMPTS):
-                fk_type_issues = self._validate_foreignkey_type_annotation(generated_code)
-                if not fk_type_issues:
-                    break
-                logger.debug(f"[G-25] Detected {len(fk_type_issues)} ForeignKey type issues (attempt {attempt + 1})")
-                generated_code = self._auto_fix_foreignkey_type_annotation(fk_type_issues, generated_code)
-            
-            # G-26: Mapped型とSQLAlchemy型の不一致チェック
-            for attempt in range(MAX_FIX_ATTEMPTS):
-                mapped_mismatch_issues = self._validate_mapped_sqlalchemy_type_mismatch(generated_code)
-                if not mapped_mismatch_issues:
-                    break
-                logger.debug(f"[G-26] Detected {len(mapped_mismatch_issues)} Mapped type mismatch issues (attempt {attempt + 1})")
-                generated_code = self._auto_fix_mapped_sqlalchemy_type_mismatch(mapped_mismatch_issues, generated_code)
-            
-            # G-27: relationship overlaps検出（警告のみ）
-            overlap_issues = self._validate_relationship_overlaps(generated_code)
-            if overlap_issues:
-                logger.debug(f"[G-27] Detected {len(overlap_issues)} relationship overlap issues (warning only)")
-            
-            # G-28: 循環インポート検出（警告のみ）
-            circular_import_issues = self._validate_circular_imports(generated_code)
-            if circular_import_issues:
-                logger.debug(f"[G-28] Detected {len(circular_import_issues)} circular import issues (warning only)")
-            
-            # G-29: Marshmallow Nested循環参照検出（警告のみ）
-            nested_circular_issues = self._validate_marshmallow_nested_circular(generated_code)
-            if nested_circular_issues:
-                logger.debug(f"[G-29] Detected {len(nested_circular_issues)} Marshmallow nested circular issues (warning only)")
-            
-            # G-30: JavaScript this参照喪失チェック
-            for attempt in range(MAX_FIX_ATTEMPTS):
-                this_issues = self._validate_js_this_context_loss(generated_code)
-                if not this_issues:
-                    break
-                logger.debug(f"[G-30] Detected {len(this_issues)} this context issues (attempt {attempt + 1})")
-                generated_code = self._auto_fix_js_this_context_loss(this_issues, generated_code)
-            
-            # G-31: Marshmallow API誤用検出（再検証ループ付き）
-            for attempt in range(MAX_FIX_ATTEMPTS):
-                marshmallow_api_issues = self._validate_marshmallow_api_usage(generated_code)
-                if not marshmallow_api_issues:
-                    break
-                logger.debug(f"[G-31] Detected {len(marshmallow_api_issues)} Marshmallow API issues (attempt {attempt + 1})")
-                generated_code = self._auto_fix_marshmallow_api_usage(marshmallow_api_issues, generated_code)
-            
+            generated_code = self._run_consistency_checks(generated_code)
+
             logger.debug(f"  {Icon.SUCCESS.value} Consistency checks completed")
             
             if hud:
@@ -27554,7 +27508,7 @@ Identify what structural changes you made, and undo them while keeping only the 
             # Step 3: Lint check & Auto-fix
             # ============================================
             if hud:
-                hud.mark("Lint check & Auto-fix")
+                hud.mark("Lint & Auto-fix")
             logger.debug(f"  {Icon.GEAR.value} Running lint check...")
             
             lint_result = None
@@ -27611,13 +27565,13 @@ Identify what structural changes you made, and undo them while keeping only the 
                 logger.debug(f"[Linter] Error: {e}")
             
             if hud:
-                hud.complete("Lint check & Auto-fix")
+                hud.complete("Lint & Auto-fix")
             
             # ============================================
             # Step 4: Quality check & fix
             # ============================================
             if hud:
-                hud.mark("Quality assessment")
+                hud.mark("Quality & Review")
             logger.debug(f"  {Icon.GEAR.value} Checking code quality...")
             
             quality_scores = self._assess_code_quality(
@@ -27664,34 +27618,29 @@ Identify what structural changes you made, and undo them while keeping only the 
             else:
                 logger.debug(f"  {Icon.SUCCESS.value} Quality check passed")
             
-            if hud:
-                hud.complete("Quality assessment")
-            
             # ============================================
-            # Step 5: 総合レビュー
+            # Step 4 (continued): 総合レビュー
             # ============================================
-            if hud:
-                hud.mark("Comprehensive Review")
             logger.debug(f"  {Icon.GEAR.value} Running comprehensive review...")
             logger.debug(f"      This may take 2-5 minutes for complex projects.")
-            
+
             generated_code = self._final_comprehensive_review(generated_code, goal)
-            
+
             # 🆕 Comprehensive Review後のHTML参照修正（スタブ再生成後に必要）
             if getattr(self, '_no_framework_mode', False):
                 logger.debug("[Post-Review] Checking HTML script references after comprehensive review...")
                 generated_code = self._fix_html_script_reference_for_vanilla_js(generated_code)
-            
+
             logger.debug(f"  {Icon.SUCCESS.value} Comprehensive review completed")
-            
+
             if hud:
-                hud.complete("Comprehensive Review")
+                hud.complete("Quality & Review")
             
             # ============================================
             # 🆕 Test Execution & Auto-fix（指摘B修正）
             # ============================================
             if hud:
-                hud.mark("Test execution & Auto-fix")
+                hud.mark("Test & Auto-fix")
             
             if self._should_run_tests(generated_code):
                 logger.debug("[Retry] Running test verification...")
@@ -27757,7 +27706,7 @@ Identify what structural changes you made, and undo them while keeping only the 
                             logger.debug("[API Contract] All contract violations resolved!")
             
             if hud:
-                hud.complete("Test execution & Auto-fix")
+                hud.complete("Test & Auto-fix")
             
             # ============================================
             # 最終Quality再評価
@@ -28194,6 +28143,28 @@ Identify what structural changes you made, and undo them while keeping only the 
             dest.parent.mkdir(parents=True, exist_ok=True)
             dest.write_text(code, encoding='utf-8')
 
+        # Step 3: Python依存のインストール（テスト実行前提条件）
+        requirements_path = temp_dir / 'requirements.txt'
+        if requirements_path.exists():
+            try:
+                import subprocess as _sp
+                import sys as _sys
+                pip_target = temp_dir / '.pip_libs'
+                pip_result = _sp.run(
+                    [_sys.executable, '-m', 'pip', 'install',
+                     '-r', str(requirements_path),
+                     '--target', str(pip_target),
+                     '--quiet', '--no-warn-script-location'],
+                    capture_output=True, text=True, timeout=120,
+                    cwd=str(temp_dir)
+                )
+                if pip_result.returncode == 0:
+                    logger.debug("[Test Env] pip install --target: success")
+                else:
+                    logger.debug(f"[Test Env] pip install failed: {pip_result.stderr[:200]}")
+            except (Exception,) as e:
+                logger.debug(f"[Test Env] pip install skipped: {e}")
+
         return temp_dir
 
     def _execute_tests(
@@ -28206,15 +28177,22 @@ Identify what structural changes you made, and undo them while keeping only the 
         start_time = time.time()
         
         try:
+            # pip install --target でインストールされたライブラリをPYTHONPATHに追加
+            env = os.environ.copy()
+            pip_libs = temp_dir / '.pip_libs'
+            if pip_libs.exists():
+                env['PYTHONPATH'] = str(pip_libs) + os.pathsep + env.get('PYTHONPATH', '')
+
             result = subprocess.run(
                 test_detection.run_command,
                 capture_output=True,
                 encoding='utf-8',
                 errors='replace',
                 timeout=120,
-                cwd=str(temp_dir)
+                cwd=str(temp_dir),
+                env=env
             )
-            
+
             elapsed = time.time() - start_time
             if test_detection.framework == "unittest":
                 return self._parse_unittest_output(
@@ -29178,6 +29156,20 @@ Fix the error now."""
                 if any(d.get('test_name') == 'TIMEOUT' for d in test_result.failure_details):
                     logger.debug("[Test Exec] Timeout detected, retry would produce same result. Stopping.")
                     break
+
+                # ModuleNotFoundError はコードの問題ではなく依存パッケージの問題
+                # LLM修正では解決できないため早期リターン
+                if (test_result.errors > 0 and test_result.passed == 0 and
+                    any('ModuleNotFoundError' in d.get('message', '')
+                        for d in test_result.failure_details)):
+                    logger.debug("[Test Exec] ModuleNotFoundError: dependency issue, not a code error. Stopping.")
+                    return current_files, {
+                        "skipped": False, "reason": "dependencies_not_installed",
+                        "total": test_result.total_tests,
+                        "passed": 0, "failed_initial": test_result.errors,
+                        "failed_final": test_result.errors,
+                        "fixed": False, "attempts": attempt
+                    }
 
                 if test_result.success:
                     logger.debug(f"[Test Exec] All {test_result.total_tests} tests passed!")

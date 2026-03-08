@@ -1272,10 +1272,21 @@ class RequirementValidator:
             >>> validator._is_standard_library('json')
             True
         """
-        # Python標準ライブラリの代表的なモジュール
-        # 完全なリストはsys.builtin_module_namesとstdlib-listを参照
-        standard_modules = {
-            # Built-in modules
+        # トップレベルモジュール名を取得
+        # 例: 'os.path' → 'os'
+        top_level = module_name.split('.')[0]
+
+        # Python 3.10+: sys.stdlib_module_names で正確に判定
+        if hasattr(sys, 'stdlib_module_names'):
+            if top_level in sys.stdlib_module_names:
+                return True
+
+        # sys.builtin_module_namesでも確認
+        if top_level in sys.builtin_module_names:
+            return True
+
+        # フォールバック: ハードコードリスト（Python 3.9以下向け）
+        _fallback_stdlib = {
             'os', 'sys', 're', 'json', 'math', 'datetime', 'time',
             'collections', 'itertools', 'functools', 'operator',
             'pathlib', 'io', 'pickle', 'shelve', 'sqlite3',
@@ -1292,25 +1303,16 @@ class RequirementValidator:
             'types', 'inspect', 'ast', 'dis',
             'importlib', 'pkgutil', 'modulefinder',
             'warnings', 'contextlib', 'atexit',
-            'gc', 'trace', 'traceback', 'sys',
-            
-            # Common third-party libraries (not standard, but check anyway)
-            # これらは標準ライブラリではないが、よく使われるのでチェック対象外
+            'gc', 'trace', 'traceback',
+            'tempfile', 'shutil', 'glob', 'fnmatch',
+            'hashlib', 'hmac', 'uuid', 'base64',
+            'struct', 'codecs', 'unicodedata', 'csv',
+            'zipfile', 'gzip', 'tarfile', 'bz2', 'lzma', 'zlib',
+            'socket', 'ssl', 'select', 'selectors',
+            'signal', 'platform', 'sysconfig',
+            'contextvars', 'runpy', 'builtins',
         }
-        
-        # トップレベルモジュール名を取得
-        # 例: 'os.path' → 'os'
-        top_level = module_name.split('.')[0]
-        
-        # 標準ライブラリかチェック
-        if top_level in standard_modules:
-            return True
-        
-        # sys.builtin_module_namesでも確認
-        if top_level in sys.builtin_module_names:
-            return True
-        
-        return False
+        return top_level in _fallback_stdlib
 
 
     def _is_pip_package(
@@ -1364,7 +1366,11 @@ class RequirementValidator:
             #   pandas>=1.0.0 → pandas
             #   requests<=2.31.0 → requests
             pkg = line.split('==')[0].split('>=')[0].split('<=')[0].split('~=')[0].strip()
-            
+
+            # extras bracket を除去: uvicorn[standard] → uvicorn
+            if '[' in pkg:
+                pkg = pkg.split('[')[0]
+
             # 小文字化して追加
             pip_packages.add(pkg.lower())
             
