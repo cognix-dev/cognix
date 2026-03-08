@@ -47,14 +47,14 @@ class RequirementValidator:
     
     # 機能キーワード
     FEATURE_KEYWORDS = {
-        'encryption': ['encrypt', 'cipher', 'crypto', 'hash'],
-        'storage': ['storage', 'database', 'persist', 'save data', 'store data'],
+        'encryption': ['encrypt', 'cipher', 'crypto', 'password hash', 'hashing algorithm'],
+        'storage': ['database', 'persist', 'data storage', 'save data', 'store data'],
         'authentication': ['auth', 'login', 'password', 'credential', 'sign in', 'user management'],
         'generator': ['code generator', 'file generator', 'auto generate', 'template generator'],
-        'cli': ['cli', 'command line', 'terminal', 'argparse', 'command interface'],
-        'api': ['api', 'endpoint', 'rest api', 'http server', 'web service'],
-        'gui': ['gui', 'graphical interface', 'window', 'dialog', 'tkinter', 'qt'],
-        'test': ['test', 'spec', 'unit test', 'pytest', 'jest'],
+        'cli': ['cli tool', 'cli app', 'command line', 'argparse', 'command interface'],
+        'api': ['rest api', 'api endpoint', 'api server', 'http server', 'web service', 'api route'],
+        'gui': ['gui app', 'desktop gui', 'graphical interface', 'tkinter', 'qt', 'pyqt', 'wxpython'],
+        'test': ['unit test', 'test suite', 'test coverage', 'pytest', 'jest'],
     }
     
     # ドメイン固有の必須ファイルパターン
@@ -179,8 +179,9 @@ class RequirementValidator:
             len(implemented_features)
         )
         
-        # 総合スコア
-        fulfillment_score = (file_score + feature_score) / 2.0
+        # 総合スコア（ファイル充足度を重視、フィーチャー検出は補助的）
+        # 案C安全弁: 単一フィーチャー誤検出でスコアが崩壊しないよう重み付け
+        fulfillment_score = file_score * 0.7 + feature_score * 0.3
         
         # 完全性判定
         is_complete = (len(missing_files) == 0 and len(missing_features) == 0)

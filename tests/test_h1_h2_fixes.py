@@ -406,3 +406,342 @@ class TestH2bIsPipPackageExtras:
         assert validator._is_pip_package('flask', files) is True
         assert validator._is_pip_package('Flask', files) is True
         assert validator._is_pip_package('FLASK', files) is True
+
+
+# ══════════════════════════════════════════════════════════════
+# H-3a: FEATURE_KEYWORDS 複合キーワード化（誤検出防止）
+# ══════════════════════════════════════════════════════════════
+
+class TestH3aFeatureKeywordsFalsePositives:
+    """H-3a: Verify FEATURE_KEYWORDS compound keywords prevent false detection.
+
+    Root cause: Single-word keywords like 'api', 'test', 'window', 'hash',
+    'terminal', 'storage', 'spec' matched spec text in unintended contexts
+    (e.g., "Web Audio API" triggered 'api' feature requirement).
+    """
+
+    # --- 'api' feature: browser API mentions must NOT trigger ---
+
+    def test_web_audio_api_does_not_trigger(self, validator):
+        """Spec mentioning 'Web Audio API' should NOT require REST API feature."""
+        result = validator.validate_requirements(
+            "Build a Tetris game with Web Audio API for sound effects",
+            {'game.html': '<html><script>new AudioContext()</script></html>'}
+        )
+        missing = result.get('missing_features', [])
+        assert 'api' not in [f.lower() for f in missing]
+
+    def test_canvas_api_does_not_trigger(self, validator):
+        """Spec mentioning 'Canvas API' should NOT require REST API feature."""
+        result = validator.validate_requirements(
+            "Use Canvas API to render graphics on the screen",
+            {'game.html': '<canvas></canvas>'}
+        )
+        missing = result.get('missing_features', [])
+        assert 'api' not in [f.lower() for f in missing]
+
+    def test_fetch_api_does_not_trigger(self, validator):
+        """Spec mentioning 'Fetch API' should NOT require REST API feature."""
+        result = validator.validate_requirements(
+            "Use Fetch API for data retrieval",
+            {'app.js': 'fetch("/data").then(r => r.json())'}
+        )
+        missing = result.get('missing_features', [])
+        assert 'api' not in [f.lower() for f in missing]
+
+    def test_rest_api_does_trigger(self, validator):
+        """Spec explicitly requesting 'REST API' SHOULD require API feature."""
+        features = validator._extract_required_features(
+            "Build a REST API for user management"
+        )
+        assert 'api' in features
+
+    def test_api_endpoint_does_trigger(self, validator):
+        """Spec requesting 'API endpoint' SHOULD require API feature."""
+        features = validator._extract_required_features(
+            "Create an API endpoint for CRUD operations"
+        )
+        assert 'api' in features
+
+    def test_api_server_does_trigger(self, validator):
+        """Spec requesting 'API server' SHOULD require API feature."""
+        features = validator._extract_required_features(
+            "Build an API server with Express"
+        )
+        assert 'api' in features
+
+    def test_http_server_does_trigger(self, validator):
+        """Spec requesting 'HTTP server' SHOULD require API feature."""
+        features = validator._extract_required_features(
+            "Create an HTTP server for the backend"
+        )
+        assert 'api' in features
+
+    # --- 'test' feature: casual mentions must NOT trigger ---
+
+    def test_bare_test_does_not_trigger(self, validator):
+        """'test the application' should NOT require test framework feature."""
+        features = validator._extract_required_features(
+            "Build a calculator and test the application manually"
+        )
+        assert 'test' not in features
+
+    def test_stress_test_does_not_trigger(self, validator):
+        """'stress test' should NOT require test framework feature."""
+        features = validator._extract_required_features(
+            "Run a stress test on the server"
+        )
+        assert 'test' not in features
+
+    def test_unit_test_does_trigger(self, validator):
+        """'unit test' SHOULD require test feature."""
+        features = validator._extract_required_features(
+            "Write unit test for the service layer"
+        )
+        assert 'test' in features
+
+    def test_pytest_does_trigger(self, validator):
+        """'pytest' SHOULD require test feature."""
+        features = validator._extract_required_features(
+            "Use pytest for testing"
+        )
+        assert 'test' in features
+
+    # --- 'test' feature: 'spec' must NOT trigger ---
+
+    def test_spec_does_not_trigger(self, validator):
+        """'specification' or 'spec' alone should NOT require test feature."""
+        features = validator._extract_required_features(
+            "Build per the spec document provided"
+        )
+        assert 'test' not in features
+
+    def test_sample_spec_does_not_trigger(self, validator):
+        """'sample_spec_tetris.md' in goal should NOT require test feature."""
+        features = validator._extract_required_features(
+            "Generate code from sample_spec_tetris.md specification"
+        )
+        assert 'test' not in features
+
+    # --- 'gui' feature: browser 'window' must NOT trigger ---
+
+    def test_browser_window_does_not_trigger(self, validator):
+        """'window.addEventListener' should NOT require GUI framework feature."""
+        features = validator._extract_required_features(
+            "Add window resize event handling"
+        )
+        assert 'gui' not in features
+
+    def test_game_window_does_not_trigger(self, validator):
+        """'game window' should NOT require GUI framework feature."""
+        features = validator._extract_required_features(
+            "Create a game window with canvas"
+        )
+        assert 'gui' not in features
+
+    def test_dialog_does_not_trigger(self, validator):
+        """'confirmation dialog' should NOT require GUI framework feature."""
+        features = validator._extract_required_features(
+            "Show a confirmation dialog before deleting"
+        )
+        assert 'gui' not in features
+
+    def test_tkinter_does_trigger(self, validator):
+        """'tkinter' SHOULD require GUI feature."""
+        features = validator._extract_required_features(
+            "Build a desktop app with tkinter"
+        )
+        assert 'gui' in features
+
+    def test_gui_app_does_trigger(self, validator):
+        """'GUI app' SHOULD require GUI feature."""
+        features = validator._extract_required_features(
+            "Create a GUI app for file management"
+        )
+        assert 'gui' in features
+
+    # --- 'encryption' feature: 'hash' alone must NOT trigger ---
+
+    def test_hash_table_does_not_trigger(self, validator):
+        """'hash table' should NOT require encryption feature."""
+        features = validator._extract_required_features(
+            "Implement a hash table for fast lookup"
+        )
+        assert 'encryption' not in features
+
+    def test_url_hash_does_not_trigger(self, validator):
+        """'URL hash' should NOT require encryption feature."""
+        features = validator._extract_required_features(
+            "Use location hash for client-side routing"
+        )
+        assert 'encryption' not in features
+
+    def test_encrypt_does_trigger(self, validator):
+        """'encrypt' SHOULD require encryption feature."""
+        features = validator._extract_required_features(
+            "Encrypt user data before storing"
+        )
+        assert 'encryption' in features
+
+    def test_password_hash_does_trigger(self, validator):
+        """'password hash' SHOULD require encryption feature."""
+        features = validator._extract_required_features(
+            "Use password hash with bcrypt"
+        )
+        assert 'encryption' in features
+
+    # --- 'cli' feature: 'terminal' alone must NOT trigger ---
+
+    def test_terminal_state_does_not_trigger(self, validator):
+        """'terminal state' should NOT require CLI feature."""
+        features = validator._extract_required_features(
+            "Check the terminal state of the finite automaton"
+        )
+        assert 'cli' not in features
+
+    def test_bare_cli_does_not_trigger(self, validator):
+        """Bare 'cli' without 'tool'/'app' should NOT trigger CLI feature."""
+        features = validator._extract_required_features(
+            "The CLI for this service is minimal"
+        )
+        assert 'cli' not in features
+
+    def test_cli_tool_does_trigger(self, validator):
+        """'CLI tool' SHOULD require CLI feature."""
+        features = validator._extract_required_features(
+            "Build a CLI tool for data processing"
+        )
+        assert 'cli' in features
+
+    def test_command_line_does_trigger(self, validator):
+        """'command line' SHOULD require CLI feature."""
+        features = validator._extract_required_features(
+            "Create a command line utility"
+        )
+        assert 'cli' in features
+
+    def test_argparse_does_trigger(self, validator):
+        """'argparse' SHOULD require CLI feature."""
+        features = validator._extract_required_features(
+            "Use argparse for argument parsing"
+        )
+        assert 'cli' in features
+
+    # --- 'storage' feature: 'localStorage' must NOT trigger ---
+
+    def test_localstorage_does_not_trigger(self, validator):
+        """'localStorage' should NOT require storage/database feature."""
+        features = validator._extract_required_features(
+            "Use localStorage for saving user preferences"
+        )
+        assert 'storage' not in features
+
+    def test_web_storage_does_not_trigger(self, validator):
+        """'Web Storage API' should NOT require storage/database feature."""
+        features = validator._extract_required_features(
+            "Use Web Storage API for session data"
+        )
+        assert 'storage' not in features
+
+    def test_database_does_trigger(self, validator):
+        """'database' SHOULD require storage feature."""
+        features = validator._extract_required_features(
+            "Connect to a database for user data"
+        )
+        assert 'storage' in features
+
+    def test_data_storage_does_trigger(self, validator):
+        """'data storage' SHOULD require storage feature."""
+        features = validator._extract_required_features(
+            "Implement data storage for the application"
+        )
+        assert 'storage' in features
+
+
+# ══════════════════════════════════════════════════════════════
+# H-3b: fulfillment_score 計算式の安全弁
+# ══════════════════════════════════════════════════════════════
+
+class TestH3bFulfillmentScoreSafetyValve:
+    """H-3b: Verify fulfillment_score uses weighted formula (0.7 file + 0.3 feature).
+
+    Root cause: Previous formula (file + feature) / 2.0 allowed a single
+    false-positive feature miss to halve the score (1.0 + 0.0) / 2 = 0.50.
+    New formula: file * 0.7 + feature * 0.3 → (1.0 * 0.7) + (0.0 * 0.3) = 0.70.
+    """
+
+    def test_perfect_scores_unchanged(self, validator):
+        """Both file and feature perfect → fulfillment should be 1.0."""
+        # Use simple goal that doesn't trigger API_PROJECT_PATTERNS
+        # Code must contain the exact keyword ('database') for _check_implemented_features
+        result = validator.validate_requirements(
+            "Build a calculator with database connection",
+            {'calculator.py': '# database module\nimport sqlite3\ndef add(a,b): return a+b'}
+        )
+        score = result['fulfillment_score']
+        # 'database' keyword found in both goal and code → feature matched
+        assert score >= 0.90
+
+    def test_single_feature_miss_does_not_halve(self, validator):
+        """Missing 1 feature should NOT drop score below 0.70.
+        Old formula: (1.0 + 0.0) / 2.0 = 0.50 (halved)
+        New formula: 1.0 * 0.7 + 0.0 * 0.3 = 0.70 (floor)
+        """
+        # Goal requires 'encryption' but code has no encryption
+        result = validator.validate_requirements(
+            "Build a notes app that can encrypt data",
+            {'notes.py': 'class Note:\n    def __init__(self): self.text = ""'}
+        )
+        score = result['fulfillment_score']
+        # encryption missing, but file_score = 1.0 → should be >= 0.70
+        assert score >= 0.70
+
+    def test_all_features_missing_still_has_file_weight(self, validator):
+        """Even if ALL features are missing, file_score (0.7 weight) keeps floor."""
+        result = validator.validate_requirements(
+            "Build a tool that can encrypt and persist data",
+            {'tool.py': 'print("hello")'}
+        )
+        score = result['fulfillment_score']
+        # Both features missing but file present → 1.0*0.7 + 0.0*0.3 = 0.70
+        assert score >= 0.70
+
+    def test_no_required_features_gives_full_score(self, validator):
+        """Goal with no detectable feature keywords → fulfillment = 1.0."""
+        result = validator.validate_requirements(
+            "Build a simple calculator app",
+            {'calculator.py': 'def add(a, b): return a + b'}
+        )
+        score = result['fulfillment_score']
+        assert score == 1.0
+
+    def test_file_score_weighted_higher_than_feature(self, validator):
+        """file_score should have 0.7 weight, feature_score 0.3 weight.
+        Verifies the actual weighting ratio."""
+        # Test via _calculate_file_score and _calculate_feature_score
+        file_score = validator._calculate_file_score(
+            required_count=1, generated_count=1, missing_count=0
+        )
+        feature_score = validator._calculate_feature_score(
+            required_count=1, implemented_count=0
+        )
+        expected = file_score * 0.7 + feature_score * 0.3
+        # file_score=1.0, feature_score=0.0 → 0.70
+        assert abs(expected - 0.70) < 0.01
+
+    def test_neon_tetris_scenario(self, validator):
+        """Reproduce the actual neon_tetris.html bug scenario.
+        Goal mentions 'Web Audio API' → previously triggered 'api' feature.
+        With compound keywords, 'api' alone should NOT trigger.
+        Even if it did, score should remain >= 0.70 (not 0.48).
+        """
+        result = validator.validate_requirements(
+            "Build NEON TETRIS with Web Audio API for sound effects and Canvas for rendering",
+            {'neon_tetris.html': '<html><canvas></canvas><script>new AudioContext()</script></html>'}
+        )
+        score = result['fulfillment_score']
+        # No features should be required → score should be 1.0
+        assert score >= 0.90
+        # Verify 'api' was NOT extracted as required
+        missing = result.get('missing_features', [])
+        assert 'api' not in [f.lower() for f in missing]
