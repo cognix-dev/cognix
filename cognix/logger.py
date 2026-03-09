@@ -155,17 +155,17 @@ class Logger:
 
     def error(self, message: str, **kwargs: Any):
         err_console.print(f"❌ {message}", style="bold red", **kwargs)
-        _std_logger.error(message)
+        _std_logger.debug(message)
 
     def success(self, message: str, **kwargs: Any):
         if self._level >= LogLevel.NORMAL:
             err_console.print(f"✅ {message}", style="bold green", **kwargs)
-        _std_logger.info(f"SUCCESS: {message}")
+        _std_logger.debug(f"SUCCESS: {message}")
 
     def warning(self, message: str, **kwargs: Any):
         if self._level >= LogLevel.NORMAL:
             err_console.print(f"⚠️  {message}", style="bold yellow", **kwargs)
-        _std_logger.warning(message)
+        _std_logger.debug(message)
 
 logger = Logger()
 
