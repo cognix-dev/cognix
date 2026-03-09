@@ -23912,7 +23912,7 @@ Focus ONLY on issues that cause runtime errors, data corruption, or security vul
 **Project Files:**
 {files_content}
 
-**Check for these 10 BLOCKING issue types ONLY:**
+**Check for these 11 BLOCKING issue types ONLY:**
 
 9. Missing await on async calls, unhandled Promises
    → Causes: Runtime errors, race conditions
@@ -23944,6 +23944,9 @@ Focus ONLY on issues that cause runtime errors, data corruption, or security vul
 21. Type/return value mismatch (declared -> User but returns None)
     → Causes: TypeError at runtime
 
+26. State overwrite after function side-effect (function A calls B which sets shared state, then A overwrites it — causes state loss and app freeze)
+    → Causes: Game freeze, lost state, broken lifecycle
+
 **DO NOT report:**
 - TODO/FIXME comments (not blocking)
 - Dead code or unused variables (not blocking)
@@ -23955,7 +23958,7 @@ Focus ONLY on issues that cause runtime errors, data corruption, or security vul
 Return a JSON array. Each issue must have:
 - "file": filepath
 - "line": line number (or null)
-- "type": issue type number (9, 10, 11, 13, 14, 17, 18, 19, 20, or 21 ONLY)
+- "type": issue type number (9, 10, 11, 13, 14, 17, 18, 19, 20, 21, or 26 ONLY)
 - "description": specific problem
 - "fix": suggested fix
 
@@ -24066,7 +24069,7 @@ Return ONLY the JSON array, no other text."""
 **Project Files:**
 {files_content}
 
-**Check for these 25 issue types:**
+**Check for these 27 issue types:**
 1. TODO/FIXME/unimplemented features remaining
 2. Incomplete error handling (empty catch, console.log only)
 3. Dead code (functions never called)
@@ -24092,12 +24095,14 @@ Return ONLY the JSON array, no other text."""
 23. Debug code remaining (print(), console.log(), debugger, breakpoint(), pdb.set_trace())
 24. External dependency issues (requests without timeout, no error handling for network calls, no retry/fallback)
 25. Stub/placeholder files (files with >80% comments and no real code, files containing "not used", "stub", "placeholder", or referencing other files as the "real" implementation)
+26. State overwrite after function side-effect (function A calls B which sets shared state, then A overwrites that state — e.g., lockPiece() calls spawnPiece() setting currentPiece, then caller sets currentPiece = null. Only flag when the called function SETS a new value to shared state that the caller immediately overwrites. Simple cleanup like removeItem(x); x = null is NOT an issue)
+27. Async timing state conflict (setTimeout/requestAnimationFrame callback sets state, but synchronous code after scheduling also sets the same state, causing one to overwrite the other)
 
 **Output Format:**
 Return a JSON array of issues found. Each issue should have:
 - "file": filepath
 - "line": line number (if identifiable, otherwise null)
-- "type": issue type number (1-25)
+- "type": issue type number (1-27)
 - "description": specific description of the problem
 - "fix": suggested fix
 
@@ -24130,6 +24135,12 @@ If no issues found, return an empty array: []
 - setInterval/setTimeout for game timing → intentional, NOT resource leak
 - Canvas rendering loops → required for games
 - Particle system update loops → required for effects
+
+**State Lifecycle Management (Games, SPA, Real-time Apps — MUST CHECK type 26, 27):**
+- If a function sets shared state (currentPiece, currentPlayer, activeEnemy, currentItem, loading, etc.) as a side-effect, verify the caller does NOT overwrite that state after the call returns. Only flag when the called function SETS a new value that the caller immediately nullifies or overwrites — simple cleanup (removeItem(x); x = null) is NOT a problem
+- If setTimeout/setInterval is used to delay state changes, verify that synchronous code after the scheduling call does not conflict with the delayed state change
+- Common bug pattern: lockPiece()/destroy()/kill() internally calls spawn()/create()/next() — the caller should NOT null out the reference after the call
+- This also applies to SPA frameworks: e.g., fetchData() sets loading=false internally, but the caller also sets loading=false after the call
 
 **React/Vue/Angular Patterns (NOT unused code - type 3, 4 exclusion):**
 - useState variables only appearing in JSX → they ARE used (rendered)
