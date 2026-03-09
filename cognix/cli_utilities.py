@@ -582,11 +582,11 @@ Made by Individual Developer | MIT License"""
         relative_time = format_relative_time(autosave_info['last_updated'])
         absolute_time = autosave_info['last_updated'].split('T')[0] + ' ' + autosave_info['last_updated'].split('T')[1].split('.')[0]
 
-        # 白色で表示（Richマークアップ使用・ラベル18文字幅（先頭4スペース含めて22文字）統一）
-        err_console.print(f"[white]    {'Last Updated':<18}{absolute_time}[/white]")
-        err_console.print(f"[white]    {'Entries':<18}{autosave_info['entries']} conversations[/white]")
-        err_console.print(f"[white]    {'Model':<18}{autosave_info['model']}[/white]")
-        err_console.print(f"[white]    {'Directory':<18}{autosave_info['directory']}[/white]")
+        # デフォルト色で表示（ラベル18文字幅（先頭4スペース含めて22文字）統一）
+        err_console.print(f"    {'Last Updated':<18}{absolute_time}", highlight=False)
+        err_console.print(f"    {'Entries':<18}{autosave_info['entries']} conversations", highlight=False)
+        err_console.print(f"    {'Model':<18}{autosave_info['model']}", highlight=False)
+        err_console.print(f"    {'Directory':<18}{autosave_info['directory']}", highlight=False)
 
         # 追加の統計があれば行追加（autosave_infoから直接取得）
         # NOTE: この時点ではセッション未復元のため、get_token_statistics()ではなく
@@ -598,10 +598,10 @@ Made by Individual Developer | MIT License"""
             input_cost = tokens_input * 3.00 / 1_000_000
             output_cost = tokens_output * 15.00 / 1_000_000
             cost = input_cost + output_cost
-            err_console.print(f"[white]    {'Token Usage':<18}{total_tokens:,} (~${cost:.2f})[/white]")
+            err_console.print(f"    {'Token Usage':<18}{total_tokens:,} (~${cost:.2f})", highlight=False)
         duration = autosave_info.get('total_duration_seconds', 0.0)
         if duration > 0:
-            err_console.print(f"[white]    {'Total Duration':<18}{format_duration(duration)}[/white]")
+            err_console.print(f"    {'Total Duration':<18}{format_duration(duration)}", highlight=False)
 
         # rule()はANSIコードを返すのでprint()で直接出力
         print("\n" + rule())

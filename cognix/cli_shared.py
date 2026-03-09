@@ -185,8 +185,8 @@ class CLIModuleBase:
             else:
                 model_display = model_name
             
-            return f"[{model_display}]> "
-        return "[AI]> "
+            return f"\\[{model_display}]> "
+        return "\\[AI]> "
     
     def get_multiline_input(self, prompt: str, allow_empty: bool = False) -> str:
         """複数行入力の取得
