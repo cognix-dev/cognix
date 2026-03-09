@@ -16246,15 +16246,47 @@ Generate complete, production-ready code for {missing_file} only."""
         """
         if not missing_classes:
             return generated_files
-        
+
+        import re as _re
+
         # CSSファイルを特定
         css_files = [f for f in generated_files.keys() if f.endswith('.css')]
+
+        # フォールバック: .css がなければ HTML 内の <style> タグを対象にする
+        target_html = None
         if not css_files:
-            logger.debug("[G-1] No CSS file found, skipping auto-completion")
-            return generated_files
-        
-        css_file = css_files[0]  # 最初のCSSファイルを使用
-        existing_css = generated_files[css_file]
+            html_files = [f for f in generated_files.keys() if f.endswith(('.html', '.htm'))]
+            for hf in html_files:
+                if '</style>' in generated_files[hf]:
+                    target_html = hf
+                    break
+            if not target_html:
+                logger.debug("[G-1] No CSS file or <style> tag found, skipping auto-completion")
+                return generated_files
+            logger.debug(f"[G-1] No CSS file found, using inline <style> in {target_html}")
+
+            # <style> 内で既に定義済みのクラスをフィルタ（偽陽性除去）
+            style_match = _re.search(r'<style[^>]*>(.*?)</style>', generated_files[target_html], _re.DOTALL)
+            if style_match:
+                defined_in_style = set(_re.findall(
+                    r'\.([a-zA-Z_-][a-zA-Z0-9_-]*)(?=[^a-zA-Z0-9_-]|$)',
+                    style_match.group(1)
+                ))
+                before_count = len(missing_classes)
+                missing_classes = [c for c in missing_classes if c not in defined_in_style]
+                filtered = before_count - len(missing_classes)
+                if filtered > 0:
+                    logger.debug(f"[G-1] Filtered {filtered} class(es) already defined in <style>")
+                if not missing_classes:
+                    logger.debug("[G-1] All classes already defined in <style>, skipping")
+                    return generated_files
+
+            # <style> 内のCSSを既存CSS参照として使用
+            existing_css = style_match.group(1) if style_match else ""
+            css_file = None  # LLM呼び出し後に <style> へ注入
+        else:
+            css_file = css_files[0]  # 最初のCSSファイルを使用
+            existing_css = generated_files[css_file]
         
         # HTMLコンテキストを抽出（クラスの使用状況を把握）
         html_context = ""
@@ -16336,8 +16368,18 @@ Generate CSS:"""
 
                 # 既存CSSに追記
                 if new_css.strip():
-                    generated_files[css_file] = existing_css + "\n\n/* ========================================\n   Auto-generated: Missing CSS Classes (G-1)\n   ======================================== */\n" + new_css.strip()
-                    logger.debug(f"[G-1] ✅ Added {len(new_css)} chars of CSS to {css_file}")
+                    css_block = "\n\n/* ========================================\n   Auto-generated: Missing CSS Classes (G-1)\n   ======================================== */\n" + new_css.strip()
+                    if css_file:
+                        # 通常パス: .css ファイルに追記
+                        generated_files[css_file] = existing_css + css_block
+                        logger.debug(f"[G-1] ✅ Added {len(new_css)} chars of CSS to {css_file}")
+                    elif target_html:
+                        # フォールバック: HTML の </style> 直前に注入
+                        html_content = generated_files[target_html]
+                        generated_files[target_html] = html_content.replace(
+                            '</style>', css_block + '\n</style>', 1
+                        )
+                        logger.debug(f"[G-1] ✅ Injected {len(new_css)} chars of CSS into <style> of {target_html}")
                 else:
                     logger.debug("[G-1] ⚠ Generated CSS was empty")
             else:
@@ -16367,21 +16409,24 @@ Generate CSS:"""
         """
         import re
         
-        # 1. JSから参照されているIDを抽出
+        # 1. JSから参照されているIDを抽出（.jsファイル + HTML内 <script> タグ）
         js_ids = set()
+
+        def _extract_js_ids(js_content: str):
+            """JS コード内の getElementById / querySelector を抽出"""
+            ids = set()
+            ids.update(re.findall(r'getElementById\(["\']([^"\']+)["\']\)', js_content))
+            ids.update(re.findall(r'querySelector\(["\']#([^"\'#\s\[]+)["\']', js_content))
+            return ids
+
         for filepath, content in generated_files.items():
             if filepath.endswith(('.js', '.jsx', '.ts', '.tsx')):
-                # getElementById('xxx') を抽出
-                matches = re.findall(r'getElementById\(["\']([^"\']+)["\']\)', content)
-                js_ids.update(matches)
-                
-                # querySelector('#xxx') を抽出
-                matches = re.findall(r'querySelector\(["\']#([^"\'#\s\[]+)["\']', content)
-                js_ids.update(matches)
-                
-                # document.forms.xxx や document.xxx を抽出（一般的なパターン）
-                matches = re.findall(r'document\.(?:forms\.)?([a-zA-Z_][a-zA-Z0-9_]*)\b', content)
-                # これらはIDでない可能性が高いのでスキップ
+                js_ids.update(_extract_js_ids(content))
+            elif filepath.endswith(('.html', '.htm')):
+                # 単一HTMLファイル内の <script> タグも検索
+                script_blocks = re.findall(r'<script[^>]*>(.*?)</script>', content, re.DOTALL)
+                for block in script_blocks:
+                    js_ids.update(_extract_js_ids(block))
         
         if not js_ids:
             logger.debug("[G-2] No JS ID references found")
@@ -16627,6 +16672,30 @@ Generate the complete fixed HTML:"""
                     'min_version': '2.0.20',
                     'issue': 'SQLAlchemy < 2.0.20 has issues with Python 3.12',
                     'fix': '2.0.36'
+                },
+                'numpy': {
+                    'min_version': '1.26.0',
+                    'issue': 'NumPy < 1.26.0 not compatible with Python 3.12',
+                    'fix': '1.26.4'
+                },
+            },
+            '3.11': {
+                'numpy': {
+                    'min_version': '1.23.2',
+                    'issue': 'NumPy < 1.23.2 not compatible with Python 3.11',
+                    'fix': '1.24.0'
+                },
+                'pandas': {
+                    'min_version': '1.4.3',
+                    'issue': 'Pandas < 1.4.3 not compatible with Python 3.11',
+                    'fix': '1.5.0'
+                },
+            },
+            '3.10': {
+                'numpy': {
+                    'min_version': '1.21.2',
+                    'issue': 'NumPy < 1.21.2 not compatible with Python 3.10',
+                    'fix': '1.22.0'
                 },
             }
         }
@@ -17149,7 +17218,13 @@ Generate the complete fixed HTML:"""
                 break
         
         if not requirements_content:
-            logger.debug("[G-5] No requirements.txt found, skipping check")
+            # 代替の依存管理ファイルが存在すれば requirements.txt 不要
+            alt_dep_files = ('pyproject.toml', 'setup.py', 'setup.cfg', 'Pipfile', 'poetry.lock')
+            has_alt = any(f.lower() in (a.lower() for a in alt_dep_files) for f in generated_files)
+            if has_alt:
+                logger.debug("[G-5] No requirements.txt but alternative dependency file found, skipping")
+            else:
+                logger.debug("[G-5] No requirements.txt or alternative dependency file found, skipping check")
             return []
         
         # 既存パッケージを小文字で正規化して保存
@@ -18007,14 +18082,19 @@ Return ONLY the {file_type} code without markdown code blocks.
         # 2. 不足Flaskルートの追加
         # ========================================
         if missing_routes:
-            # views/api.py または適切なファイルを探す
+            # ルート定義を含む Python ファイルを探す（ファイル名ではなくコード内容で判定）
+            import re as _re_g7
             api_file = None
-            for filepath in generated_files.keys():
-                if 'api' in filepath.lower() and filepath.endswith('.py'):
+            for filepath, content in generated_files.items():
+                if filepath.endswith('.py') and _re_g7.search(r'@\w+\.(route|get|post|put|delete|patch)\(', content):
                     api_file = filepath
                     break
-                if 'views' in filepath.lower() and filepath.endswith('.py'):
-                    api_file = filepath
+            # フォールバック: ファイル名ベースの探索
+            if not api_file:
+                for filepath in generated_files.keys():
+                    if filepath.endswith('.py') and any(k in filepath.lower() for k in ('api', 'views', 'routes', 'app')):
+                        api_file = filepath
+                        break
             
             if api_file and api_file in generated_files:
                 current_code = generated_files[api_file]
@@ -25218,10 +25298,20 @@ Return ONLY the JSON array, no other text."""
         for issue in issues:
             filepath = issue.get('file')
             if filepath and filepath in all_files:
-                if filepath not in issues_by_file:
-                    issues_by_file[filepath] = []
-                issues_by_file[filepath].append(issue)
-        
+                issues_by_file.setdefault(filepath, []).append(issue)
+            elif filepath:
+                # ファジーマッチ: LLMがパスを誤生成した場合にbasename一致で再検索
+                import os
+                basename = os.path.basename(filepath)
+                candidates = [p for p in all_files if os.path.basename(p) == basename]
+                if len(candidates) == 1:
+                    issues_by_file.setdefault(candidates[0], []).append(issue)
+                    logger.debug(f"[Comprehensive Review] Fuzzy matched: {filepath} → {candidates[0]}")
+                elif len(candidates) > 1:
+                    logger.warning(f"[Comprehensive Review] Ambiguous match for {filepath}: {candidates}, skipping")
+                else:
+                    logger.debug(f"[Comprehensive Review] Issue file not found: {filepath}")
+
         if not issues_by_file:
             logger.debug("[Comprehensive Review] No files to fix")
             return None
@@ -25425,10 +25515,10 @@ Return ONLY the JSON array, no other text."""
                 # サニタイズ後の構文チェック
                 is_syntax_valid, syntax_error = self._validate_python_syntax(sanitized_content, filepath)
                 if not is_syntax_valid:
-                    logger.debug(f"[Diff Sanitizer] Post-sanitize syntax error in {filepath}: {syntax_error}")
-                    # サニタイズで壊れた場合、サニタイズ前のコードを使用
-                    sanitized_content = fixed_content
-                    logger.debug(f"[Diff Sanitizer] Falling back to unsanitized code for {filepath}")
+                    logger.warning(f"[Diff Sanitizer] Post-sanitize syntax error in {filepath}: {syntax_error}")
+                    # サニタイズで壊れた場合、元のコードを使用（未サニタイズLLM出力には戻さない）
+                    sanitized_content = original_content
+                    logger.warning(f"[Diff Sanitizer] Returning original code for {filepath} (fail-safe)")
                 
                 # サニタイズ後のコードを使用
                 fixed_content = sanitized_content
@@ -25584,9 +25674,10 @@ Return ONLY the JSON array, no other text."""
                     for l in range(max(1, line - margin), line + margin + 1):
                         allowed_lines.add(l)
             
-            # 行番号の指定がない場合、全行を許可
+            # 行番号の指定がない場合、安全側に倒す（全変更を拒否）
             if not allowed_lines:
-                return fixed_content, 0
+                logger.warning("[Diff Sanitizer] No line numbers in issues, rejecting all changes (fail-safe)")
+                return original_content, len(fixed_lines)
             
             # 行ごとに差分を比較
             result_lines = []
@@ -25643,9 +25734,9 @@ Return ONLY the JSON array, no other text."""
             return sanitized, removed_count
             
         except Exception as e:
-            # エラー時はサニタイズをスキップし、元のfixed_contentを返す
-            logger.debug(f"[Diff Sanitizer] Error processing {filepath}: {e} - Skipping sanitization")
-            return fixed_content, 0
+            # エラー時は安全側に倒し、元のoriginal_contentを返す
+            logger.warning(f"[Diff Sanitizer] Error processing {filepath}: {e} - Returning original (fail-safe)")
+            return original_content, 0
     
     def _validate_python_syntax(
         self,
@@ -25860,10 +25951,10 @@ complete fixed code here
                 # Step 3: サニタイズ後の構文チェック
                 is_valid, error_msg = self._validate_python_syntax(sanitized_code, filepath)
                 if not is_valid:
-                    logger.debug(f"[Syntax Check] ❌ Post-sanitize syntax error in {filepath}: {error_msg}")
-                    # サニタイズで壊れた場合、サニタイズ前のコードを返す
-                    logger.debug(f"[Diff Sanitizer] Falling back to unsanitized code for {filepath}")
-                    return fixed_code
+                    logger.warning(f"[Syntax Check] ❌ Post-sanitize syntax error in {filepath}: {error_msg}")
+                    # サニタイズで壊れた場合、元のコードを返す（未サニタイズLLM出力には戻さない）
+                    logger.warning(f"[Diff Sanitizer] Returning original code for {filepath} (fail-safe)")
+                    return content
                 
                 return sanitized_code
             
