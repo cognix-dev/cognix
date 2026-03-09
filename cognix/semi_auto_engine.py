@@ -4451,31 +4451,31 @@ Flask + React Fullstack:
                 
                 # Zen HUD: 固定行ステップ表示（設計書準拠）
                 steps = [
-                    "Assess complexity",
-                    "Analyze & Plan",
-                    "Generate code",
-                    "Auto-completion",
-                    "Lint & Auto-fix",
-                    "Quality & Review",
-                    "Test & Auto-fix",
+                    "ASSESS CODE COMPLEXITY",
+                    "ANALYZE REQUIREMENTS",
+                    "GENERATE SOURCE CODE",
+                    "FILL MISSING CODE",
+                    "FIX SYNTAX ERRORS",
+                    "REVIEW CODE QUALITY",
+                    "EXECUTE TEST CASES",
                 ]
                 hud = StepHUD(section_title="Code Generation", steps=steps)
                 logger.debug("[Flow] StepHUD initialized, calling hud.start()...")
                 hud.start()
 
                 # Step 0: Complexity assessment（既に完了）
-                hud.complete("Assess complexity")
+                hud.complete("ASSESS CODE COMPLEXITY")
 
                 # Step 1+2: Analyze goal and create plan (unified)
-                hud.mark("Analyze & Plan")
+                hud.mark("ANALYZE REQUIREMENTS")
                 analysis, plan = self._analyze_and_plan(goal, complexity)
                 if not analysis:
                     hud.finish(success=False)
                     return SemiAutoResult(success=False, error="Failed to analyze implementation goal")
-                hud.complete("Analyze & Plan")
+                hud.complete("ANALYZE REQUIREMENTS")
 
                 # Step 3: Generate code
-                hud.mark("Generate code")
+                hud.mark("GENERATE SOURCE CODE")
                 
                 # ⭐ Fix F-3a(single): single-stageでもspecの明示ファイルリストを抽出して保持
                 _explicit_files = self.post_validator._extract_explicit_filenames(goal)
@@ -4506,7 +4506,7 @@ Flask + React Fullstack:
                         error="Failed to generate code implementation"
                     )
                 
-                hud.complete("Generate code")
+                hud.complete("GENERATE SOURCE CODE")
                 # Step 4.1: Auto-completion (HUD統合版)
                 # ⭐ 改善6: _auto_complete_with_import_resolutionを常に呼ぶ
                 # 理由: requirement_validatorはgoalベースの予測のみで、
@@ -4524,7 +4524,7 @@ Flask + React Fullstack:
                         logger.debug(f"[Auto-completion] Missing {missing_count} files detected (from requirement_validator)")
                 
                 # HUD: Auto-completion開始
-                hud.mark("Auto-completion")
+                hud.mark("FILL MISSING CODE")
                 
                 # ⭐ 改善6: 常に_auto_complete_with_import_resolutionを呼ぶ
                 # これにより、_validate_import_dependencies（HTML/CSS検証含む）が実行される
@@ -4559,7 +4559,7 @@ Flask + React Fullstack:
                 generated_code = self._run_consistency_checks(generated_code)
                 
                 # HUD: Auto-completion完了（G-1〜G-31完了後）
-                hud.complete("Auto-completion")
+                hud.complete("FILL MISSING CODE")
 
                 # ==========================================
                 # Step 4.5: HTML参照修正（フレームワーク禁止モード）
@@ -4639,7 +4639,7 @@ Flask + React Fullstack:
 
                 # Step 4: Lint check & Auto-fix (新規)
                 lint_result = None  # Quality評価で使用するため初期化
-                hud.mark("Lint & Auto-fix")
+                hud.mark("FIX SYNTAX ERRORS")
                 
                 # Linter統合を試行 (外部linterがインストールされている場合のみ)
                 try:
@@ -4916,10 +4916,10 @@ Flask + React Fullstack:
                 except Exception as e:
                     logger.debug(f"[ESLint] Error during lint check: {e}")
                 
-                hud.complete("Lint & Auto-fix")
+                hud.complete("FIX SYNTAX ERRORS")
 
                 # Step 4: Quality assessment & Comprehensive Review
-                hud.mark("Quality & Review")
+                hud.mark("REVIEW CODE QUALITY")
                 quality_scores = self._assess_code_quality(
                     generated_code, 
                     complexity, 
@@ -4995,7 +4995,7 @@ Flask + React Fullstack:
                 )
 
                 # Quality assessment & Comprehensive Review 完了
-                hud.complete("Quality & Review")
+                hud.complete("REVIEW CODE QUALITY")
 
             
             # ここから共通処理（both paths）
@@ -5007,7 +5007,7 @@ Flask + React Fullstack:
             else:
                 test_execution_result = None
                 if hud:
-                    hud.mark("Test & Auto-fix")
+                    hud.mark("EXECUTE TEST CASES")
                 if self._should_run_tests(generated_code):
                     logger.normal(f"{Icon.GEAR.value} Running test verification...")
                     generated_code, test_execution_result = self._test_execution_loop(
@@ -5039,7 +5039,7 @@ Flask + React Fullstack:
                         "fixed": False, "attempts": 0
                     }
                 if hud:
-                    hud.complete("Test & Auto-fix")
+                    hud.complete("EXECUTE TEST CASES")
                     hud.finish(success=True)
 
                 # ⭐ Fix F-3e(single): Post-Processing後の最終ファイルフィルタリング（安全網）
@@ -7262,22 +7262,22 @@ Generate complete, production-ready code for {missing_file}.
 
         # StepHUD初期化（8ステップ）
         steps = [
-            "Assess complexity",
-            "Foundation: Generate",
-            "Application: Generate",
-            "Environment: Generate",
-            "Auto-completion",
-            "Lint & Auto-fix",
-            "Quality & Review",
-            "Test & Auto-fix",
+            "ASSESS CODE COMPLEXITY",
+            "GENERATE FOUNDATION CODE",
+            "GENERATE APPLICATION CODE",
+            "GENERATE ENVIRONMENT CODE",
+            "FILL MISSING CODE",
+            "FIX SYNTAX ERRORS",
+            "REVIEW CODE QUALITY",
+            "EXECUTE TEST CASES",
         ]
         hud = StepHUD(section_title="Multi-Stage Generation", steps=steps)
         hud.start()
 
         try:
             # Step 1: Assess complexity (already completed before this method)
-            hud.mark("Assess complexity")
-            hud.complete("Assess complexity")
+            hud.mark("ASSESS CODE COMPLEXITY")
+            hud.complete("ASSESS CODE COMPLEXITY")
 
             # ⭐ デバッグログ追加: tryブロック開始
             logger.debug(f"[Multi-stage] Entered try block successfully")
@@ -7363,7 +7363,7 @@ Generate complete, production-ready code for {missing_file}.
             logger.debug(f"[Phase 1 Goal] Content:\n{phase1_goal}")
 
             # Step 2: Generate code implementation
-            hud.mark("Foundation: Generate")
+            hud.mark("GENERATE FOUNDATION CODE")
 
             # ⭐ デバッグログ追加: Phase 1 LLM呼び出し前
             logger.debug(f"[Phase 1] ▶ Starting _generate_code_implementation...")
@@ -7417,7 +7417,7 @@ Generate complete, production-ready code for {missing_file}.
             
             all_files.update(phase1_files)
             logger.debug(f"[Phase 1] ✓ Generated {len(phase1_files)} files: {list(phase1_files.keys())}")
-            hud.complete("Foundation: Generate")
+            hud.complete("GENERATE FOUNDATION CODE")
             
             # ==========================================
             # Phase 2: アプリケーション層生成
@@ -7433,8 +7433,8 @@ Generate complete, production-ready code for {missing_file}.
                 if not _phase2_files:
                     _skip_phase2 = True
                     logger.debug(f"[Multi-Stage] Skipping Phase 2: no Phase 2 files in explicit list")
-                    hud.mark("Application: Generate")
-                    hud.complete("Application: Generate")
+                    hud.mark("GENERATE APPLICATION CODE")
+                    hud.complete("GENERATE APPLICATION CODE")
 
             if _skip_phase2:
                 # Phase 2スキップ: 必要な変数だけ初期化
@@ -7504,7 +7504,7 @@ Generate complete, production-ready code for {missing_file}.
                 logger.debug(f"[Phase 2 Goal] Content:\n{phase2_goal}")
 
                 # Step 3: Generate code implementation
-                hud.mark("Application: Generate")
+                hud.mark("GENERATE APPLICATION CODE")
 
                 # ⭐ デバッグログ追加: Phase 2 LLM呼び出し前
                 logger.debug(f"[Phase 2] ▶ Starting _generate_code_implementation...")
@@ -7552,7 +7552,7 @@ Generate complete, production-ready code for {missing_file}.
                 phase2_files = self._preserve_near_identical_files(phase2_files, all_files)
                 all_files.update(phase2_files)
                 logger.debug(f"[Phase 2] ✓ Generated {len(phase2_files)} files: {list(phase2_files.keys())}")
-                hud.complete("Application: Generate")
+                hud.complete("GENERATE APPLICATION CODE")
 
                 # ==========================================
                 # Phase 2 必須ファイルチェック + 自動補完
@@ -7596,8 +7596,8 @@ Generate complete, production-ready code for {missing_file}.
                 if not _phase3_files_expected:
                     _skip_phase3 = True
                     logger.debug(f"[Multi-Stage] Skipping Phase 3: no Phase 3 files in explicit list")
-                    hud.mark("Environment: Generate")
-                    hud.complete("Environment: Generate")
+                    hud.mark("GENERATE ENVIRONMENT CODE")
+                    hud.complete("GENERATE ENVIRONMENT CODE")
 
             if _skip_phase3:
                 phase3_files = {}
@@ -7716,7 +7716,7 @@ Generate complete, production-ready code for {missing_file}.
                 logger.debug(f"[Phase 3 Goal] Content:\n{phase3_goal}")
 
                 # Step 4: Generate code implementation
-                hud.mark("Environment: Generate")
+                hud.mark("GENERATE ENVIRONMENT CODE")
 
                 # ⭐ デバッグログ追加: Phase 3 LLM呼び出し前
                 logger.debug(f"[Phase 3] ▶ Starting _generate_code_implementation...")
@@ -7764,14 +7764,14 @@ Generate complete, production-ready code for {missing_file}.
                 phase3_files = self._preserve_near_identical_files(phase3_files, all_files)
                 all_files.update(phase3_files)
                 logger.debug(f"[Phase 3] ✓ Generated {len(phase3_files)} files: {list(phase3_files.keys())}")
-                hud.complete("Environment: Generate")
+                hud.complete("GENERATE ENVIRONMENT CODE")
             
             # ==========================================
             # Post-Processing Steps
             # ==========================================
             
             # Step 7: Auto-completion
-            hud.mark("Auto-completion")
+            hud.mark("FILL MISSING CODE")
             all_files = self._validate_phase_requirements(
                 phase=3,
                 goal=goal,
@@ -7789,7 +7789,7 @@ Generate complete, production-ready code for {missing_file}.
             all_files = self._run_consistency_checks(all_files)
             
             # HUD: Auto-completion完了（G-1〜G-31完了後）
-            hud.complete("Auto-completion")
+            hud.complete("FILL MISSING CODE")
             
             # ==========================================
             # Step 7.5: HTML参照修正（フレームワーク禁止モード）
@@ -7860,7 +7860,7 @@ Generate complete, production-ready code for {missing_file}.
                     logger.debug("[Runtime Import] All fix attempts failed, restored original")
 
             # Step 8: Lint & Auto-fix
-            hud.mark("Lint & Auto-fix")
+            hud.mark("FIX SYNTAX ERRORS")
             
             # 実際の処理を実行（呼び出し元から移動）
             lint_result = None
@@ -8047,10 +8047,10 @@ Generate complete, production-ready code for {missing_file}.
                 logger.debug(f"[Cross-File] Error during consistency check: {e}")
                 # エラーが発生しても処理を継続
             
-            hud.complete("Lint & Auto-fix")
+            hud.complete("FIX SYNTAX ERRORS")
             
             # Step 9: Quality assessment & Comprehensive Review
-            hud.mark("Quality & Review")
+            hud.mark("REVIEW CODE QUALITY")
             
             # 実際の処理を実行（呼び出し元から移動）
             quality_scores = self._assess_code_quality(
@@ -8128,11 +8128,11 @@ Generate complete, production-ready code for {missing_file}.
             )
             
             # Quality assessment & Comprehensive Review 完了
-            hud.complete("Quality & Review")
+            hud.complete("REVIEW CODE QUALITY")
 
             # Step 10: Test execution & Auto-fix
             # シングルモードと同等のテスト実行パイプライン
-            hud.mark("Test & Auto-fix")
+            hud.mark("EXECUTE TEST CASES")
 
             test_execution_result = None
             if self._should_run_tests(all_files):
@@ -8227,7 +8227,7 @@ Generate complete, production-ready code for {missing_file}.
                     else:
                         logger.debug("[Multi-stage API Contract] LLM fix returned no result")
 
-            hud.complete("Test & Auto-fix")
+            hud.complete("EXECUTE TEST CASES")
 
             # ⭐ Fix F-3e: Post-Processing後の最終ファイルフィルタリング（安全網）
             # post-processingステップでspec外ファイルが追加される可能性がある(B-2a, B-2f)
@@ -27516,9 +27516,9 @@ Identify what structural changes you made, and undo them while keeping only the 
             steps = [
                 "Consistency checks",
                 "Import validation",
-                "Lint & Auto-fix",
-                "Quality & Review",
-                "Test & Auto-fix",
+                "FIX SYNTAX ERRORS",
+                "REVIEW CODE QUALITY",
+                "EXECUTE TEST CASES",
             ]
             _hud = StepHUD(section_title="Retry Validation", steps=steps)
             _hud.start()
@@ -27599,7 +27599,7 @@ Identify what structural changes you made, and undo them while keeping only the 
             # Step 3: Lint check & Auto-fix
             # ============================================
             if hud:
-                hud.mark("Lint & Auto-fix")
+                hud.mark("FIX SYNTAX ERRORS")
             logger.debug(f"  {Icon.GEAR.value} Running lint check...")
             
             lint_result = None
@@ -27656,13 +27656,13 @@ Identify what structural changes you made, and undo them while keeping only the 
                 logger.debug(f"[Linter] Error: {e}")
             
             if hud:
-                hud.complete("Lint & Auto-fix")
+                hud.complete("FIX SYNTAX ERRORS")
             
             # ============================================
             # Step 4: Quality check & fix
             # ============================================
             if hud:
-                hud.mark("Quality & Review")
+                hud.mark("REVIEW CODE QUALITY")
             logger.debug(f"  {Icon.GEAR.value} Checking code quality...")
             
             quality_scores = self._assess_code_quality(
@@ -27725,13 +27725,13 @@ Identify what structural changes you made, and undo them while keeping only the 
             logger.debug(f"  {Icon.SUCCESS.value} Comprehensive review completed")
 
             if hud:
-                hud.complete("Quality & Review")
+                hud.complete("REVIEW CODE QUALITY")
             
             # ============================================
             # 🆕 Test Execution & Auto-fix（指摘B修正）
             # ============================================
             if hud:
-                hud.mark("Test & Auto-fix")
+                hud.mark("EXECUTE TEST CASES")
             
             if self._should_run_tests(generated_code):
                 logger.debug("[Retry] Running test verification...")
@@ -27797,7 +27797,7 @@ Identify what structural changes you made, and undo them while keeping only the 
                             logger.debug("[API Contract] All contract violations resolved!")
             
             if hud:
-                hud.complete("Test & Auto-fix")
+                hud.complete("EXECUTE TEST CASES")
             
             # ============================================
             # 最終Quality再評価
