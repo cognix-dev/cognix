@@ -16169,8 +16169,28 @@ Generate complete, production-ready code for {missing_file} only."""
         if marshmallow_api_issues:
             logger.warning(f"[G-31] ⚠ {len(marshmallow_api_issues)} issues remain after {MAX_G31_FIX_ATTEMPTS} fix attempts")
 
-        if not missing_css_classes and not missing_html_ids and not compatibility_issues and not symbol_issues and not requirements_issues and not library_issues and not frontend_issues and not schema_issues and not doc_issues and not class_safety_issues and not framework_reserved_issues and not builtin_shadowing_issues and not route_duplicate_issues and not table_duplicate_issues and not js_reserved_issues and not relationship_issues and not foreignkey_issues and not enum_usage_issues and not mapped_type_issues and not flask_static_issues and not html_asset_issues and not js_animation_issues and not back_populates_issues and not circular_import_issues and not js_this_loss_issues and not marshmallow_api_issues:
-            logger.debug("[G-1/.../G-31] All consistency checks passed")
+        # G-33: HTML アクセシビリティチェック
+        a11y_issues = self._validate_accessibility(files)
+        a11y_remaining = []
+        if a11y_issues:
+            fixable = [i for i in a11y_issues if i.get('fixable')]
+            detect_only = [i for i in a11y_issues if not i.get('fixable')]
+            if fixable:
+                logger.debug(f"[G-33] Detected {len(fixable)} fixable a11y issues, auto-fixing...")
+                files = self._auto_fix_accessibility(fixable, files)
+                # 修正後の再検証
+                a11y_remaining = [i for i in self._validate_accessibility(files) if i.get('fixable')]
+                if not a11y_remaining:
+                    logger.debug("[G-33] ✅ All fixable a11y issues resolved")
+                else:
+                    logger.debug(f"● Accessibility: {len(a11y_remaining)} fixable issue(s) remain")
+            if detect_only:
+                logger.debug(f"[G-33] {len(detect_only)} detection-only a11y issue(s)")
+                for issue in detect_only[:5]:
+                    logger.debug(f"  - {issue['file']}:{issue['line']} {issue['message']}")
+
+        if not missing_css_classes and not missing_html_ids and not compatibility_issues and not symbol_issues and not requirements_issues and not library_issues and not frontend_issues and not schema_issues and not doc_issues and not class_safety_issues and not framework_reserved_issues and not builtin_shadowing_issues and not route_duplicate_issues and not table_duplicate_issues and not js_reserved_issues and not relationship_issues and not foreignkey_issues and not enum_usage_issues and not mapped_type_issues and not flask_static_issues and not html_asset_issues and not js_animation_issues and not back_populates_issues and not circular_import_issues and not js_this_loss_issues and not marshmallow_api_issues and not a11y_remaining:
+            logger.debug("[G-1/.../G-33] All consistency checks passed")
 
         return files
 
@@ -22904,6 +22924,277 @@ Return ONLY the complete fixed Python code without markdown code blocks.
             generated_files[filepath] = content
             logger.debug(f"[G-30] ✅ Fixed this.{method_name} in {context}")
         
+        return generated_files
+
+    # ============================================
+    # G-33: HTML アクセシビリティチェック
+    # ============================================
+
+    def _validate_accessibility(
+        self,
+        generated_files: Dict[str, str]
+    ) -> List[Dict[str, Any]]:
+        """
+        HTMLファイルのアクセシビリティ問題を検出（WCAG 2.1 Level A 相当）
+
+        検出項目:
+        - A-1: img タグの alt 属性欠落（fixable: src から推測）
+        - A-2: html タグの lang 属性欠落（fixable: コンテンツから推測）
+        - A-3: heading 階層スキップ（detection-only）
+        - A-4: form input の label 欠落（detection-only）
+        - A-5: 空ボタン・空リンク（detection-only）
+        - A-6: tabindex > 0（fixable: tabindex="0" に変更）
+
+        Args:
+            generated_files: 生成されたファイル {filepath: content}
+
+        Returns:
+            検出された問題のリスト
+        """
+        issues: List[Dict[str, Any]] = []
+
+        _DECORATIVE_ATTRS = (
+            'role="presentation"', "role='presentation'",
+            'role="none"', "role='none'",
+            'alt=""', "alt=''",
+        )
+
+        for filepath, content in generated_files.items():
+            if not filepath.lower().endswith(('.html', '.htm')):
+                continue
+
+            try:
+                # A-1: img の alt 属性欠落
+                for m in re.finditer(r'<img\b([^>]*)/?>', content, re.IGNORECASE | re.DOTALL):
+                    attrs = m.group(1)
+                    if not re.search(r'\balt\s*=', attrs, re.IGNORECASE):
+                        tag_str = m.group(0).lower()
+                        if any(dec in tag_str for dec in _DECORATIVE_ATTRS):
+                            continue
+                        lineno = content[:m.start()].count('\n') + 1
+                        issues.append({
+                            'file': filepath,
+                            'type': 'a11y_missing_alt',
+                            'message': '<img> tag missing alt attribute',
+                            'line': lineno,
+                            'fixable': True,
+                            'tag': m.group(0),
+                        })
+
+                # A-2: html の lang 属性欠落
+                html_match = re.search(r'<html\b([^>]*)>', content, re.IGNORECASE)
+                if html_match:
+                    attrs = html_match.group(1)
+                    if not re.search(r'\blang\s*=', attrs, re.IGNORECASE):
+                        lineno = content[:html_match.start()].count('\n') + 1
+                        issues.append({
+                            'file': filepath,
+                            'type': 'a11y_missing_lang',
+                            'message': '<html> tag missing lang attribute',
+                            'line': lineno,
+                            'fixable': True,
+                            'tag': html_match.group(0),
+                        })
+
+                # A-3: heading 階層スキップ
+                headings = []
+                for m in re.finditer(r'<h([1-6])\b', content, re.IGNORECASE):
+                    level = int(m.group(1))
+                    lineno = content[:m.start()].count('\n') + 1
+                    headings.append((level, lineno))
+
+                for idx in range(1, len(headings)):
+                    prev_level = headings[idx - 1][0]
+                    curr_level = headings[idx][0]
+                    if curr_level > prev_level and (curr_level - prev_level) > 1:
+                        issues.append({
+                            'file': filepath,
+                            'type': 'a11y_heading_skip',
+                            'message': f'Heading level skipped: h{prev_level} -> h{curr_level}',
+                            'line': headings[idx][1],
+                            'fixable': False,
+                        })
+
+                # A-4: form input の label 欠落
+                label_fors = set()
+                for m in re.finditer(
+                    r'<label\b[^>]*\bfor\s*=\s*["\']([^"\']+)["\']',
+                    content, re.IGNORECASE,
+                ):
+                    label_fors.add(m.group(1))
+
+                for m in re.finditer(
+                    r'<(?:input|select|textarea)\b([^>]*)>',
+                    content, re.IGNORECASE,
+                ):
+                    attrs = m.group(1)
+                    type_match = re.search(r'\btype\s*=\s*["\'](\w+)["\']', attrs, re.IGNORECASE)
+                    if type_match and type_match.group(1).lower() in (
+                        'hidden', 'submit', 'button', 'image',
+                    ):
+                        continue
+                    if re.search(r'\baria-label(?:ledby)?\s*=', attrs, re.IGNORECASE):
+                        continue
+                    if re.search(r'\btitle\s*=', attrs, re.IGNORECASE):
+                        continue
+                    id_match = re.search(r'\bid\s*=\s*["\']([^"\']+)["\']', attrs, re.IGNORECASE)
+                    if id_match and id_match.group(1) in label_fors:
+                        continue
+                    lineno = content[:m.start()].count('\n') + 1
+                    issues.append({
+                        'file': filepath,
+                        'type': 'a11y_missing_label',
+                        'message': 'Form element missing <label>, aria-label, or title',
+                        'line': lineno,
+                        'fixable': False,
+                    })
+
+                # A-5: 空ボタン・空リンク
+                for m in re.finditer(
+                    r'<button\b([^>]*)>(.*?)</button>',
+                    content, re.IGNORECASE | re.DOTALL,
+                ):
+                    attrs = m.group(1)
+                    inner = m.group(2).strip()
+                    if re.search(r'\baria-label\s*=', attrs, re.IGNORECASE):
+                        continue
+                    if re.search(r'\btitle\s*=', attrs, re.IGNORECASE):
+                        continue
+                    text_only = re.sub(r'<[^>]+>', '', inner).strip()
+                    if not text_only:
+                        lineno = content[:m.start()].count('\n') + 1
+                        issues.append({
+                            'file': filepath,
+                            'type': 'a11y_empty_button',
+                            'message': '<button> has no accessible text content',
+                            'line': lineno,
+                            'fixable': False,
+                        })
+
+                for m in re.finditer(
+                    r'<a\b([^>]*)>(.*?)</a>',
+                    content, re.IGNORECASE | re.DOTALL,
+                ):
+                    attrs = m.group(1)
+                    inner = m.group(2).strip()
+                    if re.search(r'\baria-label\s*=', attrs, re.IGNORECASE):
+                        continue
+                    if re.search(r'\btitle\s*=', attrs, re.IGNORECASE):
+                        continue
+                    text_only = re.sub(r'<[^>]+>', '', inner).strip()
+                    if not text_only:
+                        lineno = content[:m.start()].count('\n') + 1
+                        issues.append({
+                            'file': filepath,
+                            'type': 'a11y_empty_link',
+                            'message': '<a> has no accessible text content',
+                            'line': lineno,
+                            'fixable': False,
+                        })
+
+                # A-6: tabindex > 0
+                for m in re.finditer(r'\btabindex\s*=\s*["\'](\d+)["\']', content, re.IGNORECASE):
+                    value = int(m.group(1))
+                    if value > 0:
+                        lineno = content[:m.start()].count('\n') + 1
+                        issues.append({
+                            'file': filepath,
+                            'type': 'a11y_positive_tabindex',
+                            'message': f'tabindex="{value}" disrupts natural tab order',
+                            'line': lineno,
+                            'fixable': True,
+                            'original_value': str(value),
+                        })
+
+            except Exception as e:
+                logger.debug(f"[G-33] Error checking {filepath}: {e}")
+
+        return issues
+
+    def _auto_fix_accessibility(
+        self,
+        issues: List[Dict[str, Any]],
+        generated_files: Dict[str, str]
+    ) -> Dict[str, str]:
+        """
+        アクセシビリティ問題の機械的自動修正
+
+        修正項目:
+        - A-1: img alt → src 属性のファイル名から推測して追加
+        - A-2: html lang → コンテンツの CJK 文字有無から推測して追加
+        - A-6: tabindex > 0 → tabindex="0" に変更
+
+        Args:
+            issues: _validate_accessibility() で検出された fixable issues
+            generated_files: 生成されたファイル
+
+        Returns:
+            修正後のファイル
+        """
+        # ファイルごとに問題をグループ化
+        issues_by_file: Dict[str, List[Dict[str, Any]]] = {}
+        for issue in issues:
+            if issue.get('fixable'):
+                issues_by_file.setdefault(issue['file'], []).append(issue)
+
+        for filepath, file_issues in issues_by_file.items():
+            if filepath not in generated_files:
+                continue
+            content = generated_files[filepath]
+
+            for issue in file_issues:
+                issue_type = issue['type']
+
+                if issue_type == 'a11y_missing_alt':
+                    # A-1: src 属性からファイル名を取得し alt テキストを生成
+                    tag = issue['tag']
+                    if tag in content:
+                        src_match = re.search(
+                            r'\bsrc\s*=\s*["\']([^"\']+)["\']', tag, re.IGNORECASE,
+                        )
+                        if src_match:
+                            src_path = src_match.group(1)
+                            filename = src_path.rsplit('/', 1)[-1] if '/' in src_path else src_path
+                            alt_text = filename.rsplit('.', 1)[0] if '.' in filename else filename
+                            alt_text = alt_text.replace('-', ' ').replace('_', ' ')
+                        else:
+                            alt_text = ''
+                        new_tag = re.sub(
+                            r'<img\b', f'<img alt="{alt_text}"',
+                            tag, count=1, flags=re.IGNORECASE,
+                        )
+                        content = content.replace(tag, new_tag, 1)
+                        logger.debug(
+                            f"[G-33] ✅ Added alt=\"{alt_text}\" to <img> in {filepath}:{issue['line']}"
+                        )
+
+                elif issue_type == 'a11y_missing_lang':
+                    # A-2: CJK 文字の有無でコンテンツ言語を推測
+                    tag = issue['tag']
+                    if tag in content:
+                        cjk_pattern = re.compile(r'[\u3000-\u9fff\uf900-\ufaff]')
+                        has_cjk = bool(cjk_pattern.search(content))
+                        lang = 'ja' if has_cjk else 'en'
+                        new_tag = re.sub(
+                            r'<html\b', f'<html lang="{lang}"',
+                            tag, count=1, flags=re.IGNORECASE,
+                        )
+                        content = content.replace(tag, new_tag, 1)
+                        logger.debug(
+                            f"[G-33] ✅ Added lang=\"{lang}\" to <html> in {filepath}:{issue['line']}"
+                        )
+
+                elif issue_type == 'a11y_positive_tabindex':
+                    # A-6: tabindex > 0 → tabindex="0" に正規化
+                    original = issue['original_value']
+                    old_attr_pattern = rf'tabindex\s*=\s*["\']' + re.escape(original) + r'["\']'
+                    content = re.sub(old_attr_pattern, 'tabindex="0"', content, count=1)
+                    logger.debug(
+                        f"[G-33] ✅ Changed tabindex=\"{original}\" → tabindex=\"0\" in {filepath}:{issue['line']}"
+                    )
+
+            generated_files[filepath] = content
+
         return generated_files
 
     # ============================================
