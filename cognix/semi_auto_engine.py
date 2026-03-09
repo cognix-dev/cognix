@@ -5683,7 +5683,7 @@ Generate complete, production-ready implementations. No placeholders or TODO com
                 t_code = truncated_match.group(2).strip()
                 if t_code and len(t_code) >= 10:
                     files[t_filename] = t_code
-                    logger.warning(
+                    logger.debug(
                         f"[Parse Response] Truncation recovery: extracted {t_filename} "
                         f"({len(t_code)} chars, no closing </file>)"
                     )
