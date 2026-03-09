@@ -5,6 +5,26 @@ All notable changes to Cognix will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.2.7] - 2026-03-09
+
+### Added
+- **G-33 HTML Accessibility Check** - New WCAG 2.1 Level A consistency check with auto-fix
+  - 6 checks: img alt, html lang, heading hierarchy, form labels, empty interactive elements, tabindex
+  - 3 auto-fixable (alt, lang, tabindex), 3 detection-only
+  - 52 unit tests added in `test_g33_accessibility.py`
+- **State Management Bug Detection** - Enhanced REVIEW CODE QUALITY prompts
+  - Type 26: State overwrite after function side-effect detection
+  - Type 27: Async timing state conflict detection
+  - State Lifecycle Management guidance section for games, SPA, real-time apps
+
+### Fixed
+- **Session Info Bold Text** - Removed Rich `[white]` markup causing bold appearance, added `highlight=False` to prevent auto-number highlighting
+- **Prompt Bracket Markup** - Escaped `[Sonnet 4.6]` brackets to prevent Rich markup interpretation
+
+### Changed
+- **API Key Setup Screen Colors** - Provider options use default white, API key input displays in grey, "Cognix is ready to launch" displays in green
+- Version number updated to 0.2.7 across all files
+
 ## [0.2.6] - 2026-03-09
 
 ### Fixed
@@ -352,6 +372,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 pip install cognix
 ```
 
+[0.2.7]: https://github.com/cognix-dev/cognix/compare/v0.2.6...v0.2.7
 [0.2.6]: https://github.com/cognix-dev/cognix/compare/v0.2.5...v0.2.6
 [0.2.5]: https://github.com/cognix-dev/cognix/compare/v0.2.4...v0.2.5
 [0.2.4]: https://github.com/cognix-dev/cognix/compare/v0.2.3...v0.2.4
