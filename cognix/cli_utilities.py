@@ -136,22 +136,22 @@ class UtilitiesModule(CLIModuleBase):
                     
                     # 新しいフォーマットで表示
                     err_console.print(Text.from_ansi(f"\n{GREEN}Current Model:{RESET}"))
-                    err_console.print(f"    {current_provider}: {current_display}")
+                    err_console.print(f"    {current_provider}: {current_display}", highlight=False)
                     err_console.print(Text.from_ansi(f"\n{GREEN}Available Models:{RESET}"))
-                    
+
                     for provider in sorted(models_by_provider.keys()):
                         models = models_by_provider[provider]
                         display_names = [display_name for _, display_name in models]
                         models_str = ', '.join(display_names)
-                        err_console.print(f"    {provider}: {models_str}")
+                        err_console.print(f"    {provider}: {models_str}", highlight=False)
                     
                     # プロンプトとの間に空行を追加
                     err_console.print()
                 else:
                     # フォールバック: 従来の表示
                     available = self.llm_manager.get_available_models()
-                    err_console.print(f"\nCurrent Model: {current}")
-                    err_console.print(f"Available Models: {', '.join(available)}")
+                    err_console.print(f"\nCurrent Model: {current}", highlight=False)
+                    err_console.print(f"Available Models: {', '.join(available)}", highlight=False)
                     err_console.print()  # プロンプトとの間に空行を追加
                 
                 return
