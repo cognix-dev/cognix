@@ -358,36 +358,79 @@ class TestTruncatedXMLRecovery:
 
 
 class TestQualityFixDynamicMaxTokens:
-    """Verify quality fix uses dynamic max_tokens based on code size."""
+    """Verify quality fix uses dynamic max_tokens based on code size (with 1.3x buffer)."""
 
     def test_small_code_gets_floor(self):
         """Small code files should get 8000 floor."""
         generated_code = {"main.py": "x" * 5000}
         total_code_chars = sum(len(v) for v in generated_code.values())
-        quality_max_tokens = max(8000, min(total_code_chars // 3 + 2000, 32000))
+        quality_max_tokens = max(8000, min(int(total_code_chars / 3 * 1.3) + 2000, 32000))
         assert quality_max_tokens == 8000
 
     def test_medium_code_scales(self):
-        """978-line Stripe file (~35K chars) should get ~13K tokens."""
+        """978-line Stripe file (~35K chars) should get ~17K tokens with 1.3x buffer."""
         generated_code = {"main.py": "x" * 35000}
         total_code_chars = sum(len(v) for v in generated_code.values())
-        quality_max_tokens = max(8000, min(total_code_chars // 3 + 2000, 32000))
-        assert quality_max_tokens == 13666
-        assert quality_max_tokens > 8000  # Must exceed old hardcoded value
+        quality_max_tokens = max(8000, min(int(total_code_chars / 3 * 1.3) + 2000, 32000))
+        assert quality_max_tokens == 17166  # int(35000 / 3 * 1.3) + 2000
+        assert quality_max_tokens > 8000  # Must exceed floor
 
     def test_large_code_gets_ceiling(self):
         """Very large code should cap at 32000."""
         generated_code = {"main.py": "x" * 100000}
         total_code_chars = sum(len(v) for v in generated_code.values())
-        quality_max_tokens = max(8000, min(total_code_chars // 3 + 2000, 32000))
+        quality_max_tokens = max(8000, min(int(total_code_chars / 3 * 1.3) + 2000, 32000))
         assert quality_max_tokens == 32000
 
     def test_multi_file_code_summed(self):
         """Multiple files' sizes should be summed."""
         generated_code = {"a.py": "x" * 20000, "b.py": "x" * 15000}
         total_code_chars = sum(len(v) for v in generated_code.values())
-        quality_max_tokens = max(8000, min(total_code_chars // 3 + 2000, 32000))
-        assert quality_max_tokens == 13666  # 35000 // 3 + 2000
+        quality_max_tokens = max(8000, min(int(total_code_chars / 3 * 1.3) + 2000, 32000))
+        assert quality_max_tokens == 17166  # int(35000 / 3 * 1.3) + 2000
+
+    def test_buffer_gives_30_percent_more(self):
+        """1.3x buffer should give ~30% more tokens than old formula."""
+        total_code_chars = 35000
+        old_tokens = max(8000, min(total_code_chars // 3 + 2000, 32000))
+        new_tokens = max(8000, min(int(total_code_chars / 3 * 1.3) + 2000, 32000))
+        assert new_tokens > old_tokens
+        # New should be ~30% more (excluding the +2000 base)
+        old_base = total_code_chars // 3
+        new_base = int(total_code_chars / 3 * 1.3)
+        assert abs(new_base / old_base - 1.3) < 0.01
+
+
+class TestComprehensiveReviewMaxTokens:
+    """Verify comprehensive review max_tokens calculation with 1.3x buffer."""
+
+    def test_small_content_gets_floor(self):
+        """Small content should get 8000 floor."""
+        content_chars = 5000
+        estimated_tokens = int(content_chars / 3.5 * 1.3) + 500
+        max_tokens = max(8000, min(estimated_tokens, 64000))
+        assert max_tokens == 8000
+
+    def test_medium_content_scales(self):
+        """Medium content should scale with 1.3x buffer."""
+        content_chars = 30000
+        estimated_tokens = int(content_chars / 3.5 * 1.3) + 500
+        max_tokens = max(8000, min(estimated_tokens, 64000))
+        assert max_tokens == estimated_tokens
+        assert max_tokens > 8000
+
+    def test_large_content_gets_ceiling(self):
+        """Very large content should cap at 64000."""
+        content_chars = 200000
+        estimated_tokens = int(content_chars / 3.5 * 1.3) + 500
+        max_tokens = max(8000, min(estimated_tokens, 64000))
+        assert max_tokens == 64000
+
+    def test_sic_retry_has_ceiling(self):
+        """SIC retry should cap at 64000."""
+        original_code = "x" * 200000
+        max_tokens = max(8000, min(int(len(original_code) / 3 * 1.3) + 2000, 64000))
+        assert max_tokens == 64000
 
 
 # ── Fix G: Quality Fix Syntax Validation ─────────────────────
@@ -622,3 +665,52 @@ class TestFileScoreNoRequiredFiles:
         )
         assert result['is_complete'] is True
         assert result['fulfillment_score'] == 1.0
+
+
+# ── Fix C: Logger Handler Separation ─────────────────────
+
+
+class TestLoggerHandlerSeparation:
+    """Verify _std_logger only has FileHandler (not RichHandler) to prevent duplicate output."""
+
+    def test_std_logger_no_rich_handler(self):
+        """_std_logger should NOT have RichHandler attached."""
+        import logging
+        from rich.logging import RichHandler
+        std_logger = logging.getLogger("cognix")
+        for handler in std_logger.handlers:
+            assert not isinstance(handler, RichHandler), \
+                f"_std_logger should not have RichHandler, found: {handler}"
+
+    def test_std_logger_has_handler(self):
+        """_std_logger should have at least one handler (FileHandler or NullHandler)."""
+        import logging
+        std_logger = logging.getLogger("cognix")
+        assert len(std_logger.handlers) >= 1, "_std_logger should have at least one handler"
+
+    def test_logger_error_uses_error_level(self):
+        """Logger.error() should log at ERROR level to _std_logger."""
+        import logging
+        from cognix.logger import logger
+        std_logger = logging.getLogger("cognix")
+        with patch.object(std_logger, 'error') as mock_error:
+            logger.error("test error message")
+            mock_error.assert_called_once_with("test error message")
+
+    def test_logger_warning_uses_warning_level(self):
+        """Logger.warning() should log at WARNING level to _std_logger."""
+        import logging
+        from cognix.logger import logger
+        std_logger = logging.getLogger("cognix")
+        with patch.object(std_logger, 'warning') as mock_warning:
+            logger.warning("test warning message")
+            mock_warning.assert_called_once_with("test warning message")
+
+    def test_logger_success_uses_info_level(self):
+        """Logger.success() should log at INFO level to _std_logger."""
+        import logging
+        from cognix.logger import logger
+        std_logger = logging.getLogger("cognix")
+        with patch.object(std_logger, 'info') as mock_info:
+            logger.success("test success message")
+            mock_info.assert_called_once_with("SUCCESS: test success message")
