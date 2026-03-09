@@ -8,8 +8,8 @@ from rich.console import Console
 from rich.logging import RichHandler
 
 # stdout: 進捗やLive用  / stderr: ログ用
-console = Console(legacy_windows=False, force_terminal=None)
-err_console = Console(stderr=True, legacy_windows=False, force_terminal=None)
+console = Console(legacy_windows=False, force_terminal=None, highlight=False)
+err_console = Console(stderr=True, legacy_windows=False, force_terminal=None, highlight=False)
 
 # ---- Live中バッファリング: ここから ---------------------------------
 _LIVE_BUFFER_ACTIVE: bool = False

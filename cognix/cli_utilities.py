@@ -136,22 +136,22 @@ class UtilitiesModule(CLIModuleBase):
                     
                     # 新しいフォーマットで表示
                     err_console.print(Text.from_ansi(f"\n{GREEN}Current Model:{RESET}"))
-                    err_console.print(f"    {current_provider}: {current_display}", highlight=False)
+                    err_console.print(f"    {current_provider}: {current_display}")
                     err_console.print(Text.from_ansi(f"\n{GREEN}Available Models:{RESET}"))
 
                     for provider in sorted(models_by_provider.keys()):
                         models = models_by_provider[provider]
                         display_names = [display_name for _, display_name in models]
                         models_str = ', '.join(display_names)
-                        err_console.print(f"    {provider}: {models_str}", highlight=False)
+                        err_console.print(f"    {provider}: {models_str}")
                     
                     # プロンプトとの間に空行を追加
                     err_console.print()
                 else:
                     # フォールバック: 従来の表示
                     available = self.llm_manager.get_available_models()
-                    err_console.print(f"\nCurrent Model: {current}", highlight=False)
-                    err_console.print(f"Available Models: {', '.join(available)}", highlight=False)
+                    err_console.print(f"\nCurrent Model: {current}")
+                    err_console.print(f"Available Models: {', '.join(available)}")
                     err_console.print()  # プロンプトとの間に空行を追加
                 
                 return
@@ -583,10 +583,10 @@ Made by Individual Developer | MIT License"""
         absolute_time = autosave_info['last_updated'].split('T')[0] + ' ' + autosave_info['last_updated'].split('T')[1].split('.')[0]
 
         # デフォルト色で表示（ラベル18文字幅（先頭4スペース含めて22文字）統一）
-        err_console.print(f"    {'Last Updated':<18}{absolute_time}", highlight=False)
-        err_console.print(f"    {'Entries':<18}{autosave_info['entries']} conversations", highlight=False)
-        err_console.print(f"    {'Model':<18}{autosave_info['model']}", highlight=False)
-        err_console.print(f"    {'Directory':<18}{autosave_info['directory']}", highlight=False)
+        err_console.print(f"    {'Last Updated':<18}{absolute_time}")
+        err_console.print(f"    {'Entries':<18}{autosave_info['entries']} conversations")
+        err_console.print(f"    {'Model':<18}{autosave_info['model']}")
+        err_console.print(f"    {'Directory':<18}{autosave_info['directory']}")
 
         # 追加の統計があれば行追加（autosave_infoから直接取得）
         # NOTE: この時点ではセッション未復元のため、get_token_statistics()ではなく
@@ -598,10 +598,10 @@ Made by Individual Developer | MIT License"""
             input_cost = tokens_input * 3.00 / 1_000_000
             output_cost = tokens_output * 15.00 / 1_000_000
             cost = input_cost + output_cost
-            err_console.print(f"    {'Token Usage':<18}{total_tokens:,} (~${cost:.2f})", highlight=False)
+            err_console.print(f"    {'Token Usage':<18}{total_tokens:,} (~${cost:.2f})")
         duration = autosave_info.get('total_duration_seconds', 0.0)
         if duration > 0:
-            err_console.print(f"    {'Total Duration':<18}{format_duration(duration)}", highlight=False)
+            err_console.print(f"    {'Total Duration':<18}{format_duration(duration)}")
 
         # rule()はANSIコードを返すのでprint()で直接出力
         print("\n" + rule())
@@ -665,7 +665,7 @@ Made by Individual Developer | MIT License"""
             func = command_map[cmd_name]
             doc = func.__doc__ or "No documentation available"
             err_console.print(f"\nCommand: [bright_green]/{cmd_name}[/bright_green]")
-            err_console.print(f"{doc}", highlight=False)
+            err_console.print(f"{doc}")
         else:
             err_console.print(f"\nCommand '[bright_green]/{cmd_name}[/bright_green]' not found")
             err_console.print("Use '[bright_green]/help[/bright_green]' to see all available commands")
