@@ -576,10 +576,10 @@ class CognixCLI(cmd.Cmd):
 
         # ── プロバイダー選択メニュー ──
         print(f"  {DIM}Choose your AI provider:{RS}")
-        print(f"    {arrow} {DIM}[1] Anthropic (Claude) \u2014 Recommended{RS}")
-        print(f"    {arrow} {DIM}[2] OpenAI (GPT){RS}")
-        print(f"    {arrow} {DIM}[3] Anthropic & OpenAI{RS}")
-        print(f"    {arrow} {DIM}[4] OpenRouter (Multiple models){RS}")
+        print(f"    {arrow} [1] Anthropic (Claude) \u2014 Recommended")
+        print(f"    {arrow} [2] OpenAI (GPT)")
+        print(f"    {arrow} [3] Anthropic & OpenAI")
+        print(f"    {arrow} [4] OpenRouter (Multiple models)")
         print()
 
         # ── プロバイダー選択入力 ──
