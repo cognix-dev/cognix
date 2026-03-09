@@ -18,10 +18,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - State Lifecycle Management guidance section for games, SPA, real-time apps
 
 ### Fixed
+- **Truncation Code Corruption Prevention** - Truncated files in review/fix pipeline are now skipped instead of overwriting originals with incomplete code
+- **max_tokens Buffer** - Added 1.3x buffer to max_tokens calculations at 4 locations (quality fix, comprehensive review, minimal-change fix, SIC retry) and added 64K cap to SIC retry
+- **Duplicate Log Output** - Separated logger handlers so RichHandler is not attached to `_std_logger`, preventing duplicate screen output; restored proper log levels (error/warning/info) for file logging
+- **/exit Command** - Fixed `/exit` not actually exiting the application (return value was not propagated)
+- **Truncation Warning Display** - Changed truncation recovery log from warning to debug level
 - **Session Info Bold Text** - Removed Rich `[white]` markup causing bold appearance, added `highlight=False` to prevent auto-number highlighting
 - **Prompt Bracket Markup** - Escaped `[Sonnet 4.6]` brackets to prevent Rich markup interpretation
 
 ### Changed
+- **Rich Auto-Highlight Disabled** - `Console(highlight=False)` applied globally to prevent cyan number highlighting across all output
 - **API Key Setup Screen Colors** - Provider options use default white, API key input displays in grey, "Cognix is ready to launch" displays in green
 - Version number updated to 0.2.7 across all files
 
