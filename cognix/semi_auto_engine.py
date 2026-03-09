@@ -5509,7 +5509,7 @@ Flask + React Fullstack:
             
             # ファイルサイズに基づく動的 max_tokens 計算
             total_code_chars = sum(len(v) for v in generated_code.values())
-            quality_max_tokens = max(8000, min(total_code_chars // 3 + 2000, 32000))
+            quality_max_tokens = max(8000, min(int(total_code_chars / 3 * 1.3) + 2000, 32000))
             logger.debug(f"[Quality Fix] Sending fix request to LLM... (max_tokens={quality_max_tokens}, code_chars={total_code_chars})")
             response = self.llm_manager.generate_response(
                 prompt=prompt,
@@ -5682,10 +5682,10 @@ Generate complete, production-ready implementations. No placeholders or TODO com
                 t_filename = truncated_match.group(1)
                 t_code = truncated_match.group(2).strip()
                 if t_code and len(t_code) >= 10:
-                    files[t_filename] = t_code
+                    # 不完全なコードは結果に含めない（上書きによるコード破損を防止）
                     logger.debug(
-                        f"[Parse Response] Truncation recovery: extracted {t_filename} "
-                        f"({len(t_code)} chars, no closing </file>)"
+                        f"[Parse Response] Truncation detected: {t_filename} "
+                        f"({len(t_code)} chars, no closing </file>) — SKIPPED to prevent corruption"
                     )
 
             if not files:
@@ -26182,7 +26182,7 @@ complete fixed code here
             # ファイルサイズに応じてmax_tokensを動的に調整
             content_lines = len(content.split('\n'))
             content_chars = len(content)
-            estimated_tokens = int(content_chars / 3.5) + 500  # 3.5 chars/token + overhead for tags
+            estimated_tokens = int(content_chars / 3.5 * 1.3) + 500  # 3.5 chars/token * 1.3x buffer + overhead for tags
             max_tokens = max(8000, min(estimated_tokens, 64000))
 
             logger.debug(f"[Comprehensive Review] Sending fix request for {filepath} ({len(issues)} issues, {content_lines} lines, {content_chars} chars, max_tokens={max_tokens})...")
@@ -26560,7 +26560,7 @@ COMPLETE fixed code here (entire file content)
 
         try:
             content_chars = len(content)
-            estimated_tokens = int(content_chars / 3.5) + 500  # 3.5 chars/token + overhead for tags
+            estimated_tokens = int(content_chars / 3.5 * 1.3) + 500  # 3.5 chars/token * 1.3x buffer + overhead for tags
             max_tokens = max(8000, min(estimated_tokens, 64000))
 
             logger.debug(f"[Comprehensive Review] Sending minimal-change fix for {filepath} ({len(issues)} issues, {content_lines} lines, {content_chars} chars, max_tokens={max_tokens})")
@@ -27406,8 +27406,8 @@ You MUST use this exact format (the system parses <file> tags):
                     "NEVER reorganize, refactor, or 'improve' code beyond the specific fix requested. "
                     "Pay EXTREME attention to Python indentation - it determines code structure."
                 ),
-                # Fix Q-4: ファイルサイズに比例（1文字≈0.33トークン + バッファ2000）
-                max_tokens=max(8000, len(original_code) // 3 + 2000)
+                # Fix Q-4: ファイルサイズに比例（1文字≈0.33トークン * 1.3xバッファ + 2000）
+                max_tokens=max(8000, min(int(len(original_code) / 3 * 1.3) + 2000, 64000))
             )
             
             response_text = response.content if hasattr(response, 'content') else str(response)

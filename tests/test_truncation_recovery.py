@@ -276,8 +276,8 @@ class TestQualityFixFallback:
 class TestTruncatedXMLRecovery:
     """Verify _parse_llm_response recovers from truncated <file> tags."""
 
-    def test_truncated_file_tag_recovery(self, engine):
-        """<file path='...'> with NO closing </file> should still extract code."""
+    def test_truncated_file_tag_skipped(self, engine):
+        """<file path='...'> with NO closing </file> should be SKIPPED to prevent corruption."""
         response = (
             "Here is the fixed code:\n\n"
             "<file path='main.py'>\n"
@@ -289,21 +289,17 @@ class TestTruncatedXMLRecovery:
             "# rest of code truncated by max_tokens"
         )
         result = engine._parse_llm_response(response)
-        assert result is not None
-        assert "main.py" in result
-        assert "import os" in result["main.py"]
-        assert "import flask" in result["main.py"]
+        # Truncated file should NOT be included — returns None since it's the only file
+        assert result is None
 
-    def test_truncated_large_file(self, engine):
-        """Large truncated <file> block should be recovered."""
+    def test_truncated_large_file_skipped(self, engine):
+        """Large truncated <file> block should be SKIPPED to prevent corruption."""
         code_lines = [f"line_{i} = {i}" for i in range(200)]
         code_text = "\n".join(code_lines)
         response = f"<file path='app.py'>\n{code_text}"
         result = engine._parse_llm_response(response)
-        assert result is not None
-        assert "app.py" in result
-        assert "line_0 = 0" in result["app.py"]
-        assert "line_199 = 199" in result["app.py"]
+        # Truncated file should NOT be included — returns None since it's the only file
+        assert result is None
 
     def test_complete_file_tag_still_works(self, engine):
         """Normal response with closing </file> should work as before."""
@@ -324,7 +320,7 @@ class TestTruncatedXMLRecovery:
         assert result is None
 
     def test_multiple_files_one_truncated(self, engine):
-        """First file complete, second file truncated → both extracted."""
+        """First file complete, second file truncated → only complete file extracted."""
         response = (
             "<file path='a.py'>\nprint('a')\n</file>\n"
             "<file path='b.py'>\n"
@@ -336,8 +332,8 @@ class TestTruncatedXMLRecovery:
         assert result is not None
         assert "a.py" in result
         assert "print('a')" in result["a.py"]
-        assert "b.py" in result
-        assert "import os" in result["b.py"]
+        # Truncated file b.py should NOT be included
+        assert "b.py" not in result
 
     def test_no_file_tags_returns_none(self, engine):
         """Response with no <file> tags should return None."""
@@ -345,8 +341,8 @@ class TestTruncatedXMLRecovery:
         result = engine._parse_llm_response(response)
         assert result is None
 
-    def test_double_quote_path(self, engine):
-        """<file path="..."> with double quotes should also work for truncation."""
+    def test_double_quote_path_truncated_skipped(self, engine):
+        """<file path="..."> with double quotes — truncated file should be SKIPPED."""
         response = (
             '<file path="main.py">\n'
             "def hello():\n"
@@ -354,8 +350,8 @@ class TestTruncatedXMLRecovery:
             "# truncated"
         )
         result = engine._parse_llm_response(response)
-        assert result is not None
-        assert "main.py" in result
+        # Truncated file should NOT be included — returns None since it's the only file
+        assert result is None
 
 
 # ── Fix F: Quality Fix Dynamic max_tokens ─────────────────────

@@ -99,9 +99,12 @@ _std_logger = logging.getLogger("cognix")
 _std_logger.propagate = False  # 親へ伝播させない
 _std_logger.setLevel(logging.DEBUG)  # ⭐ DEBUGレベルに設定
 
-# ⭐ _std_logger に直接ハンドラーを追加
-for handler in _handlers:
-    _std_logger.addHandler(handler)
+# ⭐ _std_logger にはファイルハンドラーのみ追加（画面出力は Logger メソッドが担当）
+# RichHandler を追加すると err_console.print() と二重出力になるため除外
+if _file_handler:
+    _std_logger.addHandler(_file_handler)
+else:
+    _std_logger.addHandler(logging.NullHandler())
 class LogLevel(IntEnum):
     QUIET = 0
     NORMAL = 1
@@ -155,17 +158,17 @@ class Logger:
 
     def error(self, message: str, **kwargs: Any):
         err_console.print(f"❌ {message}", style="bold red", **kwargs)
-        _std_logger.debug(message)
+        _std_logger.error(message)
 
     def success(self, message: str, **kwargs: Any):
         if self._level >= LogLevel.NORMAL:
             err_console.print(f"✅ {message}", style="bold green", **kwargs)
-        _std_logger.debug(f"SUCCESS: {message}")
+        _std_logger.info(f"SUCCESS: {message}")
 
     def warning(self, message: str, **kwargs: Any):
         if self._level >= LogLevel.NORMAL:
             err_console.print(f"⚠️  {message}", style="bold yellow", **kwargs)
-        _std_logger.debug(message)
+        _std_logger.warning(message)
 
 logger = Logger()
 
