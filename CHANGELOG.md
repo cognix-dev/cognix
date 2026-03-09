@@ -5,6 +5,26 @@ All notable changes to Cognix will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.2.6] - 2026-03-09
+
+### Fixed
+- **FEATURE_KEYWORDS False Positives** - Changed single-word keywords to compound phrases to prevent false matches (e.g., "Web Audio API" no longer triggers `api` keyword)
+- **Fulfillment Score Safety Valve** - Changed formula from equal-weight average to `file_score * 0.7 + feature_score * 0.3` so a single feature keyword miss cannot halve the overall score
+- **Detect-Repair Gaps** - Closed 10 gaps where consistency checks detected issues but repair functions silently skipped
+  - G-1: CSS repair now injects into inline `<style>` tags when no `.css` file exists
+  - G-2: HTML-JS consistency detection now scans inline `<script>` blocks
+  - G-3: Python compatibility DB expanded with 3.10/3.11 entries
+  - G-5: Dependency check now recognizes pyproject.toml, setup.py, Pipfile as alternatives
+  - G-7: Route detection uses content-based regex instead of filename matching
+  - Diff sanitizer: empty allowed_lines now rejects all changes (fail-safe)
+  - Diff sanitizer: exceptions now return original content (fail-safe)
+  - Comprehensive review: fuzzy filepath matching with ambiguity check
+  - Sanitizer fallback: two caller sites fixed to return original content on post-sanitize syntax errors
+
+### Changed
+- **HUD Step Labels** - Renamed all progress HUD step labels to uppercase command style (e.g., "Auto-completion" → "FILL MISSING CODE")
+- Version number updated to 0.2.6 across all files
+
 ## [0.2.5] - 2026-02-20
 
 ### Added
@@ -332,6 +352,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 pip install cognix
 ```
 
+[0.2.6]: https://github.com/cognix-dev/cognix/compare/v0.2.5...v0.2.6
 [0.2.5]: https://github.com/cognix-dev/cognix/compare/v0.2.4...v0.2.5
 [0.2.4]: https://github.com/cognix-dev/cognix/compare/v0.2.3...v0.2.4
 [0.2.3]: https://github.com/cognix-dev/cognix/compare/v0.2.2...v0.2.3
