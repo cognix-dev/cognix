@@ -698,15 +698,18 @@ class CognixCLI(cmd.Cmd):
             cmd_parts = line[1:].strip().split(maxsplit=1)
             cmd_name = cmd_parts[0]
             args = cmd_parts[1] if len(cmd_parts) > 1 else ""
-            self.handle_slash_command(cmd_name, args)
-            self._reset_multiline_state() 
+            if self.handle_slash_command(cmd_name, args):
+                return True
+            self._reset_multiline_state()
         else:
             self._handle_multiline_input(line)
     
     def handle_slash_command(self, cmd_name, args):
         if cmd_name in self.command_map:
             try:
-                self.command_map[cmd_name](args)
+                result = self.command_map[cmd_name](args)
+                if result:
+                    return True
             except Exception as e:
                 if hasattr(self, 'error_handler') and self.error_handler:
                     self.error_handler.handle_error(e, f"command execution: /{cmd_name}")
