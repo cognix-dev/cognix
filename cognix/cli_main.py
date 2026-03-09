@@ -576,10 +576,10 @@ class CognixCLI(cmd.Cmd):
 
         # ── プロバイダー選択メニュー ──
         print(f"  {DIM}Choose your AI provider:{RS}")
-        print(f"    {arrow} {WHITE}[1] Anthropic (Claude){RS} {DIM}\u2014 Recommended{RS}")
-        print(f"    {arrow} {WHITE}[2] OpenAI (GPT){RS}")
-        print(f"    {arrow} {WHITE}[3] Anthropic & OpenAI{RS}")
-        print(f"    {arrow} {WHITE}[4] OpenRouter (Multiple models){RS}")
+        print(f"    {arrow} {DIM}[1] Anthropic (Claude) \u2014 Recommended{RS}")
+        print(f"    {arrow} {DIM}[2] OpenAI (GPT){RS}")
+        print(f"    {arrow} {DIM}[3] Anthropic & OpenAI{RS}")
+        print(f"    {arrow} {DIM}[4] OpenRouter (Multiple models){RS}")
         print()
 
         # ── プロバイダー選択入力 ──
@@ -617,7 +617,8 @@ class CognixCLI(cmd.Cmd):
             print()
 
             try:
-                api_key = input(f"  {DIM}Enter your {key_name}:{RS} ").strip()
+                api_key = input(f"  {DIM}Enter your {key_name}:{RS} {DIM}").strip()
+                print(RS, end="")
             except (KeyboardInterrupt, EOFError):
                 print(f"\n\n  {DIM}Setup cancelled.{RS}")
                 return
@@ -667,7 +668,7 @@ class CognixCLI(cmd.Cmd):
             print()
             print(f"  {CG}\u2713{RS} {DIM}.env created at{RS} {CG}{env_path}{RS}")
             print()
-            print(f"  {grad_top}  {DIM}Cognix is ready to launch{RS}  {grad_btm}")
+            print(f"  {grad_top}  {CG}Cognix is ready to launch{RS}  {grad_btm}")
             print()
             print(f"  {DIM}Run{RS} {CG}cognix{RS} {DIM}to start.{RS}")
             print()
